@@ -139,7 +139,7 @@ internal sealed class Overlay
                 if (stage == Stage.Summary)
                 {
                     int cx = (short)((long)lParam & 0xFFFF), cy = (short)(((long)lParam >> 16) & 0xFFFF);
-                    int pad = (int)Math.Round(14 * scale), top = (int)Math.Round((8 + 24 + 20 + 20) * scale), lineH = (int)Math.Round(20 * scale);
+                    int pad = (int)Math.Round(10 * scale), top = (int)Math.Round(67 * scale), lineH = (int)Math.Round(20 * scale);
                     if (cx >= pad && cx <= pad + (int)Math.Round(CreditWidth * scale) && cy >= top && cy <= top + lineH)
                     {
                         try { Process.Start(new ProcessStartInfo(ProfileUrl) { UseShellExecute = true }); } catch (Exception) { /* no browser: nothing to do */ }
@@ -411,38 +411,40 @@ internal sealed class Overlay
         public static int Height(int rows) => 14 + 24 + 22 + 22 + rows * 19 + 8 + 20 + 14;
     }
 
-    private static readonly uint Back = Native.Rgb(0x1E1F22), Edge = Native.Rgb(0x3F4147), Track = Native.Rgb(0x34373B), Amber = Native.Rgb(0xD5A876),
-        Text = Native.Rgb(0xD7D7D7), Dim = Native.Rgb(0x949AA1), Green = Native.Rgb(0x63B970), Red = Native.Rgb(0xC04A3C);
+    private static readonly uint Back = Native.Rgb(KeelPalette.Panel), Header = Native.Rgb(KeelPalette.Header),
+        Track = Native.Rgb(KeelPalette.Control), Accent = Native.Rgb(KeelPalette.Accent), Amber = Native.Rgb(KeelPalette.Amber),
+        Text = Native.Rgb(KeelPalette.Text), Dim = Native.Rgb(KeelPalette.Muted),
+        Green = Native.Rgb(KeelPalette.Green), Red = Native.Rgb(KeelPalette.Red);
 
     /// <summary>Draws the full window's content into <paramref name="dc"/> (size w x h pixels, at <paramref name="scale"/> x 96 dpi).</summary>
     internal static void Draw(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontBold, IntPtr fontSmall)
     {
         int S(int v) => (int)Math.Round(v * scale);
-        Fill(dc, 0, 0, w, h, Edge);
-        Fill(dc, 1, 1, w - 2, h - 2, Back);
+        Fill(dc, 0, 0, w, h, Back);
         Native.SetBkMode(dc, Native.TRANSPARENT);
-        int pad = S(14), y = S(12);
+        int pad = S(10), y = 0;
 
-        Put(dc, fontBold, Amber, "R.A.T.S. Keel Loading", pad, y, w - 2 * pad - S(70), S(24), 0);
-        Put(dc, fontText, Dim, Clock(s.Elapsed), pad, y, w - 2 * pad, S(24), Native.DT_RIGHT);
-        y += S(24);
+        Fill(dc, 0, 0, w, S(28), Header);
+        Put(dc, fontSmall, Dim, "R.A.T.S. KEEL  ·  STARTUP", pad, y, w - 2 * pad - S(70), S(28), 0);
+        Put(dc, fontSmall, Dim, Clock(s.Elapsed), pad, y, w - 2 * pad, S(28), Native.DT_RIGHT);
+        y += S(36);
 
-        Put(dc, fontText, Text, s.Phase, pad, y, w - 2 * pad, S(22), 0);
+        Put(dc, fontText, Text, s.Phase, pad, y, w - 2 * pad, S(22), Native.DT_END_ELLIPSIS);
         y += S(22);
 
         // progress bar: a fill when the number of mods is known, else a block that travels
-        int barW = w - 2 * pad - S(60), barH = S(8), barY = y + S(5);
+        int barW = w - 2 * pad - S(60), barH = S(4), barY = y + (S(18) - barH) / 2;
         Fill(dc, pad, barY, barW, barH, Track);
         if (s.Total > 0)
         {
             int fill = (int)(barW * Math.Min(1.0, s.Handled / (double)s.Total));
-            Fill(dc, pad, barY, fill, barH, s.Done ? Green : Amber);
+            Fill(dc, pad, barY, fill, barH, Accent);
             Put(dc, fontSmall, Dim, s.Handled + " / " + s.Total, pad + barW + S(8), y, S(52), S(18), Native.DT_RIGHT);
         }
         else
         {
             int block = barW / 5, x = (int)(((s.Elapsed * 0.6) % 1.0) * (barW - block));
-            Fill(dc, pad + x, barY, block, barH, Amber);
+            Fill(dc, pad + x, barY, block, barH, Accent);
         }
         y += S(22);
 
@@ -490,28 +492,26 @@ internal sealed class Overlay
     internal static void DrawSummary(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontBold, IntPtr fontSmall)
     {
         int S(int v) => (int)Math.Round(v * scale);
-        Fill(dc, 0, 0, w, h, Edge);
-        Fill(dc, 1, 1, w - 2, h - 2, Back);
+        Fill(dc, 0, 0, w, h, Back);
         string alert = LoadingWindow.Alert;
         bool amber = alert != null || s.HasProblems;
-        Fill(dc, 1, 1, S(4), h - 2, amber ? Amber : Green);
+        Fill(dc, 0, 0, w, S(24), Header);
         Native.SetBkMode(dc, Native.TRANSPARENT);
-        int pad = S(14), y = S(8), lineH = S(20);
+        int pad = S(10), y = 0, lineH = S(20);
 
         string ver = string.IsNullOrEmpty(s.KeelVersion) ? "" : " " + s.KeelVersion;
-        string head = "Keel" + ver + " started " + s.Running + (s.Running == 1 ? " mod" : " mods") + (s.KeelSeconds >= 1 ? " in " + s.KeelSeconds.ToString("0") + " s" : "");
-        Put(dc, fontBold, Text, head, pad, y, w - 2 * pad, S(24), Native.DT_END_ELLIPSIS);
-        y += S(24);
+        Put(dc, fontSmall, Dim, "R.A.T.S. KEEL" + ver, pad, y, w - 2 * pad, S(24), Native.DT_END_ELLIPSIS);
+        y += S(27);
 
         var sb = new StringBuilder();
-        sb.Append("Game ready after ").Append(Clock(s.DoneElapsed > 0 ? s.DoneElapsed : s.Elapsed));
-        if (s.Skipped > 0) sb.Append("  -  ").Append(s.Skipped).Append(" skipped");
-        Put(dc, fontText, Dim, sb.ToString(), pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
+        sb.Append(s.Running).Append(" running · Game ready in ").Append(Clock(s.DoneElapsed > 0 ? s.DoneElapsed : s.Elapsed));
+        if (s.Skipped > 0) sb.Append(" · ").Append(s.Skipped).Append(" skipped");
+        Put(dc, fontSmall, Text, sb.ToString(), pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
         y += lineH;
 
-        Put(dc, fontSmall, amber ? Amber : Dim, s.SummaryLine(alert), pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
+        Put(dc, fontSmall, amber ? Amber : Green, s.SummaryLine(alert), pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
         y += lineH;
-        Put(dc, fontSmall, Edge, "Made by Kanalratte", pad, y, S(CreditWidth), lineH, Native.DT_END_ELLIPSIS);      // quiet; a click opens his Steam profile
+        Put(dc, fontSmall, Dim, "Made by Kanalratte", pad, y, S(CreditWidth), lineH, Native.DT_END_ELLIPSIS);
     }
 
     public const int CreditWidth = 130;
