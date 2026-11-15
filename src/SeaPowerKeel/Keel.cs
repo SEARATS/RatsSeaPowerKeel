@@ -1025,7 +1025,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             if (esc) { showWindow = false; return; }
             if (!click) return;
             var gui = new Vector2(pos.x / guiScale, (Screen.height - pos.y) / guiScale);       // the pointer's y runs from the bottom
-            if (closeRect.Contains(gui)) showWindow = false;
+            if (closeRect.Contains(gui) || titleCloseRect.Contains(gui)) showWindow = false;
             else if (logsRect.Contains(gui)) SaveLogs();
             else if (sendRect.Contains(gui)) SendReport();
             else if (HeldOffered && heldRect.Contains(gui)) HeldButton();
@@ -1135,7 +1135,6 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     // ---- in-game report (IMGUI: drawn on top of the game's own UI, needs nothing from the game) ----
 
-    private GUIStyle wrap, small, title;
     private bool windowWasShown;
 
     private void OnGUI()
@@ -1162,9 +1161,6 @@ internal sealed partial class KeelHost : MonoBehaviour
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
         guiScale = scale;
         float screenW = Screen.width / scale, screenH = Screen.height / scale;
-        wrap ??= new GUIStyle(GUI.skin.label) { wordWrap = true, richText = true };
-        small ??= new GUIStyle(GUI.skin.label) { wordWrap = true, richText = true, fontSize = 11 };
-        title ??= new GUIStyle(GUI.skin.label) { richText = true, fontSize = 15 };
 
         if (!showWindow && Time.realtimeSinceStartup < noticeUntil)
         {
@@ -1173,11 +1169,17 @@ internal sealed partial class KeelHost : MonoBehaviour
             float height = crashNotice != null ? 170 : restartForTakeover ? 120 : 70;
             float above = StackTop;
             var r = new Rect(20, (float.IsNaN(above) ? screenH - 135 : above - 8) - height, 470, height);
-            GUI.Box(r, GUIContent.none);
-            GUI.Label(new Rect(r.x + 10, r.y + 6, r.width - 20, r.height - 12),
+            EnsureStyles();
+            if (Event.current.type == EventType.Repaint)
+            {
+                DrawBody(r, 1f);
+                GUI.DrawTexture(new Rect(r.x, r.y, r.width, 23), headerBack);
+            }
+            GUI.Label(new Rect(r.x + 8, r.y + 1, r.width - 16, 23), "MESSAGE  ·  R.A.T.S. KEEL", headStyle);
+            GUI.Label(new Rect(r.x + 10, r.y + 31, r.width - 20, r.height - 36),
                       (crashNotice != null ? $"<b>{crashNotice}</b>\n" : "") +
                       (restartForTakeover ? "<b>Keel set up its takeover: restart the game once, then Keel runs every mod.</b>\n" : "") +
-                      $"<b>{Keel.Name}</b>: {bad} mod(s) did not start or threw errors.\n{Report.Summary(Keel.Plugins)}.\n<b>{hotkey.Value}</b> shows why.", wrap);
+                      $"{bad} mod(s) did not start or threw errors. {Report.Summary(Keel.Plugins)}.\n<b>{hotkey.Value}</b> opens the report.", noteStyle);
         }
         if (!showWindow)
         {
@@ -1197,7 +1199,6 @@ internal sealed partial class KeelHost : MonoBehaviour
         window.y = Mathf.Clamp(window.y, 0, screenH - window.height);
         EnsureStyles();
         GUI.DrawTexture(new Rect(0, 0, screenW, screenH), shade);
-        GUI.DrawTexture(new Rect(window.x - 1, window.y - 1, window.width + 2, window.height + 2), edge);
         window = GUI.Window(0x4B45454C, window, DrawWindow, GUIContent.none, windowStyle);
     }
 
@@ -1213,7 +1214,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private long newsSceneTicks;
     private Rect newsRect, newsCloseRect;
     private GUIStyle newsClose;
-    private GUIStyle newsCard, newsTitle, newsName, newsLine, newsFoot;
+    private GUIStyle newsTitle, newsName, newsLine, newsFoot;
     private readonly Dictionary<NewsKind, GUIStyle> newsPills = new();
 
     /// <summary>Right after the scan, on a worker thread: what changed since the last start, and the authors' notes for it.</summary>
@@ -1296,28 +1297,21 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private void EnsureNewsStyles()
     {
-        if (newsCard != null)
+        if (newsTitle != null)
             return;
         EnsureStyles();
-        newsCard = new GUIStyle { padding = new RectOffset(16, 16, 12, 12) };
-        newsCard.normal.background = Solid("#14181f", 0.94f);
-        newsTitle = Text(12, "#8b95a3", FontStyle.Bold, 8);
-        newsName = Text(14, "#f2f5f8", FontStyle.Normal, 1);
-        newsLine = Text(12, "#c3cad3", FontStyle.Normal, 1);
-        newsFoot = Text(11, "#7f8a98", FontStyle.Normal, 0);
+        newsTitle = Text(13, KeelPalette.Muted);
+        newsName = Text(14, KeelPalette.Text, below: 1);
+        newsLine = Text(12, KeelPalette.Muted, below: 1);
+        newsFoot = Text(11, KeelPalette.Muted);
         newsFoot.margin = new RectOffset(0, 0, 6, 0);
-        newsClose = Text(15, "#c3cad3", FontStyle.Bold, 0);
-        newsClose.alignment = TextAnchor.MiddleCenter;
-        foreach ((NewsKind kind, string color) in new[]
+        newsClose = new GUIStyle(buttonStyle) { padding = new RectOffset() };
+        foreach ((NewsKind kind, uint color) in new[]
         {
-            (NewsKind.Problem, "#b83c36"), (NewsKind.Updated, "#2f6aa8"), (NewsKind.New, "#2c7a4d"), (NewsKind.Gone, "#4a5361"),
+            (NewsKind.Problem, KeelPalette.Red), (NewsKind.Updated, KeelPalette.Blue),
+            (NewsKind.New, KeelPalette.Green), (NewsKind.Gone, KeelPalette.Muted),
         })
-        {
-            var pill = new GUIStyle { fontSize = 10, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, margin = new RectOffset(0, 10, 2, 0) };
-            pill.normal.background = Solid(color);
-            pill.normal.textColor = UnityEngine.Color.white;
-            newsPills[kind] = pill;
-        }
+            newsPills[kind] = StatusText(color);
     }
 
     // His layout 2026-11-12: the card is a glance (one line per mod), the report window shows two lines per mod and a click on a
@@ -1357,12 +1351,12 @@ internal sealed partial class KeelHost : MonoBehaviour
         // Clickable in the report when anything is hidden: more lines than shown, or a shown line cut short.
         bool more = inReport && (n.Lines.Count > ReportNewsLines || n.Lines.Take(ReportNewsLines).Any(l => l.Length > cut));
         EnsureNewsStyles();
-        GUILayout.BeginHorizontal();
+        GUILayout.BeginHorizontal(rowStyle);
         GUILayout.Label(n.Tag, newsPills[n.Kind], GUILayout.Width(74), GUILayout.Height(18));
         GUILayout.BeginVertical();
         string head = n.Kind == NewsKind.Updated && n.From.Length > 0 && n.To.Length > 0 && n.From != n.To
-            ? $"<b>{n.Name}</b>  <color=#8b95a3>{n.From} → {n.To}</color>"
-            : $"<b>{n.Name}</b>{(n.To.Length > 0 ? $"  <color=#8b95a3>{n.To}</color>" : "")}";
+            ? $"{n.Name}  <color=#{KeelPalette.Muted:X6}>{n.From} → {n.To}</color>"
+            : $"{n.Name}{(n.To.Length > 0 ? $"  <color=#{KeelPalette.Muted:X6}>{n.To}</color>" : "")}";
         GUILayout.Label(head, newsName);
         int shown = 0;
         foreach (string line in n.Lines)
@@ -1552,18 +1546,18 @@ internal sealed partial class KeelHost : MonoBehaviour
     // ---- the look of the report ----
 
     private bool windowCentered;
+    private Rect titleCloseRect;
     private GUIStyle windowStyle, headStyle, metaStyle, statsStyle, lineStyle, alertStyle, noteStyle, groupStyle, rowStyle, nameStyle, sourceStyle, bodyStyle, warnStyle, buttonStyle;
-    private readonly Dictionary<PluginState, GUIStyle> pills = new();
-    private Texture2D shade, edge, track, thumb;
+    private readonly Dictionary<PluginState, GUIStyle> statusStyles = new();
+    private Texture2D shade, track, thumb, headerBack;
 
-    private static UnityEngine.Color Hex(string html) => ColorUtility.TryParseHtmlString(html, out UnityEngine.Color c) ? c : UnityEngine.Color.magenta;
+    private static UnityEngine.Color Rgb(uint value, float alpha = 1f) =>
+        new((value >> 16) / 255f, (value >> 8 & 255) / 255f, (value & 255) / 255f, alpha);
 
-    private static Texture2D Solid(string html, float alpha = 1f)
+    private static Texture2D Solid(uint color, float alpha = 1f)
     {
         var t = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
-        UnityEngine.Color c = Hex(html);
-        c.a = alpha;
-        t.SetPixel(0, 0, c);
+        t.SetPixel(0, 0, Rgb(color, alpha));
         t.Apply();
         return t;
     }
@@ -1577,68 +1571,76 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
     }
 
-    private static GUIStyle Text(int size, string color, FontStyle font = FontStyle.Normal, int below = 0)
+    private static GUIStyle Text(int size, uint color, FontStyle font = FontStyle.Normal, int below = 0)
     {
         var style = new GUIStyle(GUI.skin.label) { fontSize = size, fontStyle = font, wordWrap = true, richText = true, margin = new RectOffset(0, 0, 0, below), padding = new RectOffset(0, 0, 0, 0) };
-        Paint(style, null, Hex(color));
+        Paint(style, null, Rgb(color));
+        return style;
+    }
+
+    private static GUIStyle StatusText(uint color)
+    {
+        var style = Text(11, color);
+        style.wordWrap = false;
+        style.alignment = TextAnchor.MiddleLeft;
+        style.margin.right = 10;
         return style;
     }
 
     private void EnsureStyles()
     {
-        if (windowStyle != null && edge != null)
+        if (windowStyle != null)
             return;
-        shade = Solid("#000000", 0.5f);
-        edge = Solid("#39424f");
-        track = Solid("#1b2028");
-        thumb = Solid("#465160");
-        windowStyle = new GUIStyle(GUI.skin.window) { padding = new RectOffset(22, 22, 18, 18), border = new RectOffset(0, 0, 0, 0), contentOffset = Vector2.zero };
-        Paint(windowStyle, Solid("#14181f"), UnityEngine.Color.white);
-        headStyle = Text(20, "#f2f5f8", FontStyle.Bold);
-        metaStyle = Text(12, "#8b95a3");
+        shade = Solid(0, 0.35f);
+        track = Solid(KeelPalette.Header);
+        thumb = Solid(KeelPalette.Hover);
+        headerBack = track;
+        windowStyle = new GUIStyle(GUI.skin.window) { padding = new RectOffset(14, 14, 42, 12), border = new RectOffset(0, 0, 0, 0), contentOffset = Vector2.zero };
+        Paint(windowStyle, Solid(KeelPalette.Panel), UnityEngine.Color.white);
+        headStyle = Text(14, KeelPalette.Muted);
+        headStyle.alignment = TextAnchor.MiddleLeft;
+        metaStyle = Text(12, KeelPalette.Muted);
         metaStyle.alignment = TextAnchor.MiddleRight;
         metaStyle.wordWrap = false;
-        statsStyle = Text(14, "#d7dde5", FontStyle.Normal, 10);
-        lineStyle = new GUIStyle { margin = new RectOffset(0, 0, 0, 12) };
-        lineStyle.normal.background = edge;
-        alertStyle = Text(13, "#ffd98a", FontStyle.Normal, 8);
+        statsStyle = Text(14, KeelPalette.Text, below: 8);
+        lineStyle = new GUIStyle { margin = new RectOffset(0, 0, 0, 8) };
+        lineStyle.normal.background = Solid(KeelPalette.Divider);
+        alertStyle = Text(13, KeelPalette.Amber, below: 8);
         alertStyle.padding = new RectOffset(12, 12, 9, 9);
-        alertStyle.normal.background = Solid("#3a2f17");
-        noteStyle = Text(12, "#8b95a3", FontStyle.Normal, 6);
-        groupStyle = Text(12, "#8b95a3", FontStyle.Bold, 6);
-        rowStyle = new GUIStyle { padding = new RectOffset(12, 12, 9, 9), margin = new RectOffset(0, 8, 0, 6) };
-        rowStyle.normal.background = Solid("#1d232c");
-        nameStyle = Text(14, "#f2f5f8", FontStyle.Normal, 1);
-        sourceStyle = Text(11, "#7f8a98");
-        bodyStyle = Text(12, "#ffb4ae");
+        alertStyle.normal.background = Solid(KeelPalette.Header);
+        noteStyle = Text(12, KeelPalette.Muted, below: 6);
+        groupStyle = Text(12, KeelPalette.Muted, below: 3);
+        groupStyle.padding = new RectOffset(8, 8, 4, 4);
+        groupStyle.normal.background = headerBack;
+        rowStyle = new GUIStyle { padding = new RectOffset(8, 8, 6, 6), margin = new RectOffset(0, 0, 0, 2) };
+        rowStyle.normal.background = Solid(KeelPalette.Row);
+        nameStyle = Text(14, KeelPalette.Text, below: 1);
+        sourceStyle = Text(11, KeelPalette.Muted);
+        bodyStyle = Text(12, KeelPalette.Red);
         bodyStyle.margin = new RectOffset(0, 0, 5, 0);
-        warnStyle = Text(12, "#e8c56f");
+        warnStyle = Text(12, KeelPalette.Amber);
         warnStyle.margin = new RectOffset(0, 0, 5, 0);
         buttonStyle = new GUIStyle(GUI.skin.button) { fontSize = 13, alignment = TextAnchor.MiddleCenter, border = new RectOffset(0, 0, 0, 0), margin = new RectOffset(0, 8, 0, 0), padding = new RectOffset(8, 8, 0, 0) };
-        Paint(buttonStyle, Solid("#2a323d"), Hex("#e8ecf1"));
-        buttonStyle.hover.background = buttonStyle.onHover.background = Solid("#3a4552");
-        buttonStyle.active.background = buttonStyle.onActive.background = Solid("#4a5766");
-        pills.Clear();
-        foreach ((PluginState state, string color) in new[]
+        Paint(buttonStyle, Solid(KeelPalette.Control), Rgb(KeelPalette.Text));
+        buttonStyle.hover.background = buttonStyle.onHover.background = Solid(KeelPalette.Hover);
+        buttonStyle.active.background = buttonStyle.onActive.background = Solid(KeelPalette.Pressed);
+        foreach ((PluginState state, uint color) in new[]
         {
-            (PluginState.Running, "#2c7a4d"), (PluginState.RunningWithErrors, "#a87a12"), (PluginState.Failed, "#b83c36"), (PluginState.NotStarted, "#b83c36"),
-            (PluginState.Skipped, "#4a5361"), (PluginState.LeftToAnchorChain, "#2f6aa8"), (PluginState.Pending, "#4a5361"),
+            (PluginState.Running, KeelPalette.Green), (PluginState.RunningWithErrors, KeelPalette.Amber),
+            (PluginState.Failed, KeelPalette.Red), (PluginState.NotStarted, KeelPalette.Red),
+            (PluginState.Skipped, KeelPalette.Muted), (PluginState.LeftToAnchorChain, KeelPalette.Blue),
+            (PluginState.Pending, KeelPalette.Muted),
         })
-        {
-            var pill = new GUIStyle { fontSize = 11, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, margin = new RectOffset(0, 12, 1, 0) };
-            pill.normal.background = Solid(color);
-            pill.normal.textColor = UnityEngine.Color.white;
-            pills[state] = pill;
-        }
+            statusStyles[state] = StatusText(color);
     }
 
     private static string Coloured(string summary) => string.Join("   ·   ", summary.Split(new[] { ", " }, StringSplitOptions.None).Select(part =>
     {
-        string color = part.Contains("failed") || part.Contains("not started") ? "#ff8f88"
-                     : part.Contains("errors") ? "#e8c56f"
-                     : part.Contains("loader") ? "#8cc0f2"
-                     : "#86d99b";
-        return $"<color={color}>{part}</color>";
+        uint color = part.Contains("failed") || part.Contains("not started") ? KeelPalette.Red
+                   : part.Contains("errors") || part.Contains("warning") ? KeelPalette.Amber
+                   : part.Contains("loader") ? KeelPalette.Blue
+                   : KeelPalette.Green;
+        return $"<color=#{color:X6}>{part}</color>";
     }));
 
     private static int GroupOf(PluginEntry p) => Report.IsProblem(p) ? 0 : p.State == PluginState.Running ? 1 : 2;
@@ -1646,9 +1648,9 @@ internal sealed partial class KeelHost : MonoBehaviour
     private void Row(PluginEntry p)
     {
         GUILayout.BeginHorizontal(rowStyle);
-        GUILayout.Label(Report.Tag(p.State), pills.TryGetValue(p.State, out GUIStyle pill) ? pill : pills[PluginState.Pending], GUILayout.Width(100), GUILayout.Height(22));
+        GUILayout.Label(Report.Tag(p.State), statusStyles[p.State], GUILayout.Width(96), GUILayout.Height(18));
         GUILayout.BeginVertical();
-        GUILayout.Label($"<b>{p.Display}</b>  <color=#8b95a3>{p.Version}</color>", nameStyle);
+        GUILayout.Label($"{p.Display}  <color=#{KeelPalette.Muted:X6}>{p.Version}</color>", nameStyle);
         GUILayout.Label($"{p.Folder?.Label}  ·  {Path.GetFileName(p.Dll)}", sourceStyle);
         if (!string.IsNullOrEmpty(p.Reason))
             GUILayout.Label(p.Reason, bodyStyle);
@@ -1664,7 +1666,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private bool Button(string text, float width, ref Rect rect)
     {
-        bool clicked = GUILayout.Button(text, buttonStyle, GUILayout.Width(width), GUILayout.Height(32));
+        bool clicked = GUILayout.Button(text, buttonStyle, GUILayout.Width(width), GUILayout.Height(27));
         if (Event.current.type == EventType.Repaint)
         {
             Rect r = GUILayoutUtility.GetLastRect();
@@ -1675,12 +1677,17 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private void DrawWindow(int id)
     {
-        GUILayout.BeginHorizontal();
-        GUILayout.Label("R.A.T.S. Keel", headStyle);
-        GUILayout.FlexibleSpace();
-        GUILayout.Label($"{Keel.Version}  ·  {GameState.BuildName}", metaStyle, GUILayout.Height(26));
-        GUILayout.EndHorizontal();
-        GUILayout.Space(4);
+        const float headerHeight = 28;
+        var caption = new Rect(0, 0, window.width, headerHeight);
+        var close = new Rect(window.width - 25, 2, 23, 24);
+        if (Event.current.type == EventType.Repaint)
+        {
+            GUI.DrawTexture(caption, headerBack);
+            titleCloseRect = new Rect(window.x + close.x, window.y + close.y, close.width, close.height);
+        }
+        GUI.Label(new Rect(9, 0, window.width - 45, headerHeight), "R.A.T.S. KEEL  ·  MOD REPORT", headStyle);
+        GUI.Label(new Rect(0, 0, window.width - 34, headerHeight), $"{Keel.Version}  ·  {GameState.BuildName}", metaStyle);
+        if (GUI.Button(close, "×", buttonStyle)) showWindow = false;
         GUILayout.Label(done ? Coloured(Report.Summary(Keel.Plugins)) : "Still starting mods …", statsStyle);
         GUILayout.Box(GUIContent.none, lineStyle, GUILayout.Height(1), GUILayout.ExpandWidth(true));
 
@@ -1739,7 +1746,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         bar.fixedWidth = barWidth;
         knob.fixedWidth = knobWidth;
 
-        GUILayout.Space(12);
+        GUILayout.Space(6);
+        GUILayout.Box(GUIContent.none, lineStyle, GUILayout.Height(1), GUILayout.ExpandWidth(true));
         GUILayout.BeginHorizontal();
         if (Button("Copy report", 120, ref copyRect))
             GUIUtility.systemCopyBuffer = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
@@ -1747,6 +1755,13 @@ internal sealed partial class KeelHost : MonoBehaviour
             SaveLogs();
         if (Button("Send report", 120, ref sendRect))
             SendReport();
+        bool stackedActions = window.width < (euromod is { AcPack: true } ? 890 : 710);
+        if (stackedActions)
+        {
+            GUILayout.EndHorizontal();
+            GUILayout.Space(4);
+            GUILayout.BeginHorizontal();
+        }
         if (HeldOffered && Button(heldClicked ? "Restart the game" : "Let held mods run", 160, ref heldRect))
             HeldButton();
         if (!HeldOffered && Button(restartArmed ? "Click again to restart" : "Restart the game", 180, ref restartRect))
@@ -1757,6 +1772,6 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (Button("Close", 100, ref closeRect))
             showWindow = false;
         GUILayout.EndHorizontal();
-        GUI.DragWindow(new Rect(0, 0, 10000, 56));
+        GUI.DragWindow(new Rect(0, 0, close.x, headerHeight));
     }
 }

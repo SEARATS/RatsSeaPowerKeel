@@ -141,4 +141,8 @@ internal static class LoadingWindow
     public static string Alert;
     public static bool ExternalProgress;
     public static string PreparationStatus;
+    public static string WaitingFor;
+    public static bool SummaryReady, GameDrawsSummary, OverlayGone;
+    public static int SummaryX, SummaryY, SummaryW, SummaryH;
+    public static float SummaryScale;
 }

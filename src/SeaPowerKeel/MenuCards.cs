@@ -47,14 +47,13 @@ internal sealed partial class KeelHost
     private float exitBottom = -1f, exitCheckedAt = -10f, panelRight = -1f;
     private int cardErrors;
 
-    private Texture2D roundTex, circleTex;
-    private GUIStyle roundBody, cardHead, cardText, cardSmall, cardCredit;
+    private Texture2D circleTex;
+    private GUIStyle cardHead, cardText, cardSmall, cardCredit;
     private float cardStyleUnit = -1f;
 
-    private static readonly UnityEngine.Color CardBack = new(0x1E / 255f, 0x1F / 255f, 0x22 / 255f, 0.94f),
-        CardGreen = new(0x63 / 255f, 0xB9 / 255f, 0x70 / 255f), CardAmber = new(0xD5 / 255f, 0xA8 / 255f, 0x76 / 255f),
-        CardText = new(0xD7 / 255f, 0xD7 / 255f, 0xD7 / 255f), CardDim = new(0x94 / 255f, 0x9A / 255f, 0xA1 / 255f),
-        CardEdge = new(0x3F / 255f, 0x41 / 255f, 0x47 / 255f);
+    private static readonly UnityEngine.Color CardBack = Rgb(KeelPalette.Panel, 0.97f),
+        CardGreen = Rgb(KeelPalette.Green), CardAmber = Rgb(KeelPalette.Amber),
+        CardText = Rgb(KeelPalette.Text), CardDim = Rgb(KeelPalette.Muted);
 
     // ---- what is up -------------------------------------------------------------------------------------------------------
 
@@ -285,7 +284,7 @@ internal sealed partial class KeelHost
             return;
         UnityEngine.Color was = GUI.color;
         GUI.color = new UnityEngine.Color(1f, 1f, 1f, alpha);
-        roundBody.Draw(r, GUIContent.none, false, false, false, false);
+        GUI.DrawTexture(r, Tint(CardBack));
         GUI.color = was;
     }
 
@@ -299,8 +298,7 @@ internal sealed partial class KeelHost
         GUI.color = was;
     }
 
-    /// <summary>Where a card's × sits: the same spot on both cards (his word 2026-11-12), 16 in and 12 down from the top right.</summary>
-    private static Rect CloseSpot(Rect card) => new Rect(card.xMax - 16 - 22, card.y + 12, 22, 18);
+    private static Rect CloseSpot(Rect card) => new Rect(card.xMax - 24, card.y + 3, 21, 18);
 
     /// <summary>The Keel card: what Keel did, how long the game took, what to look at (the overlay's summary, drawn by the game).</summary>
     private void DrawSummaryCard(Rect r, float alpha, float textAlpha)
@@ -319,24 +317,25 @@ internal sealed partial class KeelHost
         if (Event.current.type == EventType.Repaint)
         {
             GUI.color = new UnityEngine.Color(1, 1, 1, alpha);
-            GUI.DrawTexture(new Rect(r.x + 1, r.y + 6, Mathf.Max(2f, 4 * u), r.height - 12), amber ? Tint(CardAmber) : Tint(CardGreen));
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 24 * u), headerBack);
         }
         GUI.color = new UnityEngine.Color(1, 1, 1, alpha * textAlpha);
-        float pad = 14 * u, y = r.y + 8 * u, lineH = 20 * u, tw = r.width - 2 * pad;
+        float pad = 10 * u, y = r.y, lineH = 20 * u, tw = r.width - 2 * pad;
         string ver = string.IsNullOrEmpty(s.KeelVersion) ? "" : " " + s.KeelVersion;
         // An × top right closes it, like What's new (his word 2026-11-12: "just add a x to both, no right click").
         EnsureNewsStyles();
         var close = CloseSpot(r);          // the very spot of What's new's ×
         GUI.Label(close, "×", newsClose);
         cardCloseRect = new Rect(close.x - 6, close.y - 6, close.width + 12, close.height + 12);
-        GUI.Label(new Rect(r.x + pad, y, tw - 22 * u, 24 * u),
-            Fit("Keel" + ver + " started " + s.Running + (s.Running == 1 ? " mod" : " mods") + (s.KeelSeconds >= 1 ? " in " + s.KeelSeconds.ToString("0") + " s" : ""), cardHead, tw - 22 * u), cardHead);
-        y += 24 * u;
-        string line2 = "Game ready after " + Clock(s.DoneElapsed > 0 ? s.DoneElapsed : s.Elapsed) + (s.Skipped > 0 ? "  -  " + s.Skipped + " skipped" : "");
+        GUI.Label(new Rect(r.x + pad, y, tw - 24, 24 * u),
+            Fit("R.A.T.S. KEEL" + ver, cardHead, tw - 24), cardHead);
+        y += 27 * u;
+        string line2 = $"{s.Running} running · Game ready in {Clock(s.DoneElapsed > 0 ? s.DoneElapsed : s.Elapsed)}";
+        if (s.Skipped > 0) line2 += $" · {s.Skipped} skipped";
         GUI.Label(new Rect(r.x + pad, y, tw, lineH), Fit(line2, cardText, tw), cardText);
         y += lineH;
         string line3 = s.SummaryLine(alert);
-        cardSmall.normal.textColor = amber ? CardAmber : CardDim;
+        cardSmall.normal.textColor = amber ? CardAmber : CardGreen;
         GUI.Label(new Rect(r.x + pad, y, tw, lineH), Fit(line3, cardSmall, tw), cardSmall);
         y += lineH;
         creditRect = new Rect(r.x + pad, y, 130 * u, lineH);
@@ -363,16 +362,18 @@ internal sealed partial class KeelHost
     private float NewsLayout(Rect r, int count, bool draw, float alpha)
     {
         EnsureNewsStyles();
-        const float padX = 16, padY = 12;
-        float inner = r.width - 2 * padX, y = r.y + padY;
+        const float padX = 10, padY = 9;
+        float inner = r.width - 2 * padX, y = r.y;
         UnityEngine.Color was = GUI.color;
         if (draw)
             GUI.color = new UnityEngine.Color(1, 1, 1, alpha);
         EnsureOneLineStyles();
-        var title = new GUIContent(Fit($"WHAT'S NEW  ·  {Keel.Name}", oneTitle, inner - 26));
-        float th = Mathf.Max(18f, oneTitle.CalcHeight(title, inner - 26));
+        var title = new GUIContent(Fit("WHAT'S NEW  ·  R.A.T.S. KEEL", oneTitle, inner - 26));
+        const float th = 24;
         if (draw)
         {
+            if (Event.current.type == EventType.Repaint)
+                GUI.DrawTexture(new Rect(r.x, y, r.width, th), headerBack);
             GUI.Label(new Rect(r.x + padX, y, inner - 26, th), title, oneTitle);
             var close = CloseSpot(r);
             GUI.Label(close, "×", newsClose);
@@ -384,9 +385,9 @@ internal sealed partial class KeelHost
             float tx = r.x + padX + 84, tw = inner - 84;
             string ver = n.Kind == NewsKind.Updated && n.From.Length > 0 && n.To.Length > 0 && n.From != n.To ? $"{n.From} → {n.To}" : n.To;
             // name and version on one line: the version goes first when it does not fit, then the name is cut
-            string head = ver.Length > 0 && oneName.CalcSize(new GUIContent($"<b>{n.Name}</b>  {ver}")).x <= tw
-                ? $"<b>{n.Name}</b>  <color=#8b95a3>{ver}</color>"
-                : $"<b>{Fit(n.Name, oneNameBold, tw)}</b>";
+            string head = ver.Length > 0 && oneName.CalcSize(new GUIContent($"{n.Name}  {ver}")).x <= tw
+                ? $"{n.Name}  <color=#{KeelPalette.Muted:X6}>{ver}</color>"
+                : Fit(n.Name, oneName, tw);
             var headC = new GUIContent(head);
             float hh = oneName.CalcHeight(headC, tw);
             string line = Fit(n.Lines.FirstOrDefault() ?? "", oneLine, tw);
@@ -402,18 +403,31 @@ internal sealed partial class KeelHost
             y += Mathf.Max(22f, hh + lh) + 6;
         }
         int more = news.Count - count;
-        string footText = count == 0 ? $"{news.Count} mod(s) changed  ·  click to see them"
-                        : (more > 0 ? $"+{more} more  ·  " : "") + "click for all";
-        var foot = new GUIContent(Fit(footText, oneFoot, inner));
-        float fh = oneFoot.CalcHeight(foot, inner);
+        var moreLink = new GUIContent("(Read More)");
+        float linkWidth = newsLink.CalcSize(moreLink).x;
+        string summary = count == 0 ? $"{news.Count} {(news.Count == 1 ? "mod" : "mods")} changed"
+                         : more > 0 ? $"+{more} more" : "";
+        var foot = new GUIContent(Fit(summary, oneFoot, inner - linkWidth - 4));
+        float fh = newsLink.CalcHeight(moreLink, linkWidth);
         if (draw)
-            GUI.Label(new Rect(r.x + padX, y, inner, fh), foot, oneFoot);
+        {
+            float x = r.x + padX;
+            if (foot.text.Length > 0)
+            {
+                float width = oneFoot.CalcSize(foot).x;
+                GUI.Label(new Rect(x, y, width, fh), foot, oneFoot);
+                x += width + 4;
+            }
+            GUI.Label(new Rect(x, y, linkWidth, fh), moreLink, newsLink);
+            if (Event.current.type == EventType.Repaint)
+                GUI.DrawTexture(new Rect(x, y + fh - 2, linkWidth, 1), Tint(Rgb(KeelPalette.Accent)));
+        }
         y += fh + padY;
         GUI.color = was;
         return y - r.y;
     }
 
-    private GUIStyle oneTitle, oneName, oneNameBold, oneLine, oneFoot;
+    private GUIStyle oneTitle, oneName, oneLine, oneFoot, newsLink;
 
     /// <summary>Copies of the card's text styles that never wrap: every line is one line, cut to fit.</summary>
     private void EnsureOneLineStyles()
@@ -422,11 +436,11 @@ internal sealed partial class KeelHost
             return;
         GUIStyle One(GUIStyle s) => new GUIStyle(s) { wordWrap = false, clipping = TextClipping.Clip };
         oneTitle = One(newsTitle);
+        oneTitle.alignment = TextAnchor.MiddleLeft;
         oneName = One(newsName);
-        oneNameBold = One(newsName);
-        oneNameBold.fontStyle = FontStyle.Bold;
         oneLine = One(newsLine);
         oneFoot = One(newsFoot);
+        newsLink = One(Text(newsFoot.fontSize, KeelPalette.Accent));
     }
 
     /// <summary><paramref name="text"/> cut (with …) to what fits <paramref name="width"/> in <paramref name="style"/> on one line.</summary>
@@ -588,13 +602,7 @@ internal sealed partial class KeelHost
     private void EnsureCardStyles()
     {
         EnsureNewsStyles();
-        if (roundTex == null)
-        {
-            roundTex = RoundedRect(32, 9f, CardBack, CardEdge);
-            circleTex = Disc(64);
-            roundBody = new GUIStyle { border = new RectOffset(11, 11, 11, 11) };
-            roundBody.normal.background = roundTex;
-        }
+        circleTex ??= Disc(64);
         float u = LoadingWindow.SummaryScale / guiScale;
         if (Mathf.Abs(u - cardStyleUnit) < 0.001f)
             return;
@@ -605,31 +613,10 @@ internal sealed partial class KeelHost
             alignment = TextAnchor.MiddleLeft, padding = new RectOffset(0, 0, 0, 0), margin = new RectOffset(0, 0, 0, 0),
             normal = { textColor = color },
         };
-        cardHead = Make(14, FontStyle.Bold, CardText);
-        cardText = Make(12, FontStyle.Normal, CardDim);
+        cardHead = Make(10, FontStyle.Normal, CardDim);
+        cardText = Make(10, FontStyle.Normal, CardText);
         cardSmall = Make(10, FontStyle.Normal, CardDim);
-        cardCredit = Make(10, FontStyle.Normal, CardEdge);
-    }
-
-    /// <summary>A rounded rectangle for a 9-slice style: <paramref name="fill"/> inside, a 1-pixel <paramref name="edge"/>, soft corners.</summary>
-    internal static Texture2D RoundedRect(int size, float radius, UnityEngine.Color fill, UnityEngine.Color edge)
-    {
-        var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp };
-        var px = new UnityEngine.Color[size * size];
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-            {
-                // distance outside the rounded rectangle (negative inside)
-                float cx = Mathf.Clamp(x + 0.5f, radius, size - radius), cy = Mathf.Clamp(y + 0.5f, radius, size - radius);
-                float d = Mathf.Sqrt((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy)) - radius;
-                float cover = Mathf.Clamp01(0.5f - d);
-                UnityEngine.Color c = d > -1.2f ? edge : fill;
-                c.a = (d > -1.2f ? 1f : fill.a) * cover;
-                px[y * size + x] = c;
-            }
-        t.SetPixels(px);
-        t.Apply();
-        return t;
+        cardCredit = Make(9, FontStyle.Normal, CardDim);
     }
 
     /// <summary>A white disc with a soft edge, tinted with GUI.color.</summary>
