@@ -468,10 +468,14 @@ internal static class SelfTest
             "an old AC Pack on 0.8.7 or an unknown game version: no warning");
         Check(ModSetups.Detect(new[] { fLocal }, null, oldTimes, "0.9.1").Warning() == null, "a local AC Pack copy (no Steam time): no warning");
 
-        // Start early (opt-in, rgreat 2026-11-12): _info.ini [Keel] StartEarly=true; a mod that needs a late one waits too.
-        Check(EarlyStart.InInfoIni("[Language_en]\nName=X\n\n[Keel]\nStartEarly=true\n") && !EarlyStart.InInfoIni("[Language_en]\nStartEarly=true\n")
-              && !EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") && EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n"),
-              "start early: only [Keel] StartEarly=true counts (any case, comments allowed)");
+        Check(EarlyStart.InInfoIni("[Language_en]\nStartEarly=true\n") == null &&
+              EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") == false &&
+              EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n") == true,
+              "the legacy start-early flag still works in the Keel section");
+        Check(EarlyStart.InInfoIni("[Keel]\nLoadTiming=Early\n") == true &&
+              EarlyStart.InInfoIni("[Keel]\nLoadTiming=AnchorChain\nStartEarly=true\n") == false &&
+              EarlyStart.InInfoIni("[Keel]\nLoadTiming=unknown\n") != true,
+              "explicit timing overrides the legacy flag and invalid timing keeps the default");
         var eA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true };
         var eB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true };
         eB.Dependencies.Add(new Dependency { Guid = "c" });
@@ -497,6 +501,16 @@ internal static class SelfTest
         string other = "[Other]\nX=1\n[Submods]\nTestRange=false\n\n[More]\nY=2\n";
         Check(ModSetups.SetSubmod(other, "euromod.extended-guidance", true) == "[Other]\nX=1\n[Submods]\nTestRange=false\neuromod.extended-guidance=true\n\n[More]\nY=2\n", "EG added at the end of [Submods], other sections kept");
         Check(ModSetups.ReadSubmods(ModSetups.SetSubmod("; note\n", "euromod.extended-guidance", true))["euromod.extended-guidance"], "what the button writes reads back as on");
+        var earlyAlias = new PluginEntry { Guid = "early", StartEarly = true };
+        earlyAlias.AlsoKnownAs.Add("legacy");
+        var normal = new PluginEntry { Guid = "normal" };
+        normal.Dependencies.Add(new Dependency { Guid = "legacy", Hard = true });
+        var phases = new List<PluginEntry> { earlyAlias, normal };
+        Check(EarlyStart.Set(phases, null).SetEquals(new[] { earlyAlias }),
+            "normal timing is the default and an early plugin can satisfy a later dependency");
+        earlyAlias.State = PluginState.Running;
+        Check(Planner.Replan(phases, new HashSet<string>()).SequenceEqual(new[] { normal }),
+            "the normal phase retains an early dependency that started under an alternate GUID");
     }
 
     private static void TakeoverChecks(string tmp)
