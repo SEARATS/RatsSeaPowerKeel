@@ -48,6 +48,7 @@ internal static class SelfTest
             Console.WriteLine("0. _info.ini [Compatibility], by the game's rules");
             InfoIni();
             ScannerExclusions(tmp, managed, core);
+            KeelBootCompatibility();
             StartupPreparationChecks(tmp);
             Console.WriteLine("3. Scanner: Anchor Chain plugin classes must be public (exported)");
             ExportedTypes(tmp, managed, core);
@@ -82,11 +83,42 @@ internal static class SelfTest
         return failures > 0 ? 1 : 0;
     }
 
-    private static void StartupPreparationChecks(string tmp)
+    private static void KeelBootCompatibility()
     {
         var boot = typeof(Keel).GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
-        Check(boot?.GetParameters().Select(parameter => parameter.ParameterType)
-            .SequenceEqual(new[] { typeof(string), typeof(string) }) == true, "the original stub can resolve the two-argument Boot method");
+        Check(boot?.ReturnType == typeof(void) && boot.GetParameters().Select(parameter => parameter.ParameterType)
+            .SequenceEqual(new[] { typeof(string), typeof(string) }), "the original stub can resolve public static void Boot(string, string)");
+
+        int starts = 0;
+        var reports = new List<string>();
+        void Prepare(Action<string> report) => report("prepared");
+        void OldLoader() => starts++;
+        void NewLoader()
+        {
+            starts++;
+            PreparationDll.RunIfAvailable(reports.Add);
+        }
+
+        OldLoader();
+        NewLoader();
+        Check(starts == 2 && reports.Count == 0, "the old stub can boot both loaders without a preparation callback");
+        PreparationDll.DuringBoot(OldLoader, Prepare);
+        Check(starts == 3 && reports.Count == 0, "the new stub can boot the old loader without requiring it to prepare");
+        PreparationDll.DuringBoot(NewLoader, Prepare);
+        Check(starts == 4 && reports.SequenceEqual(new[] { "prepared" }), "the new loader can use the new stub's callback during Boot");
+        PreparationDll.RunIfAvailable(reports.Add);
+        Check(reports.Count == 1, "the callback is cleared after Boot returns");
+        var failure = new InvalidOperationException("test boot failure");
+        bool propagated = false;
+        try { PreparationDll.DuringBoot(() => throw failure, Prepare); }
+        catch (InvalidOperationException error) when (ReferenceEquals(error, failure)) { propagated = true; }
+        Check(propagated, "a failed loader still reports the boot error to the stub");
+        NewLoader();
+        Check(starts == 5 && reports.Count == 1, "a failed boot clears the callback before the next loader starts");
+    }
+
+    private static void StartupPreparationChecks(string tmp)
+    {
         string folder = Path.Combine(tmp, "preparation");
         string nested = Path.Combine(folder, "nested");
         Directory.CreateDirectory(nested);

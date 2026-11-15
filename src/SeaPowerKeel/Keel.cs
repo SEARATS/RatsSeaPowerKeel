@@ -207,9 +207,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         reportPath = Path.Combine(Paths.BepInExRootPath, "Keel-report.txt");
         Loading.LoadingWindow.Start(config, log);      // first, so it opens before the slow steps that follow (see docs/loading-window.md)
         Keel.StartupWindowOpened = Keel.StartupElapsed;
-        if (disabled.Value.Length == 0 && crash is { Previous.Unclean: false, HasHeldPlugins: false } &&
-            AppDomain.CurrentDomain.GetData(PreparationDll.BootCallbackKey) is Action<Action<string>> prepare)
-            prepare(Loading.LoadingWindow.ReportPreparation);
+        if (disabled.Value.Length == 0 && crash is { Previous.Unclean: false, HasHeldPlugins: false })
+            PreparationDll.RunIfAvailable(Loading.LoadingWindow.ReportPreparation);
         log.LogInfo($"{Keel.Name} {Keel.Version} (stub {StubVersion}) on the {GameState.BuildName}, from {OwnPath}");
         StartCoroutine(Run());
     }

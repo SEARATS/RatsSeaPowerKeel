@@ -85,3 +85,30 @@ replays a log through the window's model (adding the `STARTING` lines older logs
 - The preloader's 12.7 s are outside Keel (`tools/anchorchain-fix`); worth a look on its own.
 - Exclusive full screen hides the window; the game's "fullscreen window" mode shows it.
 - A mod that works on after its start returns (Dynamic Campaign Mod) is not named for that work.
+
+## Loader compatibility tests
+
+The offline self-test checks the two-argument boot method, both generations of
+the preparation handoff, and callback cleanup after success or failure.
+
+Run the live matrix locally with a current Steam install of Sea Power and
+BepInEx, the [Sea Power CLI](https://github.com/agm-114/crimean-tom/tree/main/docs/seapower-cli),
+and the stub and loader DLLs from a Keel release such as 0.5.4. Close the game
+first. The script builds the current pair, tests all four pairings, and
+restores the original mod list and starter files.
+
+```powershell
+$test = @{
+    GameDir = $gameDir
+    Cli = $cliExe
+    LegacyStub = $oldKeelStub
+    LegacyLoader = $oldKeelLoader
+}
+./tools/test-loaders.ps1 @test
+```
+
+To include the current Anchor Chain loader in the same local run, add
+`AnchorChainPreloader` from its release zip and
+`AnchorChainLoader` from its installed Workshop package to `$test`.
+This case starts Anchor Chain with its own preloader and needs the current
+game version. The script reports the directory containing the logs.

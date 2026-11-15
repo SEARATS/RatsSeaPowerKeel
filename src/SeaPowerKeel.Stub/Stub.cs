@@ -61,10 +61,7 @@ public class Stub : BaseUnityPlugin
             }
             void Prepare(Action<string> report) => StartupPreparation.Queue(Application.version,
                 Application.streamingAssetsPath, ModFolders.WorkshopRoot, ModFolders.UserSettings, report, Logger);
-            var domain = AppDomain.CurrentDomain;
-            domain.SetData(PreparationDll.BootCallbackKey, (Action<Action<string>>)Prepare);
-            try { boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path }); }
-            finally { domain.SetData(PreparationDll.BootCallbackKey, null); }
+            PreparationDll.DuringBoot(() => boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path }), Prepare);
         }
         catch (Exception ex)
         {
