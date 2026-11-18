@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Anchor Chain 1.3: the switch to Keel
+
+Not released; a pull request, tested in the VM first. Goes out through Anchor Chain's own Workshop item, not Keel's.
+
+- **Anchor Chain offers the switch**: on the main menu a game message box says Anchor Chain continues as Keel; Switch or Not now
+- **Switch does it all from the game**: subscribes to Keel, switches it on in the mod list, installs its stub and takeover the way KeelSetup does (Restore undoes it), restarts the game
+- **Not now changes nothing**: Anchor Chain keeps loading the mods; the box asks again at the next start
+- **Builds from the installed game**: `anchor-chain/` no longer needs a `Dll` folder of game files
+
 ## 0.6.0 - 2026-11-18 - Keel carries on Anchor Chain, fixes from 183 player reports
 
 Run in the test VM on game 0.9.3, public (Steam build 26712472) and beta (26712879), on 2026-11-18: setup, cards, report, What's new, two
