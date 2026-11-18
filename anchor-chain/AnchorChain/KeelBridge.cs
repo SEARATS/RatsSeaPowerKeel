@@ -72,11 +72,19 @@ internal sealed class KeelBridge : MonoBehaviour
 	private IEnumerator OfferWhenMenuIsUp()
 	{
 		// The settled main menu: after the load screen and its questions, so the box does not land behind them.
-		float stable = 0f;
+		Log.LogInfo("Waiting for the main menu to offer the switch.");
+		float stable = 0f, waited = 0f;
+		bool told = false;
 		while (stable < 2f) {
 			stable = OnMainMenu() ? stable + Time.unscaledDeltaTime : 0f;
+			waited += Time.unscaledDeltaTime;
+			if (!told && waited > 300f) {
+				told = true;
+				Log.LogWarning("No main menu after five minutes; still waiting to offer the switch.");
+			}
 			yield return null;
 		}
+		Log.LogInfo("Main menu is up.");
 		try {
 			Show(OfferText, "Switch to Keel", Switch, "Not now", () => Log.LogInfo("Not now: Anchor Chain stays this time."));
 			Log.LogInfo("Switch offer shown.");
@@ -96,8 +104,15 @@ internal sealed class KeelBridge : MonoBehaviour
 		}
 	}
 
+	// The start-up load screen is done (the same test as Anchor Chain's preloader and Keel) and the main menu view exists, with no
+	// mission or campaign scene loaded. LoadScreenView.Instance cannot tell it: the game sets it once and never clears it (VM test 2026-11-18).
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static bool MenuUp() => LoadScreenView.Instance == null && MainMenuView.Instance != null;
+	private static bool MenuUp() =>
+		Singleton<UnitMetadataProvider>.InstanceExists() && Singleton<UnitMetadataProvider>.Instance.UnitData != null &&
+		Singleton<LoadScreen>.InstanceExists() && Singleton<LoadScreen>.Instance.LoadText == "Done" &&
+		MainMenuView.Instance != null &&
+		!UnityEngine.SceneManagement.SceneManager.GetSceneByName("mission").isLoaded &&
+		!UnityEngine.SceneManagement.SceneManager.GetSceneByName("linear-campaign").isLoaded;
 
 	// ---- the game's message box ----
 
