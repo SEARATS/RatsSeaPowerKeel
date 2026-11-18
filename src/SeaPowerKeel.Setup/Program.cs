@@ -4,9 +4,12 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -14,7 +17,8 @@ namespace SeaPowerKeel;
 
 /// <summary>
 /// KeelSetup.exe: one window that gets Keel running. It carries no other program inside: it copies the files that lie next to it in
-/// Keel's folder (the starter DLL, the takeover patcher) and unpacks BepInEx from its official release zip, also next to it.
+/// Keel's folder (the starter DLL, the takeover patcher). BepInEx is not shipped: when the game has none, the setup downloads BepInEx's
+/// official release from its GitHub page and checks it against the pinned hash before it unpacks anything.
 /// </summary>
 internal static class Program
 {
@@ -32,25 +36,14 @@ internal static class Program
     public static string StubFile => Path.Combine(Here, "copy-to-BepInEx-plugins", "SeaPowerKeel.Stub.dll");
     public static string PatcherFile => Path.Combine(Here, "SeaPowerKeel.Patcher.dll");
 
-    /// <summary>BepInEx's official release zip in Keel's folder, or null.</summary>
-    public static string BepInExZip
-    {
-        get
-        {
-            try
-            {
-                return Directory.GetFiles(Here, "BepInEx_win_x64_*.zip").OrderBy(f => f).LastOrDefault();
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-    }
+    private static string Metadata(string key) =>
+        Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value ?? "";
 
-    /// <summary>The SHA-256 of the official zip this build was made with (set at build time; empty in a developer build).</summary>
-    private static string ExpectedZipHash =>
-        Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == "BepInExSha256")?.Value ?? "";
+    /// <summary>The BepInEx release this build pins, and its SHA-256 (both set at build time by tools\bepinex.ps1; empty in a developer build).</summary>
+    public static string BepInExVersion => Metadata("BepInExVersion");
+    private static string ExpectedZipHash => Metadata("BepInExSha256");
+    public static string BepInExZipName => "BepInEx_win_x64_" + BepInExVersion + ".zip";
+    public static string BepInExUrl => "https://github.com/BepInEx/BepInEx/releases/download/v" + BepInExVersion + "/" + BepInExZipName;
 
     /// <summary>What is missing or wrong in Keel's folder, or null when the setup has everything it copies.</summary>
     public static string PayloadProblem(bool needBepInEx)
@@ -60,21 +53,57 @@ internal static class Program
             missing.Add(@"copy-to-BepInEx-plugins\SeaPowerKeel.Stub.dll");
         if (!File.Exists(PatcherFile))
             missing.Add("SeaPowerKeel.Patcher.dll");
-        string zip = BepInExZip;
-        if (needBepInEx && zip == null)
-            missing.Add("BepInEx_win_x64_*.zip");
         if (missing.Count > 0)
             return "Run KeelSetup.exe from Keel's own folder. Missing next to it: " + string.Join(", ", missing) + ".";
-        if (needBepInEx && ExpectedZipHash.Length > 0 && !string.Equals(Sha256(zip), ExpectedZipHash, StringComparison.OrdinalIgnoreCase))
-            return Path.GetFileName(zip) + " is not the official BepInEx release this setup was built with. Let Steam verify Keel's files, or download Keel again.";
+        if (needBepInEx && (BepInExVersion.Length == 0 || ExpectedZipHash.Length == 0))
+            return "This setup was built without the BepInEx release it may download. Use the KeelSetup.exe from Keel's Workshop folder or its GitHub release.";
         return null;
     }
 
-    private static string Sha256(string file)
+    /// <summary>
+    /// The official BepInEx release zip, checked against the pinned hash: a copy the player put next to KeelSetup.exe (for PCs without
+    /// internet), else the download from BepInEx's GitHub release. Keel ships no BepInEx itself. Throws IOException with a player text.
+    /// </summary>
+    public static byte[] GetBepInExZip()
+    {
+        string local = Path.Combine(Here, BepInExZipName);
+        if (File.Exists(local))
+        {
+            byte[] bytes = File.ReadAllBytes(local);
+            if (HashMatches(bytes))
+                return bytes;
+            throw new IOException(BepInExZipName + " next to KeelSetup.exe is not the official BepInEx release. Delete it, and Install downloads the right one.");
+        }
+        byte[] data;
+        try
+        {
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("KeelSetup/" + Assembly.GetExecutingAssembly().GetName().Version);
+            data = http.GetByteArrayAsync(BepInExUrl).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException || ex is WebException)
+        {
+            throw new IOException("BepInEx could not be downloaded from GitHub (" + Inner(ex) + "). Check your internet connection and try again. " +
+                                  "Without internet: download " + BepInExZipName + " from github.com/BepInEx/BepInEx/releases on another PC and put it next to KeelSetup.exe.");
+        }
+        if (!HashMatches(data))
+            throw new IOException("The BepInEx download is not the official " + BepInExVersion + " release (wrong checksum), so nothing was installed. Try again later.");
+        return data;
+    }
+
+    private static string Inner(Exception ex)
+    {
+        while (ex.InnerException != null)
+            ex = ex.InnerException;
+        return ex is TaskCanceledException ? "no answer in time" : ex.Message.TrimEnd('.');
+    }
+
+    private static bool HashMatches(byte[] data)
     {
         using var sha = System.Security.Cryptography.SHA256.Create();
-        using FileStream stream = File.OpenRead(file);
-        return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
+        string hash = BitConverter.ToString(sha.ComputeHash(data)).Replace("-", "");
+        return ExpectedZipHash.Length > 0 && string.Equals(hash, ExpectedZipHash, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Sea Power in any Steam library on this PC, or null.</summary>
@@ -149,15 +178,38 @@ internal sealed class SetupForm : Form
         var close = new Button { Text = "Close", AutoSize = true, DialogResult = DialogResult.Cancel, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(P(8), 0, 0, 0) };
         install = new Button { Text = "Install", AutoSize = true, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(0) };
         restore = new Button { Text = "Restore", AutoSize = true, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(0, 0, P(8), 0) };
-        install.Click += (s, e) => Do(c =>
+        install.Click += async (s, e) =>
         {
-            string problem = Program.PayloadProblem(!c.HasBepInEx);
-            if (problem != null)
-                return problem;
-            byte[] zip = c.HasBepInEx ? new byte[0] : File.ReadAllBytes(Program.BepInExZip);
-            return "Done. " + string.Join(" ", c.Install(File.ReadAllBytes(Program.StubFile), zip, File.ReadAllBytes(Program.PatcherFile))) +
-                   "\n\nStart Sea Power, switch R.A.T.S. Keel on in Mods, and restart the game.";
-        });
+            var core = new SetupCore(folder.Text.Trim());
+            byte[] zip = new byte[0];
+            if (!GameRunning && core.IsGameFolder && !core.HasBepInEx && Program.PayloadProblem(true) == null)
+            {
+                install.Enabled = restore.Enabled = browse.Enabled = folder.Enabled = false;
+                status.Text = "Downloading BepInEx " + Program.BepInExVersion + " from its GitHub release...";
+                try
+                {
+                    zip = await Task.Run(() => Program.GetBepInExZip());
+                }
+                catch (IOException ex)
+                {
+                    status.Text = ex.Message;
+                    browse.Enabled = folder.Enabled = true;
+                    Refresh2(keepStatus: true);
+                    return;
+                }
+                browse.Enabled = folder.Enabled = true;
+            }
+            Do(c =>
+            {
+                string problem = Program.PayloadProblem(!c.HasBepInEx);
+                if (problem != null)
+                    return problem;
+                if (!c.HasBepInEx && zip.Length == 0)
+                    return "BepInEx is missing. Press Install again to download it.";
+                return "Done. " + string.Join(" ", c.Install(File.ReadAllBytes(Program.StubFile), c.HasBepInEx ? new byte[0] : zip, File.ReadAllBytes(Program.PatcherFile))) +
+                       "\n\nStart Sea Power, switch R.A.T.S. Keel on in Mods, and restart the game.";
+            });
+        };
         restore.Click += (s, e) => Do(c => { c.Restore(); return "Everything Keel's setup changed is back as it was."; });
         close.Click += (s, e) => Close();
         row.Controls.Add(close);
@@ -192,12 +244,14 @@ internal sealed class SetupForm : Form
         status.Text = result;
     }
 
-    private void Refresh2()
+    private void Refresh2(bool keepStatus = false)
     {
         var core = new SetupCore(folder.Text.Trim());
         bool ok = folder.Text.Trim().Length > 0 && core.IsGameFolder;
         install.Enabled = ok;
         restore.Enabled = ok && core.CanRestore;
+        if (keepStatus)
+            return;
         if (!ok)
         {
             status.Text = "Choose the folder that holds Sea Power.exe.";
@@ -212,8 +266,10 @@ internal sealed class SetupForm : Form
         }
         var lines = new List<string> { core.HasStub ? "Keel is set up in this folder. Install again to repair it." : "Ready to install." };
         if (!core.HasBepInEx)
-            lines.Add("BepInEx is missing and will be added from its official release (" + Path.GetFileName(Program.BepInExZip) + ").");
-        lines.Add("Install only copies files into this game folder. No administrator rights, no internet access.");
+            lines.Add("BepInEx is missing: Install downloads the official BepInEx " + Program.BepInExVersion + " from its GitHub release and checks it before it adds it.");
+        lines.Add(core.HasBepInEx
+            ? "Install only copies files into this game folder. No administrator rights, no internet access."
+            : "Install only copies files into this game folder. No administrator rights; internet only for that one download.");
         if (core.HasOtherPreloader)
             lines.Add("Another loader's preloader will be set aside, so only one loader is active. Restore brings it back.");
         if (core.HasAlpine)

@@ -3,8 +3,8 @@
     Builds KeelWatcher.exe and KeelSetup.exe from the public source only: no game files, no files from a developer's PC.
 
 .DESCRIPTION
-    What the release builds need from outside this repository, all public: the official BepInEx release (shipped inside KeelSetup.exe,
-    unchanged) and the Unity reference assemblies from BepInEx's NuGet feed (only compiled against, never shipped). The results land in
+    What the release builds need from outside this repository, all public: the official BepInEx release (compiled against; KeelSetup.exe
+    downloads it on the player's PC, pinned to its hash) and the Unity reference assemblies from BepInEx's NuGet feed (only compiled against, never shipped). The results land in
     dist-ci\. This is what .github\workflows\build.yml runs, so a signature can be traced back to this source.
 #>
 $ErrorActionPreference = 'Stop'
@@ -39,7 +39,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Build failed: patcher' }
 dotnet build (Join-Path $root 'src\SeaPowerKeel.Watcher\SeaPowerKeel.Watcher.csproj') -c Release @refs
 if ($LASTEXITCODE -ne 0) { throw 'Build failed: KeelWatcher' }
 
-dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release "-p:BepInExSha256=$BepInExSha256" @refs
+dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release "-p:BepInExVersion=$BepInExVersion" "-p:BepInExSha256=$BepInExSha256" @refs
 if ($LASTEXITCODE -ne 0) { throw 'Build failed: KeelSetup' }
 
 $out = Join-Path $root 'dist-ci'

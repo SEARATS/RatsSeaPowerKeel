@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- KeelSetup.exe: carries no other program inside (virus scanners guessed the packed version to be a trojan, 2026-11). It copies the files next to it in
-       Keel's folder and unpacks BepInEx's official release zip from there. tools/package.ps1 passes BepInExSha256. .NET Framework 4.8 is on every Windows 10 and 11. -->
+       Keel's folder; BepInEx is not shipped, the setup downloads its official release. tools/package.ps1 passes BepInExVersion and BepInExSha256. .NET Framework 4.8 is on every Windows 10 and 11. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
@@ -19,7 +19,9 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />
-    <!-- the official BepInEx zip this build ships next to the exe; the setup refuses another one -->
+    <Reference Include="System.Net.Http" />
+    <!-- the official BepInEx release the setup downloads when the game has none; it refuses any file with another hash -->
+    <AssemblyMetadata Include="BepInExVersion" Value="$(BepInExVersion)" />
     <AssemblyMetadata Include="BepInExSha256" Value="$(BepInExSha256)" />
   </ItemGroup>
 

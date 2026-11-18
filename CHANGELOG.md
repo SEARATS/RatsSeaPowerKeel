@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased - Anchor Chain 1.3: the switch to Keel
+## Unreleased
+
+### KeelSetup downloads BepInEx
+
+Built and checked offline; the download has not been run on a game without BepInEx yet.
+
+- **Keel ships no BepInEx any more**: KeelSetup.exe downloads the official BepInEx 5.4.23.2 from its GitHub release only when the game has none
+- **Checked before anything is unpacked**: a download whose hash is not the pinned one is refused, nothing is installed
+- **No internet on that PC**: put `BepInEx_win_x64_5.4.23.2.zip` from BepInEx's GitHub page next to KeelSetup.exe; the setup checks and uses it
+- **Smaller package, fewer program files** for virus scanners to guess at
+
+### Anchor Chain 1.3: the switch to Keel
 
 Not released; a pull request, tested in the VM first. Goes out through Anchor Chain's own Workshop item, not Keel's.
 
