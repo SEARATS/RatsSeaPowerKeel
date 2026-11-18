@@ -154,6 +154,21 @@ internal static class GameState
         catch (Exception) { return false; }
     }
 
+    /// <summary>
+    /// A campaign screen (intro, newspaper, campaign map: scene "linear-campaign") or a mission scene is loaded: the main menu's cards
+    /// do not belong there (test 2026-11-18: the Keel card covered the campaign map's mission strip). The game's menu view model can
+    /// outlive the main menu, so it cannot tell this on its own.
+    /// </summary>
+    public static bool InCampaignOrMission()
+    {
+        try
+        {
+            return UnityEngine.SceneManagement.SceneManager.GetSceneByName("linear-campaign").isLoaded
+                || UnityEngine.SceneManagement.SceneManager.GetSceneByName("mission").isLoaded;
+        }
+        catch (Exception) { return false; }
+    }
+
     /// <summary>True once the game's menu system exists, so its UI (Noesis) is up.</summary>
     public static bool MenuUp()
     {

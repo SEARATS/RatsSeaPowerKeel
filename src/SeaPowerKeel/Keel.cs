@@ -1057,7 +1057,8 @@ internal sealed partial class KeelHost : MonoBehaviour
             nextMissionCheck = Time.unscaledTime + 0.5f;
             Loading.LoadingWindow.MissionRunning = GameState.InMission();
             // the summary belongs to the main menu's top page only; in a mission there is no menu to ask about
-            Loading.LoadingWindow.OnMenuSubPage = !Loading.LoadingWindow.MissionRunning && GameState.OnMenuSubPage();
+            // A campaign screen counts as a page away from the menu's top page too: the cards stay off there.
+            Loading.LoadingWindow.OnMenuSubPage = !Loading.LoadingWindow.MissionRunning && (GameState.InCampaignOrMission() || GameState.OnMenuSubPage());
         }
         if (Loading.LoadingWindow.ReportRequested)      // a click on the loading window's summary
         {

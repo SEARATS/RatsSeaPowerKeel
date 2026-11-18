@@ -21,6 +21,7 @@
 - **What's new asks Steam for one changelog page at a time** with a pause, and stops after Steam's first "too many requests"; one log line instead of one per page
 - **Lettered game builds** (0.9.1-261112b) keep their letter in reports
 - **New log**: `BepInEx\Keel-watcher.txt` says how each game ended and what the crash window did
+- **The Keel card stays off the campaign screens** (intro, newspaper, campaign map): it covered the mission strip (found in the test)
 
 ## 0.5.4 - 2026-11-12 - an × on both cards
 
