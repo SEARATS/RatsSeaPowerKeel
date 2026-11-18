@@ -1,6 +1,6 @@
-# The official BepInEx release that ships next to KeelSetup.exe, unchanged, as its own zip. Dot-sourced by package.ps1 and ci-build.ps1.
-# The zip is checked against a pinned SHA-256, so a build never ships anything but that release: not a copy from a game folder
-# (up to 0.5.4 package.ps1 took the developer's game copy, which was a different build of the same version; found 2026-11-13).
+# The official BepInEx release KeelSetup.exe downloads when a game has none (Keel ships no BepInEx since 0.6.1). Dot-sourced by
+# package.ps1 and ci-build.ps1, which bake version and SHA-256 into KeelSetup.exe; the setup refuses any download with another hash.
+# (Up to 0.5.4 package.ps1 took the developer's game copy, a different build of the same version; found 2026-11-13.)
 $BepInExVersion = '5.4.23.2'
 $BepInExSha256 = 'f752ce4e838f4c305b9da1404b6745f2cff23b8bfd494f79f0c84d0a01f59b46'
 

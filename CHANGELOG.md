@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+Built and checked offline; the download has not been run on a game without BepInEx yet.
+
+- **Keel ships no BepInEx any more**: KeelSetup.exe downloads the official BepInEx 5.4.23.2 from its GitHub release only when the game has none
+- **Checked before anything is unpacked**: a download whose hash is not the pinned one is refused, nothing is installed
+- **No internet on that PC**: put `BepInEx_win_x64_5.4.23.2.zip` from BepInEx's GitHub page next to KeelSetup.exe; the setup checks and uses it
+- **Smaller package, fewer program files** for virus scanners to guess at
+
 ## 0.6.0 - 2026-11-18 - Keel carries on Anchor Chain, fixes from 183 player reports
 
 Run in the test VM on game 0.9.3, public (Steam build 26712472) and beta (26712879), on 2026-11-18: setup, cards, report, What's new, two
