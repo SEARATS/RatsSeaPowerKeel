@@ -219,11 +219,10 @@ Keel reads Anchor Chain mods through their public attributes and interface so pl
 
 ## License
 
-- **The code is MIT** ([LICENSE](LICENSE)): read it, learn from it, fork it, send fixes.
+- **[R.A.T.S. Source License](LICENSE)**: read it, learn from it, fork it, send fixes; no re-uploads, no reuse in other projects.
+- Releases before 2026-11-18 stay MIT. agm-114's changes of 2026-11-14 (PR #3) came in under MIT and keep that notice: [lib/THIRD-PARTY.txt](lib/THIRD-PARTY.txt).
 - **The name and the look are not part of that.** "R.A.T.S.", "R.A.T.S. Keel", the logo, the Workshop pictures and texts and the
   plugin ids `dev.sewerlabs.seapowerkeel*` belong to the author; all rights reserved.
-- **No re-uploads.** Do not upload Keel or a copy of it to the Steam Workshop or elsewhere under these names, with these pictures,
-  or in a way that looks official or like a successor. A fork under its own name, look and plugin ids is fine.
 - Anchor Chain's library (`lib/`, MIT) and BepInEx keep their own licenses: [lib/THIRD-PARTY.txt](lib/THIRD-PARTY.txt).
 
 *R.A.T.S. – Ratte's Assorted Tactical Systems*
