@@ -9,6 +9,19 @@
 - **Only what the game needs leaves the zip**: the Doorstop files and BepInEx's core files
 - **Mod list text corrected**: it no longer says to delete Anchor Chain's preloader or to keep Anchor Chain subscribed
 
+### Fixes from 183 player reports (11 to 18 November)
+
+- **No innocent mod is held after the most common 0.9.x crash**: a crash inside Unity's object search happens when the game's object list is already damaged; the mod that only called the search (Quick Start, Cities and Borders, Hull Damage) is no longer blamed or held
+- **No campaign pack is switched off for being loaded last** before such a crash; for other crashes the "keep it off" box for a pack is no longer ticked by default (the pack is often the campaign being played)
+- **A game closed without Keel's quit mark is no crash** when Unity shut it down the normal way: no crash window, no mod named (about a quarter of the reports)
+- **The crash window waits until the game has really ended**: it came up while the game still ran
+- **The crash window says so when there is no crash record** instead of guessing a cause
+- **Report bundles carry this session's files only**: an older Keel-crash.txt or Keel-report.txt is left out, and Keel-crash.txt is written for the session that just ended
+- **Keel looks up the game's menu and loader objects once** and keeps them, instead of searching every half second; no search during missions (suspected menu stutter, and Keel's own search showed up on crash stacks)
+- **What's new asks Steam for one changelog page at a time** with a pause, and stops after Steam's first "too many requests"; one log line instead of one per page
+- **Lettered game builds** (0.9.1-261112b) keep their letter in reports
+- **New log**: `BepInEx\Keel-watcher.txt` says how each game ended and what the crash window did
+
 ## 0.5.4 - 2026-11-12 - an × on both cards
 
 - **An × on both cards**: the Keel card has one now, at the same spot as What's new's; it closes the card

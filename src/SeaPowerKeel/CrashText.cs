@@ -37,10 +37,77 @@ internal static class CrashText
         return false;
     }
 
-    /// <summary>The index of the root whose code is highest on the stack, or -1.</summary>
-    public static int FirstHit(string block, IList<string> roots)
+    // Unity's object search (FindObjectOfType and its kin) walks the game's whole object list. When that list is already broken -
+    // the most common crash in the 0.9.x reports, issue keel-findobject-blame - the search crashes in whatever code called it,
+    // a mod's or Keel's own. The caller did nothing wrong, so such a crash names no mod and no pack.
+    private static readonly string[] SearchCalls = { "FindObjectOfType", "FindObjectsOfType", "FindObjectsByType", "FindAnyObjectByType", "FindFirstObjectByType", "FindObjectsOfTypeAll" };
+
+    /// <summary>The top of the stack is Unity's object search: only UnityEngine frames above the first other frame, one of them a search.</summary>
+    public static bool InObjectSearch(string block)
     {
         if (block == null)
+            return false;
+        bool search = false;
+        foreach (string line in block.Replace("\r\n", "\n").Split('\n').Where(IsManagedFrame))
+        {
+            string code = FrameCode(line);
+            if (!code.StartsWith("UnityEngine.", StringComparison.Ordinal))
+                return search;
+            if (SearchCalls.Any(c => code.IndexOf(c, StringComparison.Ordinal) >= 0))
+                search = true;
+        }
+        return search;
+    }
+
+    /// <summary>
+    /// The code a frame names, without its address, "at ", "(Mono JIT code)" and "(wrapper ...)" parts:
+    /// "0x1 (Mono JIT code) (wrapper managed-to-native) UnityEngine.Object:FindObjectsOfType (...)" gives "UnityEngine.Object:FindObjectsOfType (...)".
+    /// </summary>
+    internal static string FrameCode(string frame)
+    {
+        string t = frame.Trim();
+        int jit = t.IndexOf("(Mono JIT code)", StringComparison.Ordinal);
+        if (jit >= 0)
+            t = t.Substring(jit + "(Mono JIT code)".Length).TrimStart();
+        if (t.StartsWith("at ", StringComparison.Ordinal))
+            t = t.Substring(3).TrimStart();
+        while (t.StartsWith("(wrapper", StringComparison.Ordinal))
+        {
+            int close = t.IndexOf(')');
+            if (close < 0)
+                break;
+            t = t.Substring(close + 1).TrimStart();
+        }
+        return t;
+    }
+
+    /// <summary>
+    /// "Input System module state changed to: Shutdown." is the last line Unity writes when the game is closed the normal way. A session
+    /// that ends with it and left no crash record was closed (or restarted) without Keel's quit mark: not a crash.
+    /// </summary>
+    public const string ShutdownLine = "Input System module state changed to: Shutdown";
+
+    public static bool LogEndedNormally(string playerLog)
+    {
+        string text = ReadAll(playerLog);
+        if (string.IsNullOrEmpty(text))
+            return false;
+        string tail = text.Length > 4000 ? text.Substring(text.Length - 4000) : text;
+        return tail.IndexOf(ShutdownLine, StringComparison.Ordinal) >= 0;
+    }
+
+    /// <summary>Keel-crash.txt: what the session left, written for the session that just ended (by Keel at the next start, or by the watcher).</summary>
+    public static string CrashFileText(string began, string step, string guid, string scene, string block) =>
+        $"The game session started {began ?? "?"} did not end normally.\n" +
+        $"Keel was {(guid != null ? $"at the '{step}' step of {guid}" : "not loading or starting a mod")}; last scene: {scene ?? "none"}.\n\n" +
+        (block ?? NoRecord) + "\n";
+
+    public const string NoRecord = "No crash record: the crash catcher wrote nothing and the game's log shows no crash. The game may have frozen and been ended, or been closed from outside.";
+
+    /// <summary>The index of the root whose code is highest on the stack, or -1. A crash inside Unity's object search names no one.</summary>
+    public static int FirstHit(string block, IList<string> roots)
+    {
+        if (block == null || InObjectSearch(block))
             return -1;
         foreach (string line in block.Replace("\r\n", "\n").Split('\n').Where(IsManagedFrame))
             for (int i = 0; i < roots.Count; i++)
@@ -82,7 +149,7 @@ internal static class CrashText
     public static bool LastPack(string block, out string folder, out string fullPath)
     {
         folder = fullPath = null;
-        if (block == null)
+        if (block == null || InObjectSearch(block))
             return false;
         foreach (string line in block.Replace("\r\n", "\n").Split('\n').Where(l => l.StartsWith(FilePrefix, StringComparison.Ordinal)))
         {

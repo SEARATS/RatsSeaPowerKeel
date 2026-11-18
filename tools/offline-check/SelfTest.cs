@@ -531,6 +531,31 @@ internal static class SelfTest
         Check(CrashText.LastPack(block, out string f, out string p) && f == "77" && p.EndsWith("plan_j-35.ini"), "the newest mod file before the crash names the pack");
         Check(!CrashText.LastPack("Crash: x\nFile: 60000\tC:/x/workshop/content/1286220/77/a.ini", out _, out _), "a file opened a minute before the crash says nothing");
 
+        // Issue keel-findobject-blame: a crash inside Unity's object search names neither its caller nor the last pack.
+        string search = "Crash: access violation (0xC0000005) in UnityPlayer.dll\nFile: 900\tC:/x/workshop/content/1286220/77/a.ini\n" +
+                        "0x01 (Mono JIT code) (wrapper managed-to-native) UnityEngine.Object:FindObjectsOfType (System.Type,bool)\n" +
+                        "0x02 (Mono JIT code) UnityEngine.Object:FindObjectOfType (System.Type)\n" +
+                        "0x03 (Mono JIT code) QuickStart.MenuRelabel:Update ()";
+        Check(CrashText.InObjectSearch(search), "a crash with Unity's object search on top is an object-search crash");
+        Check(CrashText.FirstHit(search, new[] { "QuickStart" }) == -1, "the mod that only called the search is not blamed");
+        Check(!CrashText.LastPack(search, out _, out _), "nor is the pack loaded last");
+        string notSearch = "Crash: x\n0x01 (Mono JIT code) UnityEngine.Object:Destroy (UnityEngine.Object)\n0x02 (Mono JIT code) QuickStart.MenuRelabel:Update ()";
+        Check(!CrashText.InObjectSearch(notSearch) && CrashText.FirstHit(notSearch, new[] { "QuickStart" }) == 0, "another Unity call on top still blames the mod below it");
+        string searchBelow = "Crash: x\n0x01 (Mono JIT code) QuickStart.Broken:Run ()\n0x02 (Mono JIT code) UnityEngine.Object:FindObjectOfType (System.Type)";
+        Check(!CrashText.InObjectSearch(searchBelow), "a search below the mod's own frame does not clear the mod");
+        Check(CrashText.InObjectSearch("  at UnityEngine.Object.FindObjectOfType (System.Type type) [0x00000]\n  at SeaPowerKeel.GameState.Find (System.Type type)"), "the managed 'at' form is read too");
+
+        // Issue keel-build-suffix: lettered builds are matched whole.
+        Check(ReportFacts.Build.Match("Sea Power 0.9.1-261112b – 3D globe map").Value == "0.9.1-261112b", "a lettered build keeps its letter");
+        Check(ReportFacts.Build.Match("Sea Power 0.9.3-261116 – 3D globe map").Value == "0.9.3-261116", "a plain build is matched as before");
+
+        // Issue keel-crash-without-data: a log that ends with Unity's normal shutdown is no crash.
+        string shut = Path.Combine(tmp, "player-shut.log"), cut = Path.Combine(tmp, "player-cut.log");
+        File.WriteAllText(shut, "lots\nInput System module state changed to: ShutdownInProgress.\nInput System polling thread exited.\nInput System module state changed to: Shutdown.\n");
+        File.WriteAllText(cut, "lots\n[Info : Mod] starting\n");
+        Check(CrashText.LogEndedNormally(shut) && !CrashText.LogEndedNormally(cut) && !CrashText.LogEndedNormally(Path.Combine(tmp, "none.log")), "a normal Unity shutdown is told from a log that just stops");
+        Check(CrashText.CrashFileText("2026-11-18 10:00:00", null, null, "Menu", null).Contains("No crash record"), "a crash text without a record says so");
+
         string dir = Path.Combine(tmp, "packcheck");
         Directory.CreateDirectory(dir);
         void Bytes(string name, params byte[] b) => File.WriteAllBytes(Path.Combine(dir, name), b);

@@ -23,15 +23,38 @@ internal static class GameState
 
     private static Type T(string name) => Type.GetType(name + ", Seapower-Scripts");
 
+    // The game's singletons (FileManager, LoadScreen, the menu view model ...) are looked up by type. A search walks every
+    // Unity object, costs a frame hitch, and is the call on top of the stack when a crash in the game's object list hits
+    // (reports 21-150, issues keel-findobject-blame and keel-menu-stutter). So: a found object is kept until Unity destroys
+    // it, and a type that is not there is searched again at most once per second.
+    private static readonly Dictionary<Type, UnityEngine.Object> found = new();
+    private static readonly Dictionary<Type, float> missedAt = new();
+
     private static UnityEngine.Object Find(Type type)
     {
         if (type == null)
             return null;
+        if (found.TryGetValue(type, out UnityEngine.Object kept) && kept != null)   // Unity's != : false once destroyed
+            return kept;
+        float now = Time.unscaledTime;
+        if (missedAt.TryGetValue(type, out float at) && now - at < 1f && now >= at)
+            return null;
         try
         {
 #pragma warning disable CS0618 // FindObjectOfType: the one both game builds' Unity versions have
-            return UnityEngine.Object.FindObjectOfType(type);
+            UnityEngine.Object hit = UnityEngine.Object.FindObjectOfType(type);
 #pragma warning restore CS0618
+            if (hit != null)
+            {
+                found[type] = hit;
+                missedAt.Remove(type);
+            }
+            else
+            {
+                found.Remove(type);
+                missedAt[type] = now;
+            }
+            return hit;
         }
         catch (Exception)
         {

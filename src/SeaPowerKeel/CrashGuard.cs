@@ -226,9 +226,23 @@ internal sealed class CrashGuard
         }
 
         var keptOn = new HashSet<string>(ReadLines(Path.Combine(dir, CrashText.KeepFile)).Select(l => l.Trim()));
+        string caughtStack = Previous.Unclean ? ReadAll(Path.Combine(dir, CrashText.StackPrevFile)) : null;
+        // No quit mark, but no crash record either and Unity shut down the normal way: the game was closed or restarted
+        // without Keel's quit (issue keel-crash-without-data). Not a crash: no mod is named or held.
+        if (Previous.Unclean && string.IsNullOrWhiteSpace(caughtStack) && CrashBlock(ReadAll(playerPrev)) == null && CrashText.LogEndedNormally(playerPrev))
+        {
+            note("The last game ended without Keel's quit mark, but Unity shut it down the normal way: no crash.");
+            Previous.Unclean = false;
+        }
+        if (!Previous.Unclean)
+        {
+            // Keel-crash.txt describes the last unclean session only; after a clean one it would sit in the next report's bundle
+            // as if it were that session's crash (issue keel-bundle-stale-files).
+            try { File.Delete(Path.Combine(dir, "Keel-crash.txt")); } catch (Exception) { /* it stays, it is dated */ }
+        }
         if (Previous.Unclean)
         {
-            string caught = ReadAll(Path.Combine(dir, CrashText.StackPrevFile));
+            string caught = caughtStack;
             string block = !string.IsNullOrWhiteSpace(caught) ? caught : CrashBlock(ReadAll(playerPrev));
             string detail = CrashText.CrashLine(block);
             WriteCrashFile(block);
@@ -311,12 +325,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            var sb = new StringBuilder();
-            sb.AppendLine($"The game session started {Previous.Began} did not end normally.");
-            sb.AppendLine($"Keel was {(Previous.Guid != null ? $"at the '{Previous.Step}' step of {Previous.Guid}" : "not loading or starting a mod")}; last scene: {Previous.Scene ?? "none"}.");
-            sb.AppendLine();
-            sb.AppendLine(block ?? "Player-prev.log shows no crash report.");
-            File.WriteAllText(Path.Combine(dir, "Keel-crash.txt"), sb.ToString());
+            File.WriteAllText(Path.Combine(dir, "Keel-crash.txt"), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block));
         }
         catch (Exception)
         {

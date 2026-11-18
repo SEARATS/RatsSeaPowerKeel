@@ -27,13 +27,40 @@ internal static class LogBundle
         using (FileStream stream = new FileStream(zip, FileMode.CreateNew))
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
         {
-            foreach (string pattern in new[] { "Keel-log*.txt", "Keel-report.txt", "Keel-crash*.txt", "Keel-session.txt", "Keel-mods.txt", "Keel-held.txt", "LogOutput.log" })
-                AddAll(archive, Find(bepInEx, pattern), "BepInEx", user);
+            DateTime? began = SessionBegan(bepInEx);
+            foreach (string pattern in new[] { "Keel-log*.txt", "Keel-report.txt", "Keel-crash*.txt", "Keel-session.txt", "Keel-mods.txt", "Keel-held.txt", "Keel-watcher.txt", "LogOutput.log" })
+            {
+                // A report or crash text written before this session began belongs to an older one: in the bundle it would read
+                // as this session's (issue keel-bundle-stale-files). The stack files stay, they carry their own times.
+                IEnumerable<string> files = Find(bepInEx, pattern);
+                if (began != null && (pattern == "Keel-report.txt" || pattern == "Keel-crash*.txt"))
+                    files = files.Where(f => !f.EndsWith("Keel-crash.txt", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("Keel-report.txt", StringComparison.OrdinalIgnoreCase)
+                                             || File.GetLastWriteTime(f) >= began.Value.AddSeconds(-5));
+                AddAll(archive, files, "BepInEx", user);
+            }
             AddAll(archive, Find(gameData, "Player*.log"), "Game", user);
             AddAll(archive, Newest(Path.Combine(gameData, "CrashDiagnostics"), "*.jsonl", 3), "Game/CrashDiagnostics", user);
             AddAll(archive, Newest(gameLogs, "*session*.html", 2), "Game/Logs", user);
         }
         return zip;
+    }
+
+    /// <summary>When the session in Keel-session.txt began (its "session" line), or null.</summary>
+    private static DateTime? SessionBegan(string bepInEx)
+    {
+        try
+        {
+            string line = CrashText.ReadAll(Path.Combine(bepInEx, CrashText.JournalFile))?.Replace("\r\n", "\n").Split('\n')
+                .FirstOrDefault(l => l.StartsWith("session\t", StringComparison.Ordinal));
+            if (line != null && DateTime.TryParseExact(line.Substring(8).Trim(), "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture,
+                                                       System.Globalization.DateTimeStyles.AssumeLocal, out DateTime t))
+                return t;
+        }
+        catch (Exception)
+        {
+            // then everything goes in, as before
+        }
+        return null;
     }
 
     /// <summary>The Windows user name right after "Users\", "Users/" or "Users\\" (as JSON writes it), in any case.</summary>

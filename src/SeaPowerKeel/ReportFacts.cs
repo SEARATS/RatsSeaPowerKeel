@@ -13,8 +13,8 @@ namespace SeaPowerKeel;
 /// </summary>
 internal static class ReportFacts
 {
-    /// <summary>The game's version text, e.g. 0.9.1-261112.</summary>
-    public static readonly Regex Build = new(@"\b\d+\.\d+\.\d+-\d{6}\b");
+    /// <summary>The game's version text, e.g. 0.9.1-261112, also a lettered one like 0.9.1-261112b (the "b" builds lost their build in the mails).</summary>
+    public static readonly Regex Build = new(@"\b\d+\.\d+\.\d+-\d{6}[a-z]?\b");
 
     private static readonly Regex Problem = new(@"^\[(FAILED|ERRORS|NOT STARTED|CRASHED)\] (.+?) \(", RegexOptions.Multiline);
 

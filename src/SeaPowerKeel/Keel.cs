@@ -1056,7 +1056,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         {
             nextMissionCheck = Time.unscaledTime + 0.5f;
             Loading.LoadingWindow.MissionRunning = GameState.InMission();
-            Loading.LoadingWindow.OnMenuSubPage = GameState.OnMenuSubPage();     // the summary belongs to the main menu's top page only
+            // the summary belongs to the main menu's top page only; in a mission there is no menu to ask about
+            Loading.LoadingWindow.OnMenuSubPage = !Loading.LoadingWindow.MissionRunning && GameState.OnMenuSubPage();
         }
         if (Loading.LoadingWindow.ReportRequested)      // a click on the loading window's summary
         {
@@ -1220,8 +1221,11 @@ internal sealed partial class KeelHost : MonoBehaviour
                 foreach (NewsItem n in found.Where(n => n.Kind is NewsKind.Updated or NewsKind.New))
                     log.LogInfo($"What's new: {n.Name}: {n.Lines.Count} line(s) from {(n.Source.Length > 0 ? n.Source : "nowhere")}" +
                                 (n.SteamId != 0 ? $" (Workshop {n.SteamId}, Steam time {n.PrevUpdated} -> {n.Updated})" : ""));
-                foreach (string e in WhatsNew.FetchErrors)
-                    log.LogWarning($"What's new could not read a Workshop changelog page: {e}");
+                List<string> errors = WhatsNew.FetchErrors.ToList();
+                if (errors.Count == 1)
+                    log.LogWarning($"What's new could not read a Workshop changelog page: {errors[0]}");
+                else if (errors.Count > 1)
+                    log.LogWarning($"What's new could not read {errors.Count} Workshop changelog pages (CHANGELOG used instead), first: {errors[errors.Count - 1]}");
             }
             catch (Exception ex)
             {

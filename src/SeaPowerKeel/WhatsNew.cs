@@ -339,13 +339,19 @@ internal static class WhatsNew
     /// <summary>Fills each updated or new mod's lines: Workshop notes (when <paramref name="fetch"/> gives the page), else CHANGELOG.md.</summary>
     public static void AddNotes(IEnumerable<NewsItem> news, Func<ulong, string> fetch)
     {
+        bool first = true;
         foreach (NewsItem n in news.Where(n => n.Kind is NewsKind.Updated or NewsKind.New))
         {
-            if (n.SteamId != 0 && fetch != null)
+            // Steam answers 429 (too many requests) after many pages in a row (issue keel-workshop-429): a short pause between
+            // pages, and after the first refusal no more pages this start; the CHANGELOG below fills in.
+            if (n.SteamId != 0 && fetch != null && !SteamRefused)
             {
                 string page = null;
                 try
                 {
+                    if (!first)
+                        System.Threading.Thread.Sleep(PagePauseMs);
+                    first = false;
                     page = fetch(n.SteamId);
                 }
                 catch (Exception)
@@ -496,6 +502,11 @@ internal static class WhatsNew
     /// <summary>Why pages could not be read (for the log): in the game the request runs on Unity's Mono, not .NET.</summary>
     public static readonly System.Collections.Concurrent.ConcurrentBag<string> FetchErrors = new();
 
+    /// <summary>Steam refused a page with 429 this start: no more pages are asked for.</summary>
+    public static volatile bool SteamRefused;
+    /// <summary>The pause between two changelog pages (a worker thread, the game does not wait for it).</summary>
+    public const int PagePauseMs = 400;
+
     /// <summary>The Workshop changelog page of an item, or null (any failure). Runs on a worker thread.</summary>
     public static string FetchWorkshopPage(ulong id, int timeoutMs)
     {
@@ -509,6 +520,12 @@ internal static class WhatsNew
             using var resp = (HttpWebResponse)req.GetResponse();
             using var reader = new StreamReader(resp.GetResponseStream() ?? Stream.Null, Encoding.UTF8);
             return reader.ReadToEnd();
+        }
+        catch (WebException ex) when ((ex.Response as HttpWebResponse) is { } r && (int)r.StatusCode == 429)
+        {
+            SteamRefused = true;
+            FetchErrors.Add($"Workshop {id}: Steam answered 429 (too many requests); no more pages this start");
+            return null;
         }
         catch (Exception ex)
         {
