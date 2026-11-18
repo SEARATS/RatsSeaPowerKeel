@@ -258,6 +258,8 @@ internal sealed partial class KeelHost : MonoBehaviour
             notes.Add(n);
             log.LogError(n);
         });
+        if (crash?.QuietNote != null)
+            log.LogInfo(crash.QuietNote);
         if (crash != null)
         {
             if (crash.Short != null)

@@ -215,6 +215,9 @@ internal sealed class CrashGuard
     /// Reads what the last session left and acts on it: says what happened, and holds out the mod it can name (when <paramref name="hold"/>).
     /// A held mod stays out until its DLL changes (an update of the mod) or its line is removed from Keel-held.txt.
     /// </summary>
+    /// <summary>A line for the log at info level only (set by <see cref="Apply"/>), or null.</summary>
+    public string QuietNote;
+
     public void Apply(IReadOnlyCollection<PluginEntry> plugins, bool hold, Action<string> note)
     {
         var held = new Dictionary<string, (string stamp, string reason)>();
@@ -231,7 +234,8 @@ internal sealed class CrashGuard
         // without Keel's quit (issue keel-crash-without-data). Not a crash: no mod is named or held.
         if (Previous.Unclean && string.IsNullOrWhiteSpace(caughtStack) && CrashBlock(ReadAll(playerPrev)) == null && CrashText.LogEndedNormally(playerPrev))
         {
-            note("The last game ended without Keel's quit mark, but Unity shut it down the normal way: no crash.");
+            // Only a line in the log (info): no notice on screen, no error - nothing went wrong (test 2026-11-18 found it as an error line).
+            QuietNote = "The last game ended without Keel's quit mark, but Unity shut it down the normal way: no crash.";
             Previous.Unclean = false;
         }
         if (!Previous.Unclean)
