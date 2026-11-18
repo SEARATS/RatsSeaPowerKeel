@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Built and checked offline; the download has not been run on a game without BepInEx yet.
+Run in the test VM on 2026-11-18 (fake game folders, no game start): download, network off, offline zip, wrong zip refused, game with BepInEx, Restore; all green.
 
 - **Keel ships no BepInEx any more**: KeelSetup.exe downloads the official BepInEx 5.4.23.2 from its GitHub release only when the game has none
 - **Checked before anything is unpacked**: a download whose hash is not the pinned one is refused, nothing is installed
