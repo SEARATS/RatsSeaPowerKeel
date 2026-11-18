@@ -490,7 +490,7 @@ internal static class SelfTest
         using (var ms = new MemoryStream())
         {
             using (var a = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, true))
-                foreach (string n in new[] { "winhttp.dll", "BepInEx/core/BepInEx.dll", "../escape.txt" })
+                foreach (string n in new[] { "winhttp.dll", "BepInEx/core/BepInEx.dll", "../escape.txt", "changelog.txt", "BepInEx/plugins/other.dll" })
                     using (var w = new StreamWriter(a.CreateEntry(n).Open()))
                         w.Write("x");
             zip = ms.ToArray();
@@ -500,6 +500,7 @@ internal static class SelfTest
         s.Install(stub, zip);
         Check(s.HasBepInEx && s.HasStub && s.CanRestore, "install on a bare game adds BepInEx and the starter file");
         Check(!File.Exists(Path.Combine(game, "..", "escape.txt")), "a zip entry cannot write outside the game folder");
+        Check(!File.Exists(Path.Combine(game, "changelog.txt")) && !File.Exists(Path.Combine(game, "BepInEx", "plugins", "other.dll")), "only the Doorstop files and BepInEx's core files leave the release zip");
         Directory.CreateDirectory(Path.Combine(game, "BepInEx", "cache"));
         File.WriteAllText(Path.Combine(game, "BepInEx", "cache", "made-by-the-game.txt"), "keep");
         s.Install(stub, zip);

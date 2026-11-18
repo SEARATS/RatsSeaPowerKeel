@@ -33,15 +33,11 @@ Copy-Item (Join-Path $root 'src\SeaPowerKeel.Watcher\bin\Release\net48\KeelWatch
 # The takeover patcher: Keel copies it into BepInEx\patchers itself and keeps it current (players never handle it).
 Copy-Item (Join-Path $root 'src\SeaPowerKeel.Patcher\bin\Release\netstandard2.1\SeaPowerKeel.Patcher.dll') $dist
 
-# KeelSetup.exe: one file holding the starter DLL and BepInEx (players may have none). BepInEx is the official release,
-# checked against its pinned hash (tools\bepinex.ps1): never the copy in a game folder.
+# KeelSetup.exe carries no other program inside: it copies the starter DLL and the patcher that lie next to it and unpacks
+# BepInEx from its official release zip, shipped unchanged next to it (checked against its pinned hash, tools\bepinex.ps1).
 . (Join-Path $PSScriptRoot 'bepinex.ps1')
-$payload = Join-Path $root 'obj\setup-payload'
-if (Test-Path $payload) { Remove-Item -Recurse -Force $payload }
-New-BepInExPayload (Get-OfficialBepInEx $root) $payload
-Copy-Item (Join-Path $root 'src\SeaPowerKeel.Stub\bin\Release\netstandard2.1\SeaPowerKeel.Stub.dll') (Join-Path $payload 'stub.bin')
-Copy-Item (Join-Path $root 'src\SeaPowerKeel.Patcher\bin\Release\netstandard2.1\SeaPowerKeel.Patcher.dll') (Join-Path $payload 'patcher.bin')
-dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release -p:PayloadDir="$payload"
+Copy-Item (Get-OfficialBepInExZip $root) $dist
+dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release -p:BepInExSha256="$BepInExSha256"
 if ($LASTEXITCODE -ne 0) { throw 'Build failed: KeelSetup' }
 Copy-Item (Join-Path $root 'src\SeaPowerKeel.Setup\bin\Release\net48\KeelSetup.exe') $dist
 Copy-Item (Join-Path $root 'src\SeaPowerKeel\mod\_info.ini') $dist

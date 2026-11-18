@@ -10,4 +10,4 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-KeelSetup.exe contains BepInEx 5.4.23.2 and UnityDoorstop 4.3.0, both under the GNU LGPL 2.1. Unchanged; source and licenses: https://github.com/BepInEx/BepInEx and https://github.com/NeighTools/UnityDoorstop
+BepInEx_win_x64_5.4.23.2.zip, next to KeelSetup.exe, is the official BepInEx 5.4.23.2 release with UnityDoorstop 4.3.0, both under the GNU LGPL 2.1. Unchanged, byte for byte the download from BepInEx's GitHub releases (SHA-256 f752ce4e...); source and licenses: https://github.com/BepInEx/BepInEx and https://github.com/NeighTools/UnityDoorstop

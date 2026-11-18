@@ -39,11 +39,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Build failed: patcher' }
 dotnet build (Join-Path $root 'src\SeaPowerKeel.Watcher\SeaPowerKeel.Watcher.csproj') -c Release @refs
 if ($LASTEXITCODE -ne 0) { throw 'Build failed: KeelWatcher' }
 
-$payload = Join-Path $work 'payload'
-New-BepInExPayload $bepInEx $payload
-Copy-Item (Join-Path $root 'src\SeaPowerKeel.Stub\bin\Release\netstandard2.1\SeaPowerKeel.Stub.dll') (Join-Path $payload 'stub.bin')
-Copy-Item (Join-Path $root 'src\SeaPowerKeel.Patcher\bin\Release\netstandard2.1\SeaPowerKeel.Patcher.dll') (Join-Path $payload 'patcher.bin')
-dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release "-p:PayloadDir=$payload" @refs
+dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release "-p:BepInExSha256=$BepInExSha256" @refs
 if ($LASTEXITCODE -ne 0) { throw 'Build failed: KeelSetup' }
 
 $out = Join-Path $root 'dist-ci'

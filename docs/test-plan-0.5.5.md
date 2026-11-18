@@ -1,7 +1,11 @@
 # Test plan 0.5.5 - the setup carries the official BepInEx
 
-What changed: `KeelSetup.exe` carries the official BepInEx 5.4.23.2 zip (hash pinned in `tools/bepinex.ps1`) instead of the copy
-from the developer's game folder; the mod list text (`_info.ini`) was corrected. No change to Keel's own code.
+What changed: `KeelSetup.exe` carries no other program inside: it copies the starter file and the patcher from Keel's folder and
+unpacks BepInEx from the official 5.4.23.2 zip next to it (hash pinned in `tools/bepinex.ps1`, checked again by the setup); the mod
+list text (`_info.ini`) was corrected. No change to Keel's own code.
+
+Run 2026-11-13 in the sandbox VM with the earlier 0.5.5 build (BepInEx packed inside): `docs/test-2026-11-13-0.5.5.md`, rows 1 to 5 GREEN.
+**Rows 1 and 5 are open again for the slim setup** (built 2026-11-18), plus row 6.
 
 ## Offline (done 2026-11-13)
 
@@ -27,6 +31,7 @@ from the developer's game folder; the mod list text (`_info.ini`) was corrected.
 | 3 | Mods start under the official BepInEx | `Started N plugin(s)` with the usual mods on, no new `[Error` lines against a 0.5.4 start |
 | 4 | Mod list text | The Mods menu shows the new description: no "delete AnchorChain.Preloader.dll" |
 | 5 | Restore in `KeelSetup.exe` | BepInEx, starter file and takeover are gone again, the game starts without mods |
+| 6 | `KeelSetup.exe` copied alone to another folder | it names the files it misses and Install stays off |
 
 ## After
 

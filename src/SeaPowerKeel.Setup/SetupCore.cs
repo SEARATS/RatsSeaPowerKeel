@@ -39,6 +39,13 @@ internal sealed class SetupCore
         Directory.Exists(At(@"Sea Power_Data\StreamingAssets\Alpine_Mod_Loader")) ||
         Directory.Exists(Path.GetFullPath(Path.Combine(game, @"..\..\workshop\content\1286220\3832006068")));
 
+    /// <summary>What the game needs from BepInEx's release zip: the Doorstop files and BepInEx\core. Nothing else leaves the zip.</summary>
+    public static bool IsBepInExFile(string relative) =>
+        relative.Equals("winhttp.dll", StringComparison.OrdinalIgnoreCase) ||
+        relative.Equals("doorstop_config.ini", StringComparison.OrdinalIgnoreCase) ||
+        relative.Equals(".doorstop_version", StringComparison.OrdinalIgnoreCase) ||
+        (relative.StartsWith(@"BepInEx\core\", StringComparison.OrdinalIgnoreCase) && relative.IndexOf("..", StringComparison.Ordinal) < 0);
+
     private List<string> ReadManifest() => File.Exists(Manifest) ? File.ReadAllLines(Manifest).Where(l => l.Length > 0).ToList() : new List<string>();
 
     /// <summary>Installs the stub, adds BepInEx if the game has none, and sets another loader's preloader aside. Returns what it did, for the window.</summary>
@@ -62,6 +69,8 @@ internal sealed class SetupCore
             foreach (ZipArchiveEntry entry in zip.Entries.Where(e => e.Name.Length > 0))
             {
                 string relative = entry.FullName.Replace('/', '\\');
+                if (!IsBepInExFile(relative))
+                    continue;
                 string target = Path.GetFullPath(At(relative));
                 if (!target.StartsWith(Path.GetFullPath(game) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     continue;

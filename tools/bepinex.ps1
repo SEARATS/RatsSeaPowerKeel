@@ -1,4 +1,4 @@
-# The official BepInEx release that KeelSetup.exe carries, unchanged. Dot-sourced by package.ps1 and ci-build.ps1.
+# The official BepInEx release that ships next to KeelSetup.exe, unchanged, as its own zip. Dot-sourced by package.ps1 and ci-build.ps1.
 # The zip is checked against a pinned SHA-256, so a build never ships anything but that release: not a copy from a game folder
 # (up to 0.5.4 package.ps1 took the developer's game copy, which was a different build of the same version; found 2026-11-13).
 $BepInExVersion = '5.4.23.2'
@@ -21,12 +21,8 @@ function Get-OfficialBepInEx([string]$root) {
     return $dir
 }
 
-# The tree KeelSetup.exe unpacks into a game without BepInEx, as bepinex.bin (a zip) in $payload.
-function New-BepInExPayload([string]$bepInEx, [string]$payload) {
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $tree = Join-Path $payload 'tree'
-    New-Item -ItemType Directory -Force (Join-Path $tree 'BepInEx\core') | Out-Null
-    foreach ($f in 'winhttp.dll', 'doorstop_config.ini', '.doorstop_version') { Copy-Item -LiteralPath (Join-Path $bepInEx $f) $tree }
-    Copy-Item (Join-Path $bepInEx 'BepInEx\core\*') (Join-Path $tree 'BepInEx\core')
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($tree, (Join-Path $payload 'bepinex.bin'))
+# The checked official zip itself (KeelSetup.exe unpacks only the Doorstop files and BepInEx\core from it).
+function Get-OfficialBepInExZip([string]$root) {
+    Get-OfficialBepInEx $root | Out-Null
+    return Join-Path $root "obj\bepinex\BepInEx_win_x64_$BepInExVersion.zip"
 }

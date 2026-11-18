@@ -1,2 +1,3 @@
-- KeelSetup.exe carries the official BepInEx 5.4.23.2 download, checked against its hash at every build (only used on a game without BepInEx)
+- KeelSetup.exe carries no other program inside any more: it copies the files next to it and unpacks BepInEx from its official release zip (virus scanners guessed the packed 0.5.4 setup to be a trojan)
+- The official BepInEx 5.4.23.2 download, unchanged, checked by its hash
 - Mod list text corrected: no more "delete Anchor Chain's preloader"

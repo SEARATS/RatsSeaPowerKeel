@@ -1,9 +1,12 @@
 # Changelog
 
-## 0.5.5 - 2026-11-13 - the setup carries the official BepInEx
+## 0.5.5 - 2026-11-18 - a setup with nothing packed inside
 
-- **KeelSetup.exe carries the official BepInEx 5.4.23.2 download**, checked against its hash at every build: up to 0.5.4 it carried the copy from the developer's game folder, a different build of the same version
-- **Only matters on a game without BepInEx**: the setup never replaces a BepInEx that is already there
+- **KeelSetup.exe carries no other program inside any more**: virus scanners guessed the packed setup of 0.5.4 to be a trojan (6 of 71, all guesses), and Steam took Keel down for it
+- **It copies the files that lie next to it** in Keel's folder (starter file, takeover) and unpacks BepInEx from its official release zip, shipped unchanged next to it
+- **The official BepInEx 5.4.23.2 download**, checked against its hash at every build and again by the setup before it unpacks: up to 0.5.4 the setup carried the copy from the developer's game folder, a different build of the same version
+- **Run it from Keel's folder**: moved somewhere else on its own, it says which files it misses
+- **Only what the game needs leaves the zip**: the Doorstop files and BepInEx's core files
 - **Mod list text corrected**: it no longer says to delete Anchor Chain's preloader or to keep Anchor Chain subscribed
 
 ## 0.5.4 - 2026-11-12 - an × on both cards
