@@ -1,5 +1,13 @@
 # Sea Power: R.A.T.S. Keel
 
+## Keel carries on Anchor Chain
+
+- **Anchor Chain** is the community chainloader Sea Power's code mods are built on. Keel takes over its job and runs every Anchor Chain mod unchanged.
+- **Made by** [JustOneOther](https://github.com/JustOneOther) and [agm-114](https://github.com/agm-114) of the [SeaPower-Modders](https://github.com/SeaPower-Modders).
+- **Its whole history is part of this repository**: every Anchor Chain commit, under its author's name, joined to Keel's `main` as one chain.
+- **Its source as of the hand-over** is in [`anchor-chain/`](anchor-chain/) and stays under its own MIT license ([anchor-chain/LICENSE.md](anchor-chain/LICENSE.md)).
+- **Original project:** [SeaPower-Modders/AnchorChain](https://github.com/SeaPower-Modders/AnchorChain) · [Workshop item](https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757)
+
 > **Status (12 November 2026, game 0.9.1):** the coming 0.5.0 (takeover, What's new, Euromod setup line) was run in the game on 0.9.1 (build 261112): Keel keeps Alpine's Mod Loader from starting and runs all 17 mods; with Keel switched off Alpine starts as before; the patcher updates itself while in use; Euromod with AC Pack and Extended Guidance starts 41 mods and runs a mission; the first start after the update leaves Alpine's mods to it once and says *restart once*, the next start runs all 43 under Keel; Mod Manager+ and Boost Loader start under Keel; the What's new card opens the full list on a click and closes with its ×. 0.4.0, on the Workshop now, declares every 0.9.x and was run on 0.9.0 (start-up with 17 mods, the Mods menu's Reload and Restart). Test notes: [docs/test-2026-11-12-takeover.md](docs/test-2026-11-12-takeover.md).
 
 *R.A.T.S. – Reconnaissance, Acoustics, Terrain & Signals*
@@ -214,7 +222,7 @@ The Anchor Chain compatibility changes (CHANGELOG, "Unreleased") are checked off
 
 ## Credits
 
-Written from scratch. Anchor Chain (SeaPower-Modders, MIT) is the community chainloader Sea Power code mods are built on;
+Keel's own code is written from scratch. Anchor Chain (SeaPower-Modders: JustOneOther, agm-114; MIT) is the community chainloader Sea Power code mods are built on, and Keel carries it on (see the top of this page);
 Keel reads Anchor Chain mods through their public attributes and interface so players can use both.
 
 ## License

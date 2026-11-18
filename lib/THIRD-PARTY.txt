@@ -1,3 +1,5 @@
+anchor-chain\ is Anchor Chain's source as of the hand-over to Keel (SeaPower-Modders/AnchorChain, main of 2026-11-13, without its Dll folder), with its whole commit history joined to this repository. By JustOneOther and agm-114 of the SeaPower-Modders, MIT: anchor-chain\LICENSE.md. Keel does not build it.
+
 lib\AnchorChain.keel.bin is AnchorChain.dll 1.1.0 from Anchor Chain by the SeaPower-Modders (MIT), byte for byte the official Workshop file (SHA-256 e2728110...): some mods check that hash before they run.
 Keel uses it only as a library, so Anchor Chain mods find the types they were built against. It does not start Anchor Chain.
 The .bin name keeps Anchor Chain's preloader and mod scanners from treating it as a mod.
