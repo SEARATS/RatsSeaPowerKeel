@@ -8,7 +8,7 @@
 - **Its source as of the hand-over** is in [`anchor-chain/`](anchor-chain/) and stays under its own MIT license ([anchor-chain/LICENSE.md](anchor-chain/LICENSE.md)).
 - **Original project:** [SeaPower-Modders/AnchorChain](https://github.com/SeaPower-Modders/AnchorChain) · [Workshop item](https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757)
 
-> **Status (12 November 2026, game 0.9.1):** the coming 0.5.0 (takeover, What's new, Euromod setup line) was run in the game on 0.9.1 (build 261112): Keel keeps Alpine's Mod Loader from starting and runs all 17 mods; with Keel switched off Alpine starts as before; the patcher updates itself while in use; Euromod with AC Pack and Extended Guidance starts 41 mods and runs a mission; the first start after the update leaves Alpine's mods to it once and says *restart once*, the next start runs all 43 under Keel; Mod Manager+ and Boost Loader start under Keel; the What's new card opens the full list on a click and closes with its ×. 0.4.0, on the Workshop now, declares every 0.9.x and was run on 0.9.0 (start-up with 17 mods, the Mods menu's Reload and Restart). Test notes: [docs/test-2026-11-12-takeover.md](docs/test-2026-11-12-takeover.md).
+> **Status (18 November 2026, game 0.9.3):** 0.6.0 was run in the test VM on game 0.9.3, public and beta: setup and Restore, cards, report, What's new, two missions, a game ended from outside and the start after it; every row green. Test notes: [docs/test-2026-11-18-0.6.0.md](docs/test-2026-11-18-0.6.0.md).
 
 *R.A.T.S. – Reconnaissance, Acoustics, Terrain & Signals*
 
@@ -61,7 +61,7 @@ folders, sort out dependencies and start order, start them), and on top of that:
   created before the first one starts, `TriggerEntryPoint` is called through the `IAnchorChainMod` interface (explicit
   implementations work), `[ACConfig]` config files are prepared, and `AnchorChainLoader.FindFile` works for mods that call it.
 
-Status: run in the game on the 3D globe build since 0.1.0 (0.8.7 up to 0.1.0, no more 0.8.7 tests since 2026-11-08); every release since on the then current build, last 0.9.1 (2026-11-12). Older test notes: [docs/test-2026-11-07.md](docs/test-2026-11-07.md), [docs/test-2026-11-08-globe.md](docs/test-2026-11-08-globe.md).
+Status: run in the game on the 3D globe build since 0.1.0 (0.8.7 up to 0.1.0, no more 0.8.7 tests since 2026-11-08); every release since on the then current build, last 0.9.3 (2026-11-18, public and beta, in the test VM). Older test notes: [docs/test-2026-11-07.md](docs/test-2026-11-07.md), [docs/test-2026-11-08-globe.md](docs/test-2026-11-08-globe.md).
 
 ## Install
 
