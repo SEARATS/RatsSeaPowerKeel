@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.5.5 - 2026-11-18 - a setup with nothing packed inside
+## 0.6.0 - 2026-11-18 - Keel carries on Anchor Chain, fixes from 183 player reports
+
+Run in the test VM on game 0.9.3, public (Steam build 26712472) and beta (26712879), on 2026-11-18: setup, cards, report, What's new, two
+missions, a game ended from outside, the start after it, Restore; every row green (the Falklands land check could not be reached).
+
+- **Keel carries on Anchor Chain**: its history and source are part of Keel's repository, with credit to JustOneOther and agm-114 on top of the README and the Workshop page; Anchor Chain mods run in Keel as before
+- **New look** for the cards and the loading window, closer to the game's own panels, and a load-order warning in the report (agm-114)
+- **The parts below** were prepared as 0.5.5, which was never released; 0.6.0 carries all of it
+- **A normal close without the quit mark** is one info line in the log, no error and no notice
 
 - **KeelSetup.exe carries no other program inside any more**: virus scanners guessed the packed setup of 0.5.4 to be a trojan (6 of 71, all guesses), and Steam took Keel down for it
 - **It copies the files that lie next to it** in Keel's folder (starter file, takeover) and unpacks BepInEx from its official release zip, shipped unchanged next to it

@@ -1,3 +1,4 @@
+0.6.0: Keel carries on Anchor Chain (credit to JustOneOther and agm-114); new card look and load-order warning (agm-114); fixes from 183 player reports.
 - KeelSetup.exe carries no other program inside any more: it copies the files next to it and unpacks BepInEx from its official release zip (virus scanners guessed the packed 0.5.4 setup to be a trojan)
 - The official BepInEx 5.4.23.2 download, unchanged, checked by its hash
 - Mod list text corrected: no more "delete Anchor Chain's preloader"
