@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Restore brings the other loader back
+
+- **Fixed: after Restore no mod started** when Keel had taken over from Anchor Chain or Alpine: Keel's takeover entry stayed in BepInEx's plugin cache, so BepInEx kept skipping the other loader; Restore now removes that cache file (found in the test VM, 2026-11-18)
+
+### KeelSetup downloads BepInEx
+
 Run in the test VM on 2026-11-18 (fake game folders, no game start): download, network off, offline zip, wrong zip refused, game with BepInEx, Restore; all green.
 
 - **Keel ships no BepInEx any more**: KeelSetup.exe downloads the official BepInEx 5.4.23.2 from its GitHub release only when the game has none

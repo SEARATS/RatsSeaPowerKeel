@@ -517,7 +517,10 @@ internal static class SelfTest
         File.WriteAllText(Path.Combine(plugins, "AnchorChain.Preloader.dll"), "other");
         s.Install(stub, zip);
         Check(!s.HasOtherPreloader && File.Exists(Path.Combine(plugins, "AnchorChain.Preloader.dll.keel-off")), "another loader's preloader is set aside, not deleted");
+        string typeCache = Path.Combine(game, "BepInEx", "cache", "chainloader_typeloader.dat");
+        File.WriteAllText(typeCache, "the takeover's entry");
         s.Restore();
+        Check(!File.Exists(typeCache) && File.Exists(Path.Combine(game, "BepInEx", "cache", "made-by-the-game.txt")), "restore drops BepInEx's plugin cache, so the other loader is scanned again, and leaves the rest of the cache");
         Check(s.HasOtherPreloader && s.HasBepInEx && File.ReadAllText(Path.Combine(game, "winhttp.dll")) == "theirs", "restore brings it back and leaves a BepInEx setup did not install");
     }
 

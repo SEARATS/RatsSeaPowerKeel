@@ -19,6 +19,7 @@ internal sealed class SetupCore
     private const string PatcherName = "SeaPowerKeel.Patcher.dll";
     private const string SetAside = ".keel-off";
     private const string ManifestName = "keel-setup.txt";
+    private const string CacheFile = @"BepInEx\cache\chainloader_typeloader.dat";
 
     private readonly string game;
 
@@ -133,6 +134,12 @@ internal sealed class SetupCore
             }
         }
         File.Delete(Manifest);
+        // Keel's takeover marks the other loaders' DLLs as holding no plugin in BepInEx's plugin cache. With the takeover patcher
+        // gone nobody takes that entry out again, and BepInEx would go on skipping Anchor Chain's or Alpine's loader (VM test
+        // 2026-11-18: after Restore no mod started). Without the file BepInEx scans the plugins afresh and writes it again.
+        string cache = At(CacheFile);
+        if (File.Exists(cache))
+            File.Delete(cache);
     }
 
     private void RemoveEmptyParents(string folder)
