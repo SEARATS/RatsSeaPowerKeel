@@ -48,3 +48,20 @@
 - **Cause:** Keel's takeover marks Anchor Chain's preloader as holding no plugin in `BepInEx\cache\chainloader_typeloader.dat`. Restore removed the patcher but not that entry, and the preloader kept its write time, so BepInEx trusted the stale entry and skipped it.
 - **Live in Keel 0.6.0:** any player who runs Restore after Keel took over (from Anchor Chain or Alpine) gets no mods at the next start.
 - **Fix:** Restore deletes that cache file (branch `keel-restore-cache`, PR #6; offline selftest 227 of 227). Row 13 is run again once KeelSetup has the fix.
+
+## Row 13 again (2026-11-19), with the fixed KeelSetup (PR #6)
+
+- Test VM, public 0.9.3 (build 26712472), 2 starts: Keel taking over, then the start after the fixed Restore.
+- Results: 7 of 7 GREEN.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Keel runs | GREEN: Keel 0.6.0 card, 9 mods running, no problems |
+| 2 | Anchor Chain does not start | GREEN: no Anchor Chain load line; `Keel-takeover.txt` names its preloader |
+| 3 | The cache holds the takeover entry | GREEN: `chainloader_typeloader.dat` (321 bytes) names Anchor Chain's preloader |
+| 4 | Restore with the fixed setup | GREEN: stub, patcher, `keel-setup.txt` and the cache file gone; Anchor Chain's preloader and the Harmony cache stay |
+| 5 | Anchor Chain is back | GREEN: Anchor Chain 1.3.0 loaded the five R.A.T.S. mods |
+| 6 | The switch box comes again | GREEN: box on the main menu; Not now closed it |
+| 7 | Errors | GREEN: no error line (two Harmony warnings, one Pop-Out warning) |
+
+- **Seen on the side:** Restore left `SeaPowerKeel.Patcher.dll.old`, the copy Keel keeps when it updates its patcher; harmless (BepInEx loads only `.dll`), and PR #6 now removes it too.
