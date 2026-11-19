@@ -60,11 +60,11 @@ This file is the plan: it lives here on GitHub and in the Discord `#roadmap` cha
 - A change that touches other authors' mods (the loader, the API, load order) starts as a `#proposals` thread.
 - Nothing is removed or replaced for players without an opt-in and a way back (Keel's Restore).
 
-### Anchor Chain stays theirs
+### Anchor Chain is still theirs
 
-- Anchor Chain is agm-114's and Ave's (JustOneOther) mod, and it stays theirs.
+- Anchor Chain is agm-114's and Ave's (JustOneOther) work, and it is still theirs: it moved into Keel, it did not change hands.
 - Keel builds on it because Anchor Chain did not run on the 3D-globe beta, and players needed something that did.
-- Keel is not a takeover. Where the two meet, they decide about Anchor Chain.
+- Keel is not a takeover. Where Anchor Chain is concerned, they decide.
 
 ### What went wrong in November, and that was on me (Kanalratte)
 
