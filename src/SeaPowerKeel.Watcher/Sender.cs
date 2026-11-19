@@ -38,11 +38,10 @@ internal static class Sender
         kind = crashed ? "crash" : "report";
         Sender.summary = summary;
         string folder = Path.Combine(Path.GetTempPath(), "RATS-Keel-report-" + Guid.NewGuid().ToString("N").Substring(0, 8));
-        string zip = null;
         try
         {
             Directory.CreateDirectory(folder);
-            zip = LogBundle.Save(bepInEx, folder, scrub: true);
+            string zip = LogBundle.Save(bepInEx, folder, scrub: true);
             Ask(zip, game, owner);
         }
         catch (Exception ex)
