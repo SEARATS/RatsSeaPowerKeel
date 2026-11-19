@@ -33,7 +33,8 @@ internal static class Program
     }
 
     private static string Here => AppDomain.CurrentDomain.BaseDirectory;
-    public static string StubFile => Path.Combine(Here, "copy-to-BepInEx-plugins", KeelNames.StubFile);
+    private const string PluginsCopyFolder = "copy-to-BepInEx-plugins";
+    public static string StubFile => Path.Combine(Here, PluginsCopyFolder, KeelNames.StubFile);
     public static string PatcherFile => Path.Combine(Here, KeelNames.PatcherFile);
 
     private static string Metadata(string key) =>
@@ -50,7 +51,7 @@ internal static class Program
     {
         var missing = new List<string>();
         if (!File.Exists(StubFile))
-            missing.Add(@"copy-to-BepInEx-plugins\" + KeelNames.StubFile);
+            missing.Add(Path.Combine(PluginsCopyFolder, KeelNames.StubFile));
         if (!File.Exists(PatcherFile))
             missing.Add(KeelNames.PatcherFile);
         if (missing.Count > 0)

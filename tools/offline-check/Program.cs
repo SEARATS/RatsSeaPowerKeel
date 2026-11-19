@@ -25,12 +25,7 @@ internal static class Program
             return 2;
         }
         string managed = args[0], core = args[1];
-        // Let Type.GetType find the game's Seapower-Scripts in that Managed folder: that is how Keel tells the builds apart.
-        AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
-        {
-            string p = Path.Combine(managed, new AssemblyName(e.Name).Name + ".dll");
-            return File.Exists(p) ? Assembly.LoadFrom(p) : null;
-        };
+        Program.ResolveFrom(managed);
         Console.WriteLine($"Game build: {GameState.BuildName} ({managed})");
 
         var folders = new List<ModFolder>();
@@ -70,4 +65,14 @@ internal static class Program
         Console.WriteLine(Report.Text(all, "Offline check (nothing started; RUNNING = would start)", notes, skipped));
         return 0;
     }
+
+    /// <summary>
+    /// Assemblies the runtime cannot find come from that Managed folder: Type.GetType then finds the game's Seapower-Scripts there,
+    /// which is how Keel tells the builds apart.
+    /// </summary>
+    internal static void ResolveFrom(string managed) => AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
+    {
+        string p = Path.Combine(managed, new AssemblyName(e.Name).Name + ".dll");
+        return File.Exists(p) ? Assembly.LoadFrom(p) : null;
+    };
 }

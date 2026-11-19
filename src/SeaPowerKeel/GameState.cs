@@ -95,16 +95,16 @@ internal static class GameState
         // The globe build lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
         // 0.8.7 has no kinds.
         string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
-        if (kind != null && kind != "Mod")
-            return null;
-        string full = info.FullName.TrimEnd('\\', '/');
-        if (string.Equals(full, streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user")
+        if ((kind != null && kind != "Mod") || IsGameOwn(info, streaming))
             return null;
         object id = t.GetField("steamId", Any)?.GetValue(d);
         ulong steamId = id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u ? u : 0;
         bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
         return new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on };
     }
+
+    private static bool IsGameOwn(DirectoryInfo info, string streaming) =>
+        string.Equals(info.FullName.TrimEnd('\\', '/'), streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user";
 
     /// <summary>
     /// Start-up done: the unit data is loaded and the start-up load screen says "Done". Mods started in the middle of it

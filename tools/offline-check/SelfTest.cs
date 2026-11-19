@@ -58,37 +58,33 @@ internal static class SelfTest
             return 2;
         }
         string managed = args[0], core = args[1];
-        AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
-        {
-            string p = Path.Combine(managed, new AssemblyName(e.Name).Name + ".dll");
-            return File.Exists(p) ? Assembly.LoadFrom(p) : null;
-        };
+        Program.ResolveFrom(managed);
         string tmp = Path.Combine(Path.GetTempPath(), "keel-selftest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tmp);
         try
         {
-            Console.WriteLine("1. Scanner: only the exact Anchor Chain DLL names are left out, and every one is listed");
-            Console.WriteLine("0. _info.ini [Compatibility], by the game's rules");
+            Console.WriteLine("Scanner: only the exact Anchor Chain DLL names are left out, and every one is listed");
+            Console.WriteLine("_info.ini [Compatibility], by the game's rules");
             InfoIni();
             ScannerExclusions(tmp, managed, core);
-            Console.WriteLine("3. Scanner: Anchor Chain plugin classes must be public (exported)");
+            Console.WriteLine("Scanner: Anchor Chain plugin classes must be public (exported)");
             ExportedTypes(tmp, managed, core);
-            Console.WriteLine("2. Entry point through the interface");
+            Console.WriteLine("Entry point through the interface");
             EntryPoints();
-            Console.WriteLine("7. The other map kind's build beside its partner: a note, not a warning");
+            Console.WriteLine("The other map kind's build beside its partner: a note, not a warning");
             OtherMapBuild();
-            Console.WriteLine("4+6. Sequence: load all first, start in plan order, drop dependants of a failed load, hand over to a running Anchor Chain");
+            Console.WriteLine("Sequence: load all first, start in plan order, drop dependants of a failed load, hand over to a running Anchor Chain");
             Sequence();
             LoadOrderWarnings();
-            Console.WriteLine("6. Is Anchor Chain running: Keel's own load of its DLL does not count");
+            Console.WriteLine("Is Anchor Chain running: Keel's own load of its DLL does not count");
             AnchorChainRunning();
-            Console.WriteLine("5. [ACConfig]");
+            Console.WriteLine("[ACConfig]");
             Config(tmp);
-            Console.WriteLine("8. Mods that call AnchorChainLoader.FindFile (Sonar Audio Loader) when Keel runs the mods");
+            Console.WriteLine("Mods that call AnchorChainLoader.FindFile (Sonar Audio Loader) when Keel runs the mods");
             LoaderShim(tmp);
-            Console.WriteLine("7. [ACIncompatibility]: Keel's behaviour, said in the report");
+            Console.WriteLine("[ACIncompatibility]: Keel's behaviour, said in the report");
             Incompatibility();
-            Console.WriteLine("9. Patch guard: the member and the patched method come out of the error and its stack, (taking a patch off is run in the game: Harmony does not start outside it)");
+            Console.WriteLine("Patch guard: the member and the patched method come out of the error and its stack, (taking a patch off is run in the game: Harmony does not start outside it)");
             PatchGuard();
             CrashGuardChecks(tmp);
             PreventionChecks(tmp, managed, core);
@@ -96,6 +92,9 @@ internal static class SelfTest
             WhatsNewChecks(tmp);
             TakeoverChecks(tmp);
             EuromodChecks(tmp);
+            LoadScreenEndChecks();
+            EarlyStartChecks();
+            ReportFactsChecks(tmp);
         }
         finally
         {
@@ -153,7 +152,7 @@ internal static class SelfTest
 
     private static void WhatsNewChecks(string tmp)
     {
-        Console.WriteLine("10. What's new: what changed since the last start, and the authors' words for it");
+        Console.WriteLine("What's new: what changed since the last start, and the authors' words for it");
         string root = Path.Combine(tmp, "wn");
         string ws = Path.Combine(root, "steamapps", "workshop", "content", "1286220");
         string a = Path.Combine(ws, "111"), b = Path.Combine(ws, "222"), local = Path.Combine(root, "MyLocal");
@@ -210,6 +209,24 @@ internal static class SelfTest
         string page = "<p id=\"1794002000\">1.1.0: new radar<br>fix &quot;x&quot;</p> <p id=\"1794001500\">1.0.5 <b>beta</b></p> <p id=\"1794000900\">1.0.0 old</p>";
         var w = WhatsNew.WorkshopNotes(page, 1794001000, 1794002000);
         Check(w.SequenceEqual(new[] { "1.1.0: new radar", "fix \"x\"", "1.0.5 beta" }), "Workshop notes: every update since the last start, newest first, HTML made plain");
+        WhatsNew.AddNotes(news, id => id == 111 ? page : null);
+        Check(alpha.Source == "Workshop" && alpha.Lines.Count == 3, "a Workshop mod gets its Workshop notes");
+        NewsItem loc = news.First(n => n.Key == "MyLocal");
+        Check(loc.Source == "CHANGELOG" && loc.Lines.Count == 3, "a local mod gets its CHANGELOG");
+        var offline = WhatsNew.Compare(back, WhatsNew.Look(second, plugins2, ws), second);
+        File.WriteAllText(Path.Combine(a, "CHANGELOG.md"), "## 1.1.0\n- from the file\n");
+        WhatsNew.AddNotes(offline, _ => throw new System.Net.WebException("offline"));
+        Check(offline.First(n => n.Key == "111").Lines.SequenceEqual(new[] { "from the file" }), "Steam unreachable: the CHANGELOG instead, no error");
+        Check(WhatsNew.Text(news).Contains("UPDATED  Alpha Mod  1.0.0 → 1.1.0   (from Workshop)"), "the report text");
+        WhatsNewNoteLines(page, local);
+        WhatsNewStamps(ws, a, local, fresh, second, plugins2);
+
+    }
+
+
+    // How notes are read: Workshop page entries in a time span, Steam's and Markdown's marks, CHANGELOG sections.
+    private static void WhatsNewNoteLines(string page, string local)
+    {
         Check(WhatsNew.WorkshopNotes(page, 0, 1794002000).SequenceEqual(new[] { "1.1.0: new radar", "fix \"x\"" }), "a new mod: only its newest note");
         Check(WhatsNew.WorkshopNotes(page, 1794003000, 1794004000).Count == 0, "no note after the last start: none");
         // Real notes (Euromod Main, 2026-11): Markdown headings pasted into Steam's box show raw there.
@@ -226,20 +243,11 @@ internal static class SelfTest
         Check(WhatsNew.ChangelogLines(new[] { "## Unreleased", "- not yet", "## 1.2.0", "- yes", "## 1.1.0", "- no" }, "1.1.0").SequenceEqual(new[] { "yes" }), "an Unreleased section is not in the player's build");
         Check(WhatsNew.ChangelogLines(new[] { "## Unreleased", "- not yet", "## 0.2.2 – 2026-11-12", "- yes", "## 0.2.1", "- no" }, "").SequenceEqual(new[] { "yes" }),
             "a mod without a version: its newest released section, not Unreleased (Clean Screen, 2026-11-12)");
-        Check(LoadScreenEnd.Args(typeof(SelfTest).GetMethod(nameof(FakeLoadScreenPostfix), BindingFlags.NonPublic | BindingFlags.Static).GetParameters()) is { Length: 1 } a1 && (bool)a1[0] == false
-              && LoadScreenEnd.Args(typeof(SelfTest).GetMethod(nameof(FakeNeedsMore), BindingFlags.NonPublic | BindingFlags.Static).GetParameters()) == null,
-            "load screen end: a postfix with __result gets false; one that needs other arguments is left");
+    }
 
-        WhatsNew.AddNotes(news, id => id == 111 ? page : null);
-        Check(alpha.Source == "Workshop" && alpha.Lines.Count == 3, "a Workshop mod gets its Workshop notes");
-        NewsItem loc = news.First(n => n.Key == "MyLocal");
-        Check(loc.Source == "CHANGELOG" && loc.Lines.Count == 3, "a local mod gets its CHANGELOG");
-        var offline = WhatsNew.Compare(back, WhatsNew.Look(second, plugins2, ws), second);
-        File.WriteAllText(Path.Combine(a, "CHANGELOG.md"), "## 1.1.0\n- from the file\n");
-        WhatsNew.AddNotes(offline, _ => throw new System.Net.WebException("offline"));
-        Check(offline.First(n => n.Key == "111").Lines.SequenceEqual(new[] { "from the file" }), "Steam unreachable: the CHANGELOG instead, no error");
-        Check(WhatsNew.Text(news).Contains("UPDATED  Alpha Mod  1.0.0 → 1.1.0   (from Workshop)"), "the report text");
-
+    // What counts as an update: Steam's time for a Workshop item, the files for a local mod, never a settings file the mod writes.
+    private static void WhatsNewStamps(string ws, string a, string local, string fresh, List<ModFolder> second, List<PluginEntry> plugins2)
+    {
         // Game test 2026-11-12: BetterTacMap rewrote settings.cfg in its Workshop folder at every start and was UPDATED every time.
         var steady = WhatsNew.Look(second, plugins2, ws);
         File.WriteAllText(Path.Combine(a, "settings.cfg"), "written by the mod " + Guid.NewGuid());
@@ -265,6 +273,15 @@ internal static class SelfTest
         Check(keelNews is { From: "0.4.0", To: "0.5.0" }, "Keel's own folder: its version jump");
     }
 
+    private static void LoadScreenEndChecks()
+    {
+        Console.WriteLine("Load screen end: mods that wait for it are called once it has passed");
+        Check(LoadScreenEnd.Args(typeof(SelfTest).GetMethod(nameof(FakeLoadScreenPostfix), BindingFlags.NonPublic | BindingFlags.Static).GetParameters()) is { Length: 1 } a1 && (bool)a1[0] == false
+              && LoadScreenEnd.Args(typeof(SelfTest).GetMethod(nameof(FakeNeedsMore), BindingFlags.NonPublic | BindingFlags.Static).GetParameters()) == null,
+            "load screen end: a postfix with __result gets false; one that needs other arguments is left");
+
+    }
+
     /// <summary>
     /// Does the game's real <c>SeaPower.IniHandler</c> have what [ACConfig] needs? One Managed folder per run (the game
     /// assembly cannot be loaded twice in one process). Reads the types by reflection only; nothing of the game runs.
@@ -277,11 +294,7 @@ internal static class SelfTest
             return 2;
         }
         string managed = args[0];
-        AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
-        {
-            string p = Path.Combine(managed, new AssemblyName(e.Name).Name + ".dll");
-            return File.Exists(p) ? Assembly.LoadFrom(p) : null;
-        };
+        Program.ResolveFrom(managed);
         Assembly game = Assembly.LoadFrom(Path.Combine(managed, "Seapower-Scripts.dll"));
         Console.WriteLine($"Game build: {(game.GetType("SeapowerUI.MapDisplayState") != null ? "3D globe map" : "flat map (0.8.7)")} ({managed})");
         Type ini = game.GetType("SeaPower.IniHandler");
@@ -383,7 +396,7 @@ internal static class SelfTest
 
     private static void EuromodChecks(string tmp)
     {
-        Console.WriteLine("12. Euromod setup line: which of the three stages runs (Main / + AC Pack / + Extended Guidance)");
+        Console.WriteLine("Euromod setup line: which of the three stages runs (Main / + AC Pack / + Extended Guidance)");
         string main = Path.Combine(tmp, "eu", ModSetups.EuromodMain.ToString());
         string ac = Path.Combine(tmp, "eu", ModSetups.EuromodAcPack.ToString());
         string local = Path.Combine(tmp, "eu", "MyAcPackCopy");
@@ -415,6 +428,18 @@ internal static class SelfTest
             "an old AC Pack on 0.8.7 or an unknown game version: no warning");
         Check(ModSetups.Detect(new[] { fLocal }, null, oldTimes, "0.9.1").Warning() == null, "a local AC Pack copy (no Steam time): no warning");
 
+        // The report window's EG button writes the AC Pack's own switch, leaving every other line as it was.
+        Check(ModSetups.SetSubmod(null, "euromod.extended-guidance", true) == "[Submods]\neuromod.extended-guidance=true\n", "EG on with no file: the section is made");
+        string withEg = ModSetups.SetSubmod(ini, "euromod.extended-guidance", false);
+        Check(withEg == ini.Replace("euromod.extended-guidance=true", "euromod.extended-guidance=false"), "EG off: only that line changes");
+        string other = "[Other]\nX=1\n[Submods]\nTestRange=false\n\n[More]\nY=2\n";
+        Check(ModSetups.SetSubmod(other, "euromod.extended-guidance", true) == "[Other]\nX=1\n[Submods]\nTestRange=false\neuromod.extended-guidance=true\n\n[More]\nY=2\n", "EG added at the end of [Submods], other sections kept");
+        Check(ModSetups.ReadSubmods(ModSetups.SetSubmod("; note\n", "euromod.extended-guidance", true))["euromod.extended-guidance"], "what the button writes reads back as on");
+    }
+
+    private static void EarlyStartChecks()
+    {
+        Console.WriteLine("Start early: a mod that asks for it starts before the load screen ends");
         // Start early (opt-in, rgreat 2026-11-12): _info.ini [Keel] StartEarly=true; a mod that needs a late one waits too.
         Check(EarlyStart.InInfoIni("[Language_en]\nName=X\n\n[Keel]\nStartEarly=true\n") && !EarlyStart.InInfoIni("[Language_en]\nStartEarly=true\n")
               && !EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") && EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n"),
@@ -430,6 +455,11 @@ internal static class SelfTest
         var earlySet = EarlyStart.Set(new List<PluginEntry> { eA, eB, eC, eD, eE }, (p, why) => whyLate.Add(p.Guid));
         Check(earlySet.SetEquals(new[] { eA }) && whyLate.Count == 2,
               "start early: A early; B waits (needs C, which waits); D waits (E must load before it)");
+    }
+
+    private static void ReportFactsChecks(string tmp)
+    {
+        Console.WriteLine("Sent reports: the game build and a one-line summary, read from the report Keel wrote");
         // What a sent report says in one line (player reports 2026-11-12: game "?", every mail titled "Crash report").
         string rep = "R.A.T.S. Keel 0.5.0 (stub 1.0.0) – Sea Power 0.9.1-261112, 3D globe map – 2026-11-12 15:00\nEuromod setup: Euromod + AC Pack.\n41 running, 2 failed\n\n" +
                      "[FAILED] Taigei (x.taigei) – Workshop 1, T.dll\n[RUNNING] R.A.T.S. Radio 1.5.1 (dev.sewerlabs.seapowerradio) – SeaPowerRadio\n[ERRORS] Automatic SAR (x.sar) – Workshop 2\n";
@@ -449,18 +479,11 @@ internal static class SelfTest
         Check(Enum.GetValues(typeof(PluginState)).Cast<PluginState>().All(s => ReportFormat.TryParseTag(ReportFormat.Tag(s), out PluginState back) && back == s),
               "every state's tag reads back as that state");
 
-        // The report window's EG button writes the AC Pack's own switch, leaving every other line as it was.
-        Check(ModSetups.SetSubmod(null, "euromod.extended-guidance", true) == "[Submods]\neuromod.extended-guidance=true\n", "EG on with no file: the section is made");
-        string withEg = ModSetups.SetSubmod(ini, "euromod.extended-guidance", false);
-        Check(withEg == ini.Replace("euromod.extended-guidance=true", "euromod.extended-guidance=false"), "EG off: only that line changes");
-        string other = "[Other]\nX=1\n[Submods]\nTestRange=false\n\n[More]\nY=2\n";
-        Check(ModSetups.SetSubmod(other, "euromod.extended-guidance", true) == "[Other]\nX=1\n[Submods]\nTestRange=false\neuromod.extended-guidance=true\n\n[More]\nY=2\n", "EG added at the end of [Submods], other sections kept");
-        Check(ModSetups.ReadSubmods(ModSetups.SetSubmod("; note\n", "euromod.extended-guidance", true))["euromod.extended-guidance"], "what the button writes reads back as on");
     }
 
     private static void TakeoverChecks(string tmp)
     {
-        Console.WriteLine("11. Takeover: while Keel is on, other loaders do not start; Keel installs and updates its patcher");
+        Console.WriteLine("Takeover: while Keel is on, other loaders do not start; Keel installs and updates its patcher");
         string[] withStub = { "io.github.seapower_modders.anchorchain_preloader", Takeover.StubGuid };
         Check(Takeover.WhyNot(withStub, true, "") == null, "Keel on, stub there: other loaders are kept from starting");
         Check(Takeover.WhyNot(new[] { "alpine.seapower.modloader" }, true, "") != null, "no stub in BepInEx\\plugins: nothing is taken out");
@@ -471,7 +494,12 @@ internal static class SelfTest
               && Takeover.IsOtherLoader("IO.GITHUB.SEAPOWER_MODDERS.ANCHORCHAIN") && !Takeover.IsOtherLoader("dev.sewerlabs.seapowerkeel.stub")
               && !Takeover.IsOtherLoader("anchorchain.sonaraudio") && !Takeover.IsOtherLoader(null),
               "Anchor Chain and Alpine are recognized by plugin id; Keel and ordinary mods are not");
+        TakeoverRecordChecks(tmp);
+        PatcherInstallChecks(tmp);
+    }
 
+    private static void TakeoverRecordChecks(string tmp)
+    {
         var rec = new Takeover.Record { WrittenUtc = new DateTime(2026, 11, 11, 20, 0, 0, DateTimeKind.Utc) };
         rec.Kept.Add(new Takeover.Blocked { Guid = "alpine.seapower.modloader", Name = "Alpine's Mod Loader", File = @"C:\g\BepInEx\plugins\AnchorChain.Preloader.dll" });
         string recPath = Path.Combine(tmp, "Keel-takeover.txt");
@@ -484,7 +512,10 @@ internal static class SelfTest
         Check(back.Off == "R.A.T.S. Keel is switched off" && back.Kept.Count == 0, "and why it took nothing out");
         File.WriteAllText(recPath, "garbage");
         Check(Takeover.Record.Read(recPath) == null && Takeover.Record.Read(Path.Combine(tmp, "none.txt")) == null, "a broken or missing record counts as none");
+    }
 
+    private static void PatcherInstallChecks(string tmp)
+    {
         string keelDir = Path.Combine(tmp, "keelmod");
         string patchers = Path.Combine(tmp, "game", "BepInEx", "patchers");
         Directory.CreateDirectory(keelDir);
@@ -674,7 +705,7 @@ internal static class SelfTest
     private static List<PluginEntry> Plan(List<PluginEntry> all, params string[] elsewhere) =>
         Planner.Plan(all, new HashSet<string>(elsewhere), new HashSet<string>(), "Sea Power");
 
-    // ---- 1. exclusions ----
+    // ---- exclusions ----
 
     private static void InfoIni()
     {
@@ -725,7 +756,7 @@ internal static class SelfTest
         Check(Report.Text(found, "h", notes).IndexOf("DLLs left out", StringComparison.Ordinal) < 0, "no section when nothing was left out (no list given)");
     }
 
-    // ---- 3. exported types ----
+    // ---- exported types ----
 
     private static void ExportedTypes(string tmp, string managed, string core)
     {
@@ -747,7 +778,7 @@ internal static class SelfTest
         Check(!order.Any(p => p.Guid == "test.internal" || p.Guid == "test.nested.internal" || p.Guid == "test.nested.in.internal"), "non-exported classes are not in the start order");
     }
 
-    // ---- 2. entry point ----
+    // ---- entry point ----
 
     private static void EntryPoints()
     {
@@ -776,11 +807,7 @@ internal static class SelfTest
 
     private static void Sequence()
     {
-        // A <- B <- C by dependency, plus D and E independent, in mod-list order D, C, B, A, E (so order is not the input order).
-        PluginEntry d = Ac("d"), c = Ac("c", "1.0", "b"), b = Ac("b", "1.0", "a"), a = Ac("a"), e = Ac("e");
-        var all = new List<PluginEntry> { d, c, b, a, e };
-        for (int i = 0; i < all.Count; i++)
-            all[i].Order = i;
+        List<PluginEntry> all = ChainOfMods();
         List<PluginEntry> order = Plan(all);
         string plan = string.Join("", order.Select(p => p.Guid));
         Check(plan == "dabce" || plan == "daebc" || plan == "dabec", "plan keeps dependencies first: " + plan);
@@ -798,69 +825,81 @@ internal static class SelfTest
         Check(lastPrepare < firstStart, "every plugin is loaded/created before the first one starts: " + text);
         Check(string.Join("", log.Where(x => x[0] == 'S').Select(x => x.Substring(1))) == plan, "starts in plan order (dependencies first)");
         Check(steps == 2 * order.Count && seq.StartedCount == order.Count, "one step per load and per start (the game gets a frame in between)");
+        SequenceFailedLoad();
+        SequenceHandOver();
+    }
 
-        // A cannot be loaded: B and C (which need it) do not start, D and E do.
-        foreach (PluginEntry p in all) { p.State = PluginState.Pending; p.Reason = ""; }
-        log.Clear();
-        var seq2 = new Sequencer
+    // A <- B <- C by dependency, plus D and E independent, in mod-list order D, C, B, A, E (so order is not the input order).
+    private static List<PluginEntry> ChainOfMods()
+    {
+        var all = new List<PluginEntry> { Ac("d"), Ac("c", "1.0", "b"), Ac("b", "1.0", "a"), Ac("a"), Ac("e") };
+        for (int i = 0; i < all.Count; i++)
+            all[i].Order = i;
+        return all;
+    }
+
+    // A cannot be loaded: B and C (which need it) do not start, D and E do.
+    private static void SequenceFailedLoad()
+    {
+        List<PluginEntry> all = ChainOfMods();
+        var log = new List<string>();
+        var seq = new Sequencer
         {
             Prepare = p => { log.Add("P" + p.Guid); if (p.Guid == "a") p.Stop(PluginState.Failed, "no entry point"); },
             Start = p => { log.Add("S" + p.Guid); p.State = PluginState.Running; },
             Replan = () => Planner.Replan(all, new HashSet<string>()),
         };
-        seq2.Run(Plan(all)).Count();
+        seq.Run(Plan(all)).Count();
         string started = string.Join("", log.Where(x => x[0] == 'S').Select(x => x.Substring(1)).OrderBy(x => x));
+        PluginEntry b = all.First(p => p.Guid == "b");
         Check(started == "de", "a plugin that fails to load keeps its dependants out, the others start: started " + started);
-        Check(b.State == PluginState.NotStarted && b.Reason.Contains("does not start") && c.State == PluginState.NotStarted, "  dependants say why: " + b.Reason);
-        Check(a.State == PluginState.Failed, "  the failed one is FAILED, not RUNNING");
+        Check(b.State == PluginState.NotStarted && b.Reason.Contains("does not start") && all.First(p => p.Guid == "c").State == PluginState.NotStarted, "  dependants say why: " + b.Reason);
+        Check(all.First(p => p.Guid == "a").State == PluginState.Failed, "  the failed one is FAILED, not RUNNING");
+    }
 
+    // Anchor Chain is running from the moment acRunning() says so: its pending mods are its own.
+    private static Func<string, bool> HandOverWhen(List<PluginEntry> all, Func<bool> acRunning) => _ =>
+    {
+        if (!acRunning() || !all.Any(x => x.Kind == PluginKind.AnchorChain && x.State == PluginState.Pending))
+            return false;
+        foreach (PluginEntry p in all.Where(x => x.Kind == PluginKind.AnchorChain && x.State == PluginState.Pending))
+            p.Stop(PluginState.LeftToAnchorChain, "Anchor Chain is running and starts this mod.");
+        return true;
+    };
+
+    private static void SequenceHandOver()
+    {
         // Anchor Chain appears after the loading phase: no Anchor Chain mod is started by Keel, a BepInEx plugin still is.
-        foreach (PluginEntry p in all) { p.State = PluginState.Pending; p.Reason = ""; }
-        PluginEntry bep = new PluginEntry { Guid = "bep", Name = "bep", Kind = PluginKind.BepInEx, Folder = Folder("x"), TypeName = "T.bep", Dll = "x.dll", Order = 9 };
-        all.Add(bep);
-        log.Clear();
+        List<PluginEntry> all = ChainOfMods();
+        all.Add(new PluginEntry { Guid = "bep", Name = "bep", Kind = PluginKind.BepInEx, Folder = Folder("x"), TypeName = "T.bep", Dll = "x.dll", Order = 9 });
+        var log = new List<string>();
         bool acRunning = false;
-        var seq3 = new Sequencer
+        var seq = new Sequencer
         {
             Prepare = p => log.Add("P" + p.Guid),
             Start = p => { log.Add("S" + p.Guid); p.State = PluginState.Running; },
             Replan = () => Planner.Replan(all, new HashSet<string>(all.Where(x => x.State == PluginState.LeftToAnchorChain).Select(x => x.Guid))),
-            HandOver = _ =>
-            {
-                if (!acRunning || !all.Any(x => x.Kind == PluginKind.AnchorChain && x.State == PluginState.Pending))
-                    return false;
-                foreach (PluginEntry p in all.Where(x => x.Kind == PluginKind.AnchorChain && x.State == PluginState.Pending))
-                    p.Stop(PluginState.LeftToAnchorChain, "Anchor Chain is running and starts this mod.");
-                return true;
-            },
+            HandOver = HandOverWhen(all, () => acRunning),
             Prepared = p => { if (log.Count == all.Count(x => x.State == PluginState.Pending)) acRunning = true; },
         };
-        seq3.Run(Plan(all)).Count();
+        seq.Run(Plan(all)).Count();
         Check(acRunning && !log.Any(x => x[0] == 'S' && x != "Sbep"), "Anchor Chain showed up before the first start: Keel started no Anchor Chain mod: " + string.Join(" ", log.Where(x => x[0] == 'S')));
         Check(log.Contains("Sbep"), "  but the BepInEx plugin still started");
         Check(all.Where(x => x.Kind == PluginKind.AnchorChain).All(x => x.State == PluginState.LeftToAnchorChain), "  and they are reported as left to Anchor Chain");
 
-        // Anchor Chain appears in the middle of the start phase.
+        // Anchor Chain appears in the middle of the start phase, after two starts.
         foreach (PluginEntry p in all) { p.State = PluginState.Pending; p.Reason = ""; }
         log.Clear();
         int startsDone = 0;
-        bool acNow = false;
-        var seq4 = new Sequencer
+        var seq2 = new Sequencer
         {
             Prepare = p => { },
-            Start = p => { log.Add("S" + p.Guid); p.State = PluginState.Running; if (++startsDone == 2) acNow = true; },
+            Start = p => { log.Add("S" + p.Guid); p.State = PluginState.Running; startsDone++; },
             Replan = () => Planner.Replan(all, new HashSet<string>()),
-            HandOver = _ =>
-            {
-                if (!acNow || !all.Any(x => x.Kind == PluginKind.AnchorChain && x.State == PluginState.Pending))
-                    return false;
-                foreach (PluginEntry p in all.Where(x => x.Kind == PluginKind.AnchorChain && x.State == PluginState.Pending))
-                    p.Stop(PluginState.LeftToAnchorChain, "x");
-                return true;
-            },
+            HandOver = HandOverWhen(all, () => startsDone >= 2),
         };
-        seq4.Run(Plan(all)).Count();
-        Check(seq4.StartedCount == 2 + (log.Contains("Sbep") ? 0 : 0) || log.Count(x => x[0] == 'S') <= 3,
+        seq2.Run(Plan(all)).Count();
+        Check(log.Count(x => x[0] == 'S' && x != "Sbep") == 2,
               "Anchor Chain appearing mid-way: the remaining Anchor Chain mods are not started by Keel (" + string.Join(" ", log) + ")");
         Check(all.Count(x => x.State == PluginState.Running) == startsDone, "  no mod is both started by Keel and left to Anchor Chain");
     }
@@ -873,20 +912,25 @@ internal static class SelfTest
         Check(GameState.AnchorChainRunning(a => false), "claimed by nobody: running");
     }
 
-    // ---- 5. [ACConfig] ----
+    // ---- [ACConfig] ----
+
+    /// <summary>The [ACConfig] checks' mod folder, config folder and the messages AcConfig gives.</summary>
+    private sealed class ConfigFixture
+    {
+        public string Mods, CfgDir;
+        public readonly List<string> Info = new(), Warn = new(), Err = new();
+        public AcConfig Make(Type t, string dir = null) => new AcConfig(t, dir ?? CfgDir, new[] { Mods }, Info.Add, Warn.Add, Err.Add);
+        public static PluginEntry Plugin(string guid, bool required = true) =>
+            new PluginEntry { Guid = guid, Name = guid, UsesAcConfig = true, AcConfigRequired = required, Kind = PluginKind.AnchorChain };
+    }
 
     private static void Config(string tmp)
     {
-        string mods = Path.Combine(tmp, "cfg-mods"), streaming = Path.Combine(tmp, "cfg-streaming");
-        Directory.CreateDirectory(mods);
-        Directory.CreateDirectory(streaming);
-        string cfgDir = Path.Combine(streaming, AcConfig.ConfigFolder);
-        var info = new List<string>();
-        var warn = new List<string>();
-        var err = new List<string>();
-        AcConfig Make(Type t, string dir = null) => new AcConfig(t, dir ?? cfgDir, new[] { mods }, info.Add, warn.Add, err.Add);
-        PluginEntry Plugin(string guid, bool required = true) =>
-            new PluginEntry { Guid = guid, Name = guid, UsesAcConfig = true, AcConfigRequired = required, Kind = PluginKind.AnchorChain };
+        var f = new ConfigFixture { Mods = Path.Combine(tmp, "cfg-mods"), CfgDir = Path.Combine(tmp, "cfg-streaming", AcConfig.ConfigFolder) };
+        Directory.CreateDirectory(f.Mods);
+        string mods = f.Mods, cfgDir = f.CfgDir;
+        AcConfig Make(Type t, string dir = null) => f.Make(t, dir);
+        PluginEntry Plugin(string guid, bool required = true) => ConfigFixture.Plugin(guid, required);
 
         // the game's real signature (a recent build): open has an extra optional parameter
         var members = new IniApi(typeof(SelfTestFakes.GlobeIni));
@@ -925,6 +969,16 @@ internal static class SelfTest
         File.WriteAllText(Path.Combine(mods, "mod.flat.ini"), "[S]\nK = 1\n");
         Check(Make(typeof(SelfTestFakes.FlatIni)).Load(Plugin("mod.flat"), out _) && File.ReadAllText(Path.Combine(cfgDir, "mod.flat_user.ini")).Contains("K = 1"), "the same on a handler with the 0.8.7 open signature");
 
+        ConfigFallbacks(tmp, f);
+    }
+
+    // A handler that lacks a member, has none, or throws; a player file that cannot be made.
+    private static void ConfigFallbacks(string tmp, ConfigFixture f)
+    {
+        string mods = f.Mods, cfgDir = f.CfgDir;
+        AcConfig Make(Type t, string dir = null) => f.Make(t, dir);
+        PluginEntry Plugin(string guid, bool required = true) => ConfigFixture.Plugin(guid, required);
+        List<string> warn = f.Warn;
         // a member this build lacks: handled with a fallback and said so
         File.WriteAllText(Path.Combine(mods, "mod.drift.ini"), "[S]\nK = 1\n");
         warn.Clear();
@@ -952,7 +1006,7 @@ internal static class SelfTest
         Check(Make(typeof(SelfTestFakes.GlobeIni), blocked).Load(opt, out _), "[ACConfig(false)] and no player file possible: still starts");
     }
 
-    // ---- 8. AnchorChainLoader.FindFile ----
+    // ---- AnchorChainLoader.FindFile ----
 
     private static void LoaderShim(string tmp)
     {
@@ -1009,7 +1063,7 @@ internal static class SelfTest
         }
     }
 
-    // ---- 7. incompatibility ----
+    // ---- incompatibility ----
 
     private static void Incompatibility()
     {
