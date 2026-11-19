@@ -14,12 +14,12 @@ namespace SeaPowerKeel;
 internal sealed class SetupCore
 {
     public const string ExeName = "Sea Power.exe";
-    private const string StubName = "SeaPowerKeel.Stub.dll";
-    private const string PreloaderName = "AnchorChain.Preloader.dll";
-    private const string PatcherName = "SeaPowerKeel.Patcher.dll";
+    private const string StubName = KeelNames.StubFile;
+    private const string PreloaderName = KeelNames.AnchorChainPreloaderFile;
+    private const string PatcherName = KeelNames.PatcherFile;
     private const string SetAside = ".keel-off";
     private const string ManifestName = "keel-setup.txt";
-    private const string CacheFile = @"BepInEx\cache\chainloader_typeloader.dat";
+    private const string CacheFile = @"BepInEx\cache\" + KeelNames.PluginCacheFile;
 
     private readonly string game;
 
@@ -38,7 +38,7 @@ internal sealed class SetupCore
     /// <summary>Alpine's Mod Loader on this PC: only one loader should be active.</summary>
     public bool HasAlpine =>
         Directory.Exists(At(@"Sea Power_Data\StreamingAssets\Alpine_Mod_Loader")) ||
-        Directory.Exists(Path.GetFullPath(Path.Combine(game, @"..\..\workshop\content\1286220\3832006068")));
+        Directory.Exists(Path.GetFullPath(Path.Combine(game, $@"..\..\workshop\content\{KeelNames.SteamAppId}\{KeelNames.AlpineWorkshopId}")));
 
     /// <summary>What the game needs from BepInEx's release zip: the Doorstop files and BepInEx\core. Nothing else leaves the zip.</summary>
     public static bool IsBepInExFile(string relative) =>
@@ -49,9 +49,9 @@ internal sealed class SetupCore
 
     private List<string> ReadManifest() => File.Exists(Manifest) ? File.ReadAllLines(Manifest).Where(l => l.Length > 0).ToList() : new List<string>();
 
-    /// <summary>Installs the stub, adds BepInEx if the game has none, and sets another loader's preloader aside. Returns what it did, for the window.</summary>
-    public List<string> Install(byte[] stub, byte[] bepInExZip) => Install(stub, bepInExZip, null);
-
+    /// <summary>
+    /// Installs the stub, adds BepInEx if the game has none, and sets another loader's preloader aside. Returns what it did, for the window.
+    /// </summary>
     /// <param name="patcher">Keel's takeover patcher for BepInEx\patchers (null: none; Keel installs it itself at its first start).</param>
     public List<string> Install(byte[] stub, byte[] bepInExZip, byte[] patcher)
     {
@@ -87,7 +87,7 @@ internal sealed class SetupCore
         Directory.CreateDirectory(Plugins);
         string stubPath = Path.Combine(Plugins, StubName);
         if (!File.Exists(stubPath))
-            Note(@"created\tBepInEx\plugins\".Replace(@"\t", "\t") + StubName);
+            Note("created\t" + @"BepInEx\plugins\" + StubName);
         File.WriteAllBytes(stubPath, stub);
         did.Add("Installed Keel's starter file.");
 

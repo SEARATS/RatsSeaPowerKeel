@@ -17,7 +17,7 @@ internal static class ModList
     /// <summary>Carries out the crash window's choice to keep a pack off. Returns the folder, or null.</summary>
     internal static string ApplyPackOff(string dir, string settingsPath)
     {
-        string file = Path.Combine(dir, CrashText.PackOffFile);
+        string file = Path.Combine(dir, KeelNames.PackOffFile);
         try
         {
             if (!File.Exists(file))

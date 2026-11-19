@@ -10,17 +10,84 @@ internal static class CrashText
 {
     public const string CrashPrefix = "Crash: ";
     public const string FilePrefix = "File: ";
-    /// <summary>The last game's stack, kept when Keel installs the catcher (which empties the stack file) at the start of the next one.</summary>
-    public const string StackPrevFile = "Keel-crash-stack.prev.txt";
-    /// <summary>Written by the crash window: this pack folder is to be switched off in the game's mod list.</summary>
-    public const string PackOffFile = "Keel-packoff.txt";
     /// <summary>How long before a crash a file may have been opened to count as the likely cause.</summary>
     public const int PackWindowMs = 10000;
-    public const string StackFile = "Keel-crash-stack.txt";
-    public const string ModsFile = "Keel-mods.txt";
-    public const string JournalFile = "Keel-session.txt";
-    /// <summary>Written by the crash window: the player chose to keep this mod on.</summary>
-    public const string KeepFile = "Keel-keep.txt";
+
+    /// <summary>What the journal (Keel-session.txt) of a session says.</summary>
+    public sealed class Journal
+    {
+        /// <summary>The last session has a journal and it never reached a normal quit.</summary>
+        public bool Unclean;
+        /// <summary>"load" or "start" when the session ended inside that step of a mod, else null.</summary>
+        public string Step;
+        public string Guid;
+        public string Scene;
+        public string Began;
+    }
+
+    private static readonly string[] CrashMarkers =
+    {
+        "Got a UNKNOWN while executing native code",
+        "Native Crash Reporting",
+        "Crash!!!",
+        "A crash has been intercepted by the crash handler",
+        "Received signal SIG",
+    };
+
+    private const int MaxCrashLines = 400;
+
+    /// <summary>
+    /// Reads a journal. A "load" or "start" stays open until the next one or "done": the game gets a frame after each step, and a
+    /// BepInEx plugin's own Start() runs in that frame, so a crash there still counts against the mod.
+    /// </summary>
+    public static Journal ReadJournal(IEnumerable<string> lines)
+    {
+        var v = new Journal();
+        bool any = false, quit = false;
+        foreach (string line in lines)
+        {
+            int tab = line.IndexOf('\t');
+            if (tab <= 0)
+                continue;
+            any = true;
+            string kind = line.Substring(0, tab), detail = line.Substring(tab + 1);
+            switch (kind)
+            {
+                case "session": v.Began = detail; break;
+                case "load":
+                case "start": v.Step = kind; v.Guid = detail; break;
+                case "done": v.Step = null; v.Guid = null; break;
+                case "scene": v.Scene = detail; break;
+                case "quit": quit = true; break;
+            }
+        }
+        v.Unclean = any && !quit;
+        if (!v.Unclean)
+        {
+            v.Step = null;
+            v.Guid = null;
+        }
+        return v;
+    }
+
+    /// <summary>The crash part of a Unity player log, or null when the log shows no crash.</summary>
+    internal static string CrashBlock(string log)
+    {
+        if (string.IsNullOrEmpty(log))
+            return null;
+        int at = CrashMarkers.Select(m => log.IndexOf(m, StringComparison.Ordinal)).Where(i => i >= 0).DefaultIfEmpty(-1).Min();
+        if (at < 0)
+            return null;
+        int lineStart = log.LastIndexOf('\n', at) + 1;
+        return string.Join("\n", log.Substring(lineStart).Replace("\r\n", "\n").Split('\n').Take(MaxCrashLines));
+    }
+
+    /// <summary>
+    /// No quit mark, but no crash record either and Unity shut down the normal way: the game was closed or restarted without
+    /// Keel's quit (issue keel-crash-without-data). Not a crash: no mod is named or held, no crash window.
+    /// </summary>
+    public static bool ClosedNormally(string caughtStack, string playerLog) =>
+        string.IsNullOrWhiteSpace(caughtStack) && CrashBlock(ReadAll(playerLog)) == null && LogEndedNormally(playerLog);
 
     public static bool IsManagedFrame(string line)
     {
@@ -125,13 +192,13 @@ internal static class CrashText
         return (nl < 0 ? block : block.Substring(0, nl)).Substring(CrashPrefix.Length).Trim();
     }
 
-    private static readonly string[] NotPacks = { "original", "user", "EntityScenes", "SeaPowerKeel", "ACConfigs", "3835527459", "3380210757", "3832006068" };
+    private static readonly string[] NotPacks = { "original", "user", "EntityScenes", "SeaPowerKeel", "ACConfigs", "3835527459", "3380210757", KeelNames.AlpineWorkshopId.ToString() };
 
     /// <summary>The mod folder a full path lies in (a Workshop id or a StreamingAssets folder), or null for the game's own files.</summary>
     public static string PackOf(string path)
     {
         string p = path.Replace('\\', '/');
-        foreach (string marker in new[] { "/workshop/content/1286220/", "/StreamingAssets/" })
+        foreach (string marker in new[] { $"/workshop/content/{KeelNames.SteamAppId}/", "/StreamingAssets/" })
         {
             int at = p.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
             if (at < 0)
@@ -179,5 +246,12 @@ internal static class CrashText
         {
             return null;
         }
+    }
+
+    /// <summary>The file's non-empty lines; none when it cannot be read.</summary>
+    public static string[] ReadLines(string path)
+    {
+        string text = ReadAll(path);
+        return text == null ? new string[0] : text.Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToArray();
     }
 }

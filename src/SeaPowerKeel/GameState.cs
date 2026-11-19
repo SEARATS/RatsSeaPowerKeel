@@ -208,13 +208,11 @@ internal static class GameState
     /// </summary>
     public static bool AnchorChainRunning(Func<Assembly, bool> ours) => OtherLoader(ours) != null;
 
-    private const string AlpineGuid = "alpine.seapower.modloader";
-
     private static bool AlpineActive()
     {
         try
         {
-            return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(AlpineGuid);
+            return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(KeelNames.AlpineGuid);
         }
         catch (TypeInitializationException)
         {

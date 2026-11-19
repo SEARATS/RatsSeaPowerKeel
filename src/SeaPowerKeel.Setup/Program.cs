@@ -33,8 +33,8 @@ internal static class Program
     }
 
     private static string Here => AppDomain.CurrentDomain.BaseDirectory;
-    public static string StubFile => Path.Combine(Here, "copy-to-BepInEx-plugins", "SeaPowerKeel.Stub.dll");
-    public static string PatcherFile => Path.Combine(Here, "SeaPowerKeel.Patcher.dll");
+    public static string StubFile => Path.Combine(Here, "copy-to-BepInEx-plugins", KeelNames.StubFile);
+    public static string PatcherFile => Path.Combine(Here, KeelNames.PatcherFile);
 
     private static string Metadata(string key) =>
         Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value ?? "";
@@ -50,9 +50,9 @@ internal static class Program
     {
         var missing = new List<string>();
         if (!File.Exists(StubFile))
-            missing.Add(@"copy-to-BepInEx-plugins\SeaPowerKeel.Stub.dll");
+            missing.Add(@"copy-to-BepInEx-plugins\" + KeelNames.StubFile);
         if (!File.Exists(PatcherFile))
-            missing.Add("SeaPowerKeel.Patcher.dll");
+            missing.Add(KeelNames.PatcherFile);
         if (missing.Count > 0)
             return "Run KeelSetup.exe from Keel's own folder. Missing next to it: " + string.Join(", ", missing) + ".";
         if (needBepInEx && (BepInExVersion.Length == 0 || ExpectedZipHash.Length == 0))
@@ -131,87 +131,32 @@ internal sealed class SetupForm : Form
 {
     private readonly TextBox folder;
     private readonly Label status;
-    private readonly Button install, restore;
+    private readonly Button install, restore, browse;
     private readonly int wide;
 
     public SetupForm()
     {
-        float dpi;
-        using (Graphics g = Graphics.FromHwnd(IntPtr.Zero))
-            dpi = g.DpiX;
-        int P(int v) => (int)Math.Round(v * dpi / 96f);
-        wide = P(500);
-
+        var kit = new DialogKit(500);
+        wide = kit.Wide;
         Text = "R.A.T.S. Keel Setup";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        BackColor = Color.White;
-        Font = new Font("Segoe UI", 10f);
-        Padding = new Padding(0, 0, P(26), P(20));
+        kit.Style(this);
 
-        var column = new FlowLayoutPanel { Location = new Point(P(26), P(22)), FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-        Label Line(string s, Font f, Color c, int below) => new() { Text = s, Font = f, ForeColor = c, AutoSize = true, MinimumSize = new Size(wide, 0), MaximumSize = new Size(wide, 0), Margin = new Padding(0, 0, 0, P(below)) };
-        column.Controls.Add(Line("R.A.T.S. Keel", new Font("Segoe UI Semibold", 15f), Color.FromArgb(32, 32, 32), 4));
-        column.Controls.Add(Line("Sets up Keel for your copy of Sea Power. You can undo it here at any time.", Font, Color.FromArgb(70, 70, 70), 16));
-
-        var pick = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Margin = new Padding(0, 0, 0, P(12)) };
-        folder = new TextBox { Text = Program.FindGame() ?? "", Width = wide - P(100), Margin = new Padding(0, P(2), P(8), 0) };
-        var browse = new Button { Text = "Browse...", AutoSize = true, Margin = new Padding(0) };
-        browse.Click += (s, e) =>
-        {
-            using var dialog = new OpenFileDialog { Filter = "Sea Power|" + SetupCore.ExeName, Title = "Find Sea Power.exe" };
-            if (dialog.ShowDialog(this) == DialogResult.OK)
-                folder.Text = Path.GetDirectoryName(dialog.FileName);
-        };
-        folder.TextChanged += (s, e) => Refresh2();
-        pick.Controls.Add(folder);
-        pick.Controls.Add(browse);
-        column.Controls.Add(pick);
-
-        status = Line("", Font, Color.FromArgb(48, 48, 48), 16);
+        FlowLayoutPanel column = kit.Column();
+        column.Controls.Add(kit.Line("R.A.T.S. Keel", DialogKit.Heading, DialogKit.HeadingColor, 4));
+        column.Controls.Add(kit.Line("Sets up Keel for your copy of Sea Power. You can undo it here at any time.", Font, Color.FromArgb(70, 70, 70), 16));
+        column.Controls.Add(FolderPicker(kit, out folder, out browse));
+        status = kit.Line("", Font, DialogKit.TextColor, 16);
         column.Controls.Add(status);
 
-        var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.Right, Margin = new Padding(0) };
-        var close = new Button { Text = "Close", AutoSize = true, DialogResult = DialogResult.Cancel, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(P(8), 0, 0, 0) };
-        install = new Button { Text = "Install", AutoSize = true, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(0) };
-        restore = new Button { Text = "Restore", AutoSize = true, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(0, 0, P(8), 0) };
-        install.Click += async (s, e) =>
-        {
-            var core = new SetupCore(folder.Text.Trim());
-            byte[] zip = new byte[0];
-            if (!GameRunning && core.IsGameFolder && !core.HasBepInEx && Program.PayloadProblem(true) == null)
-            {
-                install.Enabled = restore.Enabled = browse.Enabled = folder.Enabled = false;
-                status.Text = "Downloading BepInEx " + Program.BepInExVersion + " from its GitHub release...";
-                try
-                {
-                    zip = await Task.Run(() => Program.GetBepInExZip());
-                }
-                catch (IOException ex)
-                {
-                    status.Text = ex.Message;
-                    browse.Enabled = folder.Enabled = true;
-                    Refresh2(keepStatus: true);
-                    return;
-                }
-                browse.Enabled = folder.Enabled = true;
-            }
-            Do(c =>
-            {
-                string problem = Program.PayloadProblem(!c.HasBepInEx);
-                if (problem != null)
-                    return problem;
-                if (!c.HasBepInEx && zip.Length == 0)
-                    return "BepInEx is missing. Press Install again to download it.";
-                return "Done. " + string.Join(" ", c.Install(File.ReadAllBytes(Program.StubFile), c.HasBepInEx ? new byte[0] : zip, File.ReadAllBytes(Program.PatcherFile))) +
-                       "\n\nStart Sea Power, switch R.A.T.S. Keel on in Mods, and restart the game.";
-            });
-        };
+        Button close = kit.Button("Close", left: 8);
+        close.DialogResult = DialogResult.Cancel;
+        install = kit.Button("Install");
+        restore = kit.Button("Restore", right: 8);
+        install.Click += async (s, e) => await InstallClicked();
         restore.Click += (s, e) => Do(c => { c.Restore(); return "Everything Keel's setup changed is back as it was."; });
         close.Click += (s, e) => Close();
+        FlowLayoutPanel row = DialogKit.Row();
         row.Controls.Add(close);
         row.Controls.Add(install);
         row.Controls.Add(restore);
@@ -220,6 +165,57 @@ internal sealed class SetupForm : Form
         CancelButton = close;
         AcceptButton = install;
         Refresh2();
+    }
+
+    private FlowLayoutPanel FolderPicker(DialogKit kit, out TextBox box, out Button pickButton)
+    {
+        var pick = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Margin = new Padding(0, 0, 0, kit.P(12)) };
+        TextBox path = box = new TextBox { Text = Program.FindGame() ?? "", Width = wide - kit.P(100), Margin = new Padding(0, kit.P(2), kit.P(8), 0) };
+        pickButton = new Button { Text = "Browse...", AutoSize = true, Margin = new Padding(0) };
+        pickButton.Click += (s, e) =>
+        {
+            using var dialog = new OpenFileDialog { Filter = "Sea Power|" + SetupCore.ExeName, Title = "Find Sea Power.exe" };
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+                path.Text = Path.GetDirectoryName(dialog.FileName);
+        };
+        path.TextChanged += (s, e) => Refresh2();
+        pick.Controls.Add(path);
+        pick.Controls.Add(pickButton);
+        return pick;
+    }
+
+    // Install: BepInEx downloaded first when the game has none (off the window's thread), then the files copied.
+    private async Task InstallClicked()
+    {
+        var core = new SetupCore(folder.Text.Trim());
+        byte[] zip = new byte[0];
+        if (!GameRunning && core.IsGameFolder && !core.HasBepInEx && Program.PayloadProblem(true) == null)
+        {
+            install.Enabled = restore.Enabled = browse.Enabled = folder.Enabled = false;
+            status.Text = "Downloading BepInEx " + Program.BepInExVersion + " from its GitHub release...";
+            try
+            {
+                zip = await Task.Run(() => Program.GetBepInExZip());
+            }
+            catch (IOException ex)
+            {
+                status.Text = ex.Message;
+                browse.Enabled = folder.Enabled = true;
+                Refresh2(keepStatus: true);
+                return;
+            }
+            browse.Enabled = folder.Enabled = true;
+        }
+        Do(c =>
+        {
+            string problem = Program.PayloadProblem(!c.HasBepInEx);
+            if (problem != null)
+                return problem;
+            if (!c.HasBepInEx && zip.Length == 0)
+                return "BepInEx is missing. Press Install again to download it.";
+            return "Done. " + string.Join(" ", c.Install(File.ReadAllBytes(Program.StubFile), c.HasBepInEx ? new byte[0] : zip, File.ReadAllBytes(Program.PatcherFile))) +
+                   "\n\nStart Sea Power, switch R.A.T.S. Keel on in Mods, and restart the game.";
+        });
     }
 
     private static bool GameRunning => Process.GetProcessesByName("Sea Power").Length > 0;

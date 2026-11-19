@@ -13,11 +13,11 @@ namespace SeaPowerKeel;
 /// </summary>
 internal static class Takeover
 {
-    public const string PatcherFile = "SeaPowerKeel.Patcher.dll";
+    public const string PatcherFile = KeelNames.PatcherFile;
     public const string PatcherAssembly = "SeaPowerKeel.Patcher";
     public const string RecordFile = "Keel-takeover.txt";
-    public const string StubGuid = "dev.sewerlabs.seapowerkeel.stub";
-    public const string LoaderFile = "SeaPowerKeel.dll";
+    public const string StubGuid = KeelNames.StubGuid;
+    public const string LoaderFile = KeelNames.LoaderFile;
     public const string ConfigFile = "dev.sewerlabs.seapowerkeel.cfg";     // Keel.Guid + ".cfg"; Keel's settings file
     public const string ConfigSection = "Loading";
     public const string ConfigKey = "TakeOver";
@@ -27,7 +27,7 @@ internal static class Takeover
     {
         ["io.github.seapower_modders.anchorchain_preloader"] = "Anchor Chain's preloader",
         ["io.github.seapower_modders.anchorchain"] = "Anchor Chain",
-        ["alpine.seapower.modloader"] = "Alpine's Mod Loader",
+        [KeelNames.AlpineGuid] = "Alpine's Mod Loader",
         ["alpine.seapower.modloader.core"] = "Alpine's Mod Loader",
     };
 

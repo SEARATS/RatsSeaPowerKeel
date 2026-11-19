@@ -29,7 +29,7 @@ internal sealed class KeelLog : ILogListener
 
     public KeelLog(int keepSessions)
     {
-        Path = System.IO.Path.Combine(Paths.BepInExRootPath, "Keel-log.txt");
+        Path = System.IO.Path.Combine(Paths.BepInExRootPath, KeelNames.LogFile);
         try
         {
             gameStart = Process.GetCurrentProcess().StartTime;

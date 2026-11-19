@@ -21,6 +21,8 @@ internal static class Sender
     private const string Endpoint = "https://hub.sewerlabs.dev/api/report";
     private const string Board = "https://hub.sewerlabs.dev";
     private const long MaxBytes = 5 * 1024 * 1024;     // the board refuses more
+    // TLS 1.3: .NET Framework 4.8 runs with it on Windows 11 but has no name for it.
+    private const SecurityProtocolType Tls13 = (SecurityProtocolType)12288;
 
     private static string KeelVersion =>
         typeof(Sender).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0] ?? "";
@@ -63,116 +65,127 @@ internal static class Sender
 
     private static void Ask(string zip, string game, IWin32Window owner)
     {
-        float dpi;
-        using (Graphics g = Graphics.FromHwnd(IntPtr.Zero))
-            dpi = g.DpiX;
-        int P(int v) => (int)Math.Round(v * dpi / 96f);
-        int wide = P(480);
+        using var form = new SendForm(zip, game, owner);
+        form.ShowDialog(owner);
+    }
 
-        string[] files;
-        using (ZipArchive archive = ZipFile.OpenRead(zip))
-            files = archive.Entries.Select(e => $"{e.FullName}   ({Size(e.Length)})").ToArray();
-        long size = new FileInfo(zip).Length;
+    private static readonly Color Bad = Color.FromArgb(170, 40, 30), Good = Color.FromArgb(30, 120, 60);
 
-        using var form = new Form
+    /// <summary>The send window: what goes out, a note from the player, Send and Cancel, and how the sending went.</summary>
+    private sealed class SendForm : Form
+    {
+        private readonly string zip, game;
+        private readonly TextBox note;
+        private readonly Label status;
+        private readonly Button send, cancel;
+        private bool sent;
+
+        public SendForm(string zip, string game, IWin32Window owner)
         {
-            Text = "R.A.T.S. Keel", FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, TopMost = true,
-            StartPosition = owner == null ? FormStartPosition.CenterScreen : FormStartPosition.CenterParent, AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.White, Padding = new Padding(0, 0, P(26), P(20)), Font = new Font("Segoe UI", 10f),
-            ShowInTaskbar = owner == null,
-        };
-        var column = new FlowLayoutPanel { Location = new Point(P(26), P(22)), FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-        Label Text2(string s, Font f, Color c, int below) => new Label { Text = s, Font = f, ForeColor = c, AutoSize = true, MinimumSize = new Size(wide, 0), MaximumSize = new Size(wide, 0), Margin = new Padding(0, 0, 0, P(below)) };
-        Color grey = Color.FromArgb(48, 48, 48);
+            this.zip = zip;
+            this.game = game;
+            var kit = new DialogKit(480);
+            Text = "R.A.T.S. Keel";
+            TopMost = true;
+            StartPosition = owner == null ? FormStartPosition.CenterScreen : FormStartPosition.CenterParent;
+            ShowInTaskbar = owner == null;
+            kit.Style(this);
+            long size = new FileInfo(zip).Length;
+            FlowLayoutPanel column = kit.Column();
+            column.Controls.Add(kit.Line("Send logs to the R.A.T.S. developer?", DialogKit.Heading, DialogKit.HeadingColor, 8));
+            column.Controls.Add(kit.Line(
+                "These files go to the R.A.T.S. feedback board (hub.sewerlabs.dev), where only the mod's developer can open them. " +
+                "They are the logs of Keel, BepInEx and the game: which mods ran, errors, and your graphics card, Windows version and game settings as the game logs them. " +
+                "Your Windows user name is replaced with %USERNAME% in every path. Nothing else is sent, and nothing is sent unless you click Send.",
+                Font, DialogKit.TextColor, 10));
+            column.Controls.Add(FileList(kit, zip));
+            var look = new LinkLabel { Text = $"Show the zip ({Size(size)}) in Explorer", AutoSize = true, Margin = new Padding(0, 0, 0, kit.P(12)) };
+            look.LinkClicked += (s, e) => LogBundle.Reveal(zip);
+            column.Controls.Add(look);
+            column.Controls.Add(kit.Line("What happened? (optional)", Font, DialogKit.TextColor, 4));
+            note = new TextBox { Multiline = true, Width = kit.Wide, Height = kit.P(64), MaxLength = 1000, ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, kit.P(14)) };
+            column.Controls.Add(note);
+            status = kit.Line("", Font, DialogKit.TextColor, 12);
+            status.Visible = false;
+            column.Controls.Add(status);
 
-        column.Controls.Add(Text2("Send logs to the R.A.T.S. developer?", new Font("Segoe UI Semibold", 15f), Color.FromArgb(32, 32, 32), 8));
-        column.Controls.Add(Text2(
-            "These files go to the R.A.T.S. feedback board (hub.sewerlabs.dev), where only the mod's developer can open them. " +
-            "They are the logs of Keel, BepInEx and the game: which mods ran, errors, and your graphics card, Windows version and game settings as the game logs them. " +
-            "Your Windows user name is replaced with %USERNAME% in every path. Nothing else is sent, and nothing is sent unless you click Send.",
-            form.Font, grey, 10));
-        var list = new ListBox
+            send = kit.Button("Send");
+            cancel = kit.Button("Cancel", left: 8);
+            cancel.DialogResult = DialogResult.Cancel;
+            FlowLayoutPanel row = DialogKit.Row();
+            row.Controls.Add(cancel);
+            row.Controls.Add(send);
+            column.Controls.Add(row);
+            Controls.Add(column);
+            CancelButton = cancel;
+            if (size > MaxBytes)
+            {
+                send.Enabled = false;
+                Say($"The logs are {Size(size)}, more than the 5 MB the board takes. Please use Save logs and attach the file to a post on {Board}.", Bad);
+            }
+            send.Click += async (s, e) => await SendClicked();
+            Shown += (s, e) =>
+            {
+                Activate();
+                ActiveControl = note;
+            };
+        }
+
+        private static ListBox FileList(DialogKit kit, string zip)
         {
-            Width = wide, Height = P(110), IntegralHeight = false, Font = new Font("Consolas", 9f), Margin = new Padding(0, 0, 0, P(4)),
-            HorizontalScrollbar = true, SelectionMode = SelectionMode.None,
-        };
-        list.Items.AddRange(files);
-        column.Controls.Add(list);
-        var look = new LinkLabel { Text = $"Show the zip ({Size(size)}) in Explorer", AutoSize = true, Margin = new Padding(0, 0, 0, P(12)) };
-        look.LinkClicked += (s, e) => LogBundle.Reveal(zip);
-        column.Controls.Add(look);
-        column.Controls.Add(Text2("What happened? (optional)", form.Font, grey, 4));
-        var note = new TextBox { Multiline = true, Width = wide, Height = P(64), MaxLength = 1000, ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, P(14)) };
-        column.Controls.Add(note);
-        Label status = Text2("", form.Font, grey, 12);
-        status.Visible = false;
-        column.Controls.Add(status);
+            var list = new ListBox
+            {
+                Width = kit.Wide, Height = kit.P(110), IntegralHeight = false, Font = new Font("Consolas", 9f), Margin = new Padding(0, 0, 0, kit.P(4)),
+                HorizontalScrollbar = true, SelectionMode = SelectionMode.None,
+            };
+            using (ZipArchive archive = ZipFile.OpenRead(zip))
+                list.Items.AddRange(archive.Entries.Select(e => (object)$"{e.FullName}   ({Size(e.Length)})").ToArray());
+            return list;
+        }
 
-        var send = new Button { Text = "Send", AutoSize = true, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(0) };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true, Padding = new Padding(P(10), P(2), P(10), P(2)), Margin = new Padding(P(8), 0, 0, 0) };
-        var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.Right, Margin = new Padding(0) };
-        row.Controls.Add(cancel);
-        row.Controls.Add(send);
-        column.Controls.Add(row);
-        form.Controls.Add(column);
-        form.CancelButton = cancel;
-
-        if (size > MaxBytes)
+        private void Say(string text, Color color)
         {
-            send.Enabled = false;
-            status.Text = $"The logs are {Size(size)}, more than the 5 MB the board takes. Please use Save logs and attach the file to a post on {Board}.";
-            status.ForeColor = Color.FromArgb(170, 40, 30);
+            status.Text = text;
+            status.ForeColor = color;
             status.Visible = true;
         }
 
-        bool sent = false;
-        send.Click += async (s, e) =>
+        private async Task SendClicked()
         {
             if (sent)
             {
-                form.Close();
+                Close();
                 return;
             }
             send.Enabled = cancel.Enabled = note.Enabled = false;
-            status.Text = "Sending …";
-            status.ForeColor = grey;
-            status.Visible = true;
+            Say("Sending …", DialogKit.TextColor);
             string answer = await Task.Run(() => Upload(zip, note.Text.Trim(), game));
             if (answer.StartsWith("#", StringComparison.Ordinal))
             {
                 sent = true;
-                status.Text = $"Sent, thank you. Your report is number {answer}. If you post about it on {Board}, mention that number.";
-                status.ForeColor = Color.FromArgb(30, 120, 60);
+                Say($"Sent, thank you. Your report is number {answer}. If you post about it on {Board}, mention that number.", Good);
                 send.Text = "Close";
                 send.Enabled = true;
-                form.AcceptButton = send;
+                AcceptButton = send;
+                return;
             }
-            else
-            {
-                status.Text = answer + $"\n\nYou can still use Save logs and attach the file to a post on {Board}.";
-                status.ForeColor = Color.FromArgb(170, 40, 30);
-                send.Text = "Try again";
-                send.Enabled = cancel.Enabled = note.Enabled = true;
-            }
-        };
-        form.Shown += (s, e) =>
-        {
-            form.Activate();
-            form.ActiveControl = note;
-        };
-        form.ShowDialog(owner);
+            Say(answer + $"\n\nYou can still use Save logs and attach the file to a post on {Board}.", Bad);
+            send.Text = "Try again";
+            send.Enabled = cancel.Enabled = note.Enabled = true;
+        }
     }
 
-    /// <summary>"#id" when the board took the report, else a sentence for the player.</summary>
+    // What the board's mail says: a crash or a report sent from the report window, and the report's one-line summary.
     private static string kind = "report", summary = "";
 
+    /// <summary>"#id" when the board took the report, else a sentence for the player.</summary>
     private static string Upload(string zip, string note, string game)
     {
         try
         {
             try
             {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | (SecurityProtocolType)12288;     // 12288 = TLS 1.3
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | Tls13;
             }
             catch (NotSupportedException)
             {

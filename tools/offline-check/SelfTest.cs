@@ -305,20 +305,20 @@ internal static class SelfTest
 
     private static void CrashGuardChecks(string tmp)
     {
-        CrashGuard.Verdict V(params string[] lines) => CrashGuard.Read(lines);
+        CrashText.Journal V(params string[] lines) => CrashText.ReadJournal(lines);
         Check(!V().Unclean, "no journal: nothing to say");
         Check(!V("session\tx", "start\ta", "done\t", "quit\t").Unclean, "a normal quit is clean");
-        CrashGuard.Verdict during = V("session\tx", "load\ta", "start\tb");
+        CrashText.Journal during = V("session\tx", "load\ta", "start\tb");
         Check(during.Unclean && during.Step == "start" && during.Guid == "b", "ended while starting b: names b");
-        CrashGuard.Verdict after = V("session\tx", "start\tb", "done\t", "scene\tmission");
+        CrashText.Journal after = V("session\tx", "start\tb", "done\t", "scene\tmission");
         Check(after.Unclean && after.Guid == null && after.Scene == "mission", "ended after start-up: no mod from the journal, the scene is known");
 
-        Check(CrashGuard.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
+        Check(CrashText.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
         var a = new PluginEntry { Guid = "a", TypeName = "AlphaMod.Plugin", Order = 0 };
         var b = new PluginEntry { Guid = "b", TypeName = "BetaMod.Plugin", Order = 1 };
         var c = new PluginEntry { Guid = "c", TypeName = "SeaPower.Plugin", Order = 2 };
         var mods = new[] { a, b, c };
-        string block = CrashGuard.CrashBlock("before\r\nCrash!!!\r\n0x00 (Mono JIT code) BetaMod.Hooks:Prefix ()\r\n0x01 (Mono JIT code) AlphaMod.Other:Run ()");
+        string block = CrashText.CrashBlock("before\r\nCrash!!!\r\n0x00 (Mono JIT code) BetaMod.Hooks:Prefix ()\r\n0x01 (Mono JIT code) AlphaMod.Other:Run ()");
         Check(block != null && block.StartsWith("Crash!!!"), "the crash block starts at the crash");
         Check(CrashGuard.Blame(block, mods) == b, "the mod highest on the crash's stack is blamed");
         Check(CrashGuard.Blame("Crash!!!\n0x00 (Mono JIT code) SeaPower.GameMain:Update ()\nBetaMod.Hooks is mentioned but not a frame", mods) == null, "the game's frames and non-frame lines blame nobody");
@@ -332,8 +332,8 @@ internal static class SelfTest
         Directory.CreateDirectory(caughtDir);
         string betaDll = Path.Combine(caughtDir, "beta.dll");
         File.WriteAllText(betaDll, "x");
-        File.WriteAllLines(Path.Combine(caughtDir, "Keel-session.txt"), new[] { "session\tx", "start\tb", "done\t" });
-        File.WriteAllText(Path.Combine(caughtDir, CrashText.StackFile), stack);
+        File.WriteAllLines(Path.Combine(caughtDir, KeelNames.JournalFile), new[] { "session\tx", "start\tb", "done\t" });
+        File.WriteAllText(Path.Combine(caughtDir, KeelNames.StackFile), stack);
         var caughtNotes = new List<string>();
         var caught = new PluginEntry { Guid = "b", Name = "Beta", TypeName = "BetaMod.Plugin", Dll = betaDll };
         var caughtRun = new CrashGuard(caughtDir, null);
@@ -341,32 +341,32 @@ internal static class SelfTest
         caughtRun.Mark("quit", "");
         Check(caught.State == PluginState.NotStarted && caughtNotes.Count == 1 && caughtNotes[0].Contains("Beta"), "a crash after start-up with the mod on the catcher's stack: named and held out, no hunt needed");
         caughtRun.WriteModsFile(new[] { caught });
-        Check(File.ReadAllText(Path.Combine(caughtDir, CrashText.ModsFile)).Contains("b\tBeta\tBetaMod"), "the watcher's list has id, name and code root");
+        Check(File.ReadAllText(Path.Combine(caughtDir, KeelNames.ModsFile)).Contains("b\tBeta\tBetaMod"), "the watcher's list has id, name and code root");
 
         string keptDir = Path.Combine(tmp, "crashkept");
         Directory.CreateDirectory(keptDir);
-        File.WriteAllLines(Path.Combine(keptDir, "Keel-session.txt"), new[] { "session\tx", "start\tb", "done\t" });
-        File.WriteAllText(Path.Combine(keptDir, CrashText.StackFile), stack);
-        File.WriteAllText(Path.Combine(keptDir, CrashText.KeepFile), "b");
+        File.WriteAllLines(Path.Combine(keptDir, KeelNames.JournalFile), new[] { "session\tx", "start\tb", "done\t" });
+        File.WriteAllText(Path.Combine(keptDir, KeelNames.StackFile), stack);
+        File.WriteAllText(Path.Combine(keptDir, KeelNames.KeepFile), "b");
         var kept = new PluginEntry { Guid = "b", Name = "Beta", TypeName = "BetaMod.Plugin", Dll = betaDll };
         var keptRun = new CrashGuard(keptDir, null);
         keptRun.Apply(new[] { kept }, true, _ => { });
         keptRun.Mark("quit", "");
-        Check(kept.State == PluginState.Pending && !File.Exists(Path.Combine(keptDir, CrashText.KeepFile)), "the player unticked 'keep it off': the mod runs, and the answer counts once");
+        Check(kept.State == PluginState.Pending && !File.Exists(Path.Combine(keptDir, KeelNames.KeepFile)), "the player unticked 'keep it off': the mod runs, and the answer counts once");
 
         string dir = Path.Combine(tmp, "crashguard");
         Directory.CreateDirectory(dir);
         string dll = Path.Combine(dir, "beta.dll");
         File.WriteAllText(dll, "x");
         PluginEntry Mod() => new() { Guid = "b", Name = "Beta", TypeName = "BetaMod.Plugin", Dll = dll };
-        File.WriteAllLines(Path.Combine(dir, "Keel-session.txt"), new[] { "session\tx", "start\tb" });
+        File.WriteAllLines(Path.Combine(dir, KeelNames.JournalFile), new[] { "session\tx", "start\tb" });
         var notes = new List<string>();
         PluginEntry first = Mod();
         var run1 = new CrashGuard(dir, null);
         run1.Apply(new[] { first }, true, notes.Add);
         run1.Mark("quit", "");
         Check(first.State == PluginState.NotStarted && notes.Count == 1 && notes[0].Contains("Beta"), "the mod that took the game down is named and kept out at the next start");
-        Check(File.Exists(Path.Combine(dir, "Keel-crash.txt")), "Keel-crash.txt is written");
+        Check(File.Exists(Path.Combine(dir, KeelNames.CrashFile)), "Keel-crash.txt is written");
         PluginEntry second = Mod();
         var run2 = new CrashGuard(dir, null);
         run2.Apply(new[] { second }, true, notes.Add);
@@ -378,7 +378,7 @@ internal static class SelfTest
         var run3 = new CrashGuard(dir, null);
         run3.Apply(new[] { third }, true, notes.Add);
         run3.Mark("quit", "");
-        Check(third.State == PluginState.Pending && !File.Exists(Path.Combine(dir, "Keel-held.txt")), "an updated mod gets another chance");
+        Check(third.State == PluginState.Pending && !File.Exists(Path.Combine(dir, KeelNames.HeldFile)), "an updated mod gets another chance");
     }
 
     private static void EuromodChecks(string tmp)
@@ -537,13 +537,13 @@ internal static class SelfTest
         }
         var s = new SetupCore(game);
         Check(s.IsGameFolder && !s.HasBepInEx && !s.CanRestore, "a bare game: no BepInEx, nothing to restore");
-        s.Install(stub, zip);
+        s.Install(stub, zip, null);
         Check(s.HasBepInEx && s.HasStub && s.CanRestore, "install on a bare game adds BepInEx and the starter file");
         Check(!File.Exists(Path.Combine(game, "..", "escape.txt")), "a zip entry cannot write outside the game folder");
         Check(!File.Exists(Path.Combine(game, "changelog.txt")) && !File.Exists(Path.Combine(game, "BepInEx", "plugins", "other.dll")), "only the Doorstop files and BepInEx's core files leave the release zip");
         Directory.CreateDirectory(Path.Combine(game, "BepInEx", "cache"));
         File.WriteAllText(Path.Combine(game, "BepInEx", "cache", "made-by-the-game.txt"), "keep");
-        s.Install(stub, zip);
+        s.Install(stub, zip, null);
         Check(File.ReadAllLines(Path.Combine(game, "keel-setup.txt")).Distinct().Count() == File.ReadAllLines(Path.Combine(game, "keel-setup.txt")).Length, "installing twice records nothing twice");
         s.Restore();
         Check(!s.HasBepInEx && !s.HasStub && !s.CanRestore, "restore removes what setup added");
@@ -555,7 +555,7 @@ internal static class SelfTest
         File.WriteAllText(Path.Combine(game, "winhttp.dll"), "theirs");
         File.WriteAllText(Path.Combine(game, "BepInEx", "core", "BepInEx.dll"), "theirs");
         File.WriteAllText(Path.Combine(plugins, "AnchorChain.Preloader.dll"), "other");
-        s.Install(stub, zip);
+        s.Install(stub, zip, null);
         Check(!s.HasOtherPreloader && File.Exists(Path.Combine(plugins, "AnchorChain.Preloader.dll.keel-off")), "another loader's preloader is set aside, not deleted");
         string typeCache = Path.Combine(game, "BepInEx", "cache", "chainloader_typeloader.dat");
         File.WriteAllText(typeCache, "the takeover's entry");
@@ -626,8 +626,8 @@ internal static class SelfTest
 
         string ini = Path.Combine(tmp, "packoff.ini");
         File.WriteAllText(ini, "Mod1Directory=77,True,77\r\nMod2Directory=88,True,88\r\n");
-        File.WriteAllText(Path.Combine(tmp, CrashText.PackOffFile), "77");
-        Check(ModList.ApplyPackOff(tmp, ini) == "77" && ModList.ListOn(File.ReadAllText(ini)).SequenceEqual(new[] { "88" }) && !File.Exists(Path.Combine(tmp, CrashText.PackOffFile)), "the crash window's choice switches the pack off in the game's list, once");
+        File.WriteAllText(Path.Combine(tmp, KeelNames.PackOffFile), "77");
+        Check(ModList.ApplyPackOff(tmp, ini) == "77" && ModList.ListOn(File.ReadAllText(ini)).SequenceEqual(new[] { "88" }) && !File.Exists(Path.Combine(tmp, KeelNames.PackOffFile)), "the crash window's choice switches the pack off in the game's list, once");
         string edited = ModList.SetFolders("Mod1Directory=A,True,0\r\nMod2Directory=B,True,11\r\nOther=1\r\n", new[] { "B" }, new[] { "B" });
         Check(edited.Contains("Mod2Directory=B,False,11") && edited.Contains("Mod1Directory=A,True,0") && edited.Contains("Other=1\r\n"), "one folder off, its id and every other line kept");
     }

@@ -42,8 +42,8 @@ internal static class ReportFacts
     /// <summary>Reads both from a BepInEx folder; empty strings when the files are not there.</summary>
     public static (string game, string summary) Read(string bepInEx, string given)
     {
-        string report = TryRead(Path.Combine(bepInEx ?? "", "Keel-report.txt"));
-        string log = TryRead(Path.Combine(bepInEx ?? "", "Keel-log.txt"), 200_000);
+        string report = TryRead(Path.Combine(bepInEx ?? "", KeelNames.ReportFile));
+        string log = TryRead(Path.Combine(bepInEx ?? "", KeelNames.LogFile), 200_000);
         return (Game(given, report, log), Summary(report));
     }
 

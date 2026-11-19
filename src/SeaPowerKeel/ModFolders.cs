@@ -29,7 +29,7 @@ internal sealed class ModFolder
 /// </summary>
 internal static class ModFolders
 {
-    public const ulong SteamAppId = 1286220;
+    public const ulong SteamAppId = KeelNames.SteamAppId;
 
     // StreamingAssets folders that are the game's own, never mods (the game skips the same names).
     private static readonly string[] GameFolders = { "original", "user", "EntityScenes" };

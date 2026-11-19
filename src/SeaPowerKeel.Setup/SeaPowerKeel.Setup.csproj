@@ -16,6 +16,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\SeaPowerKeel\KeelNames.cs" Link="KeelNames.cs" />
+    <Compile Include="..\SeaPowerKeel.Watcher\DialogKit.cs" Link="DialogKit.cs" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />

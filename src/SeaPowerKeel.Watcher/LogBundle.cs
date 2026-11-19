@@ -20,7 +20,7 @@ internal static class LogBundle
     {
         folder ??= Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         string zip = Path.Combine(folder, $"Sea Power logs {DateTime.Now:yyyy-MM-dd HH-mm-ss}.zip");
-        string gameData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow", "Triassic Games", "Sea Power");
+        string gameData = KeelNames.PlayerDataDir;
         string gameLogs = Path.Combine(Path.GetDirectoryName(bepInEx.TrimEnd('\\', '/')) ?? "", "Sea Power_Data", "Logs");
 
         Regex user = scrub ? UserName() : null;
@@ -28,14 +28,14 @@ internal static class LogBundle
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
         {
             DateTime? began = SessionBegan(bepInEx);
-            foreach (string pattern in new[] { "Keel-log*.txt", "Keel-report.txt", "Keel-crash*.txt", "Keel-session.txt", "Keel-mods.txt", "Keel-held.txt", "Keel-watcher.txt", "LogOutput.log" })
+            foreach (string pattern in KeelNames.BundleFiles)
             {
                 // A report or crash text written before this session began belongs to an older one: in the bundle it would read
                 // as this session's (issue keel-bundle-stale-files). The stack files stay, they carry their own times.
                 IEnumerable<string> files = Find(bepInEx, pattern);
-                if (began != null && (pattern == "Keel-report.txt" || pattern == "Keel-crash*.txt"))
-                    files = files.Where(f => !f.EndsWith("Keel-crash.txt", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("Keel-report.txt", StringComparison.OrdinalIgnoreCase)
-                                             || File.GetLastWriteTime(f) >= began.Value.AddSeconds(-5));
+                if (began != null && (pattern == KeelNames.ReportFile || pattern == "Keel-crash*.txt"))
+                    files = files.Where(f => !f.EndsWith(KeelNames.CrashFile, StringComparison.OrdinalIgnoreCase) && !f.EndsWith(KeelNames.ReportFile, StringComparison.OrdinalIgnoreCase)
+                                             || File.GetLastWriteTime(f) >= began.Value.AddSeconds(-KeelNames.TimeSlackSeconds));
                 AddAll(archive, files, "BepInEx", user);
             }
             AddAll(archive, Find(gameData, "Player*.log"), "Game", user);
@@ -48,18 +48,10 @@ internal static class LogBundle
     /// <summary>When the session in Keel-session.txt began (its "session" line), or null.</summary>
     private static DateTime? SessionBegan(string bepInEx)
     {
-        try
-        {
-            string line = CrashText.ReadAll(Path.Combine(bepInEx, CrashText.JournalFile))?.Replace("\r\n", "\n").Split('\n')
-                .FirstOrDefault(l => l.StartsWith("session\t", StringComparison.Ordinal));
-            if (line != null && DateTime.TryParseExact(line.Substring(8).Trim(), "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture,
-                                                       System.Globalization.DateTimeStyles.AssumeLocal, out DateTime t))
-                return t;
-        }
-        catch (Exception)
-        {
-            // then everything goes in, as before
-        }
+        string began = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(bepInEx, KeelNames.JournalFile))).Began;
+        if (began != null && DateTime.TryParseExact(began.Trim(), "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture,
+                                                    System.Globalization.DateTimeStyles.AssumeLocal, out DateTime t))
+            return t;
         return null;
     }
 

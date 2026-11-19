@@ -111,7 +111,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         StartTimedLog();
         ParseHotkey(hotkey.Value);
         UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
-        reportPath = Path.Combine(Paths.BepInExRootPath, "Keel-report.txt");
+        reportPath = Path.Combine(Paths.BepInExRootPath, KeelNames.ReportFile);
         Loading.LoadingWindow.Start(config, log);      // first, so it opens before the slow steps that follow (see docs/loading-window.md)
         string hello = $"{Keel.Name} {Keel.Version} (stub {StubVersion}) on the {GameState.BuildName}, from {OwnPath}";
         log.LogInfo(hello);
@@ -169,7 +169,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             log.LogWarning($"No crash journal this session: {ex.Message}");
             return;
         }
-        string catcher = CrashCatcher.Install(Path.Combine(Paths.BepInExRootPath, CrashText.StackFile));
+        string catcher = CrashCatcher.Install(Path.Combine(Paths.BepInExRootPath, KeelNames.StackFile));
         if (catcher != null)
             log.LogWarning($"Crashes will not be caught this session: {catcher}");
         string trail = FileTrail.Install();
@@ -663,7 +663,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         {
             // keep now: an older record then never counts
         }
-        takeoverRecord = r != null && r.WrittenUtc >= started.AddSeconds(-5) ? r : null;
+        takeoverRecord = r != null && r.WrittenUtc >= started.AddSeconds(-KeelNames.TimeSlackSeconds) ? r : null;
         if (takeoverRecord != null)
         {
             foreach (Takeover.Blocked b in takeoverRecord.Kept)
@@ -724,7 +724,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         runner.AnchorChainDll = acDll;
         // A preloader the takeover kept from starting is still a file in BepInEx\plugins, where BepInEx's own resolver would find
         // it for Anchor Chain's library (Alpine's is named the same and is not Anchor Chain's): Keel's stand-in is loaded first.
-        if (takeoverRecord?.Kept.Any(b => Path.GetFileName(b.File).Equals("AnchorChain.Preloader.dll", StringComparison.OrdinalIgnoreCase)) == true)
+        if (takeoverRecord?.Kept.Any(b => Path.GetFileName(b.File).Equals(KeelNames.AnchorChainPreloaderFile, StringComparison.OrdinalIgnoreCase)) == true)
             runner.UsePreloaderStandIn();
         string acNote = $"Keel starts the Anchor Chain mods itself (types from {acDll}).";
         if (!notes.Contains(acNote))
