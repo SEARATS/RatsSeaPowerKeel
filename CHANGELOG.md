@@ -9,6 +9,25 @@
   - Both builds lacking parts, or no partner in the folder: still a warning, as before
 - **The game-version check runs over all DLLs first, then decides** (needed for the partner check); 6 new self-test checks
 - **README: one Linux (Steam Proton) section** with every step in order (BepInEx, starter file, launch option, Anchor Chain); a player asked, the steps were spread over two places
+- **The loading window counts mods with errors again**
+  - It read Keel's log lines back and waited for words Keel no longer wrote (`RUNNING WITH ERRORS`, `LEFT TO ANCHOR CHAIN`)
+  - A mod that started with errors was not counted at all: neither counted as running nor as a problem, so the summary card could say "No problems" while a mod threw errors
+  - Now Keel hands each result to the window directly; the state words are defined once, for the report, the window and the crash window
+- **Anchor Chain 1.2.0's `FindFile` no longer reported as broken**
+  - Keel ships Anchor Chain 1.1.0, whose `FindFile` searches a folder list Keel fills; 1.2.0 (a subscribed copy) reads the game's list itself
+  - Keel took the newer shape for a fault and said mods using `FindFile` would find nothing; now it sets up both shapes
+  - The self-test now primes the real shipped library, so a library of another shape fails there
+- **The `NOT STARTED` log line uses " - " like every other result line** (it had a typographic dash)
+- **The crash window uses the same "closed normally" test as Keel at the next start** (it now also looks for a crash in Player.log)
+- **Changed (internal):** one load pipeline for start-up and the Mods menu reload (a failed load during a reload is now logged like at start-up)
+- **Changed (internal):** the game's `_info.ini` version rule as data in `InfoVersion.cs`, a file without Keel dependencies (for Flotilla)
+- **Changed (internal):** the offline check judges DLLs with the same verdict and wording as the game
+- **Changed (internal):** Keel's file names and ids in one file (`KeelNames.cs`) for the loader, stub, patcher, KeelSetup and KeelWatcher
+- **Changed (internal):** keyboard and mouse read through one device reader; the report's buttons register their spot once
+- **Changed (internal):** the summary card's layout shared by the loading window and the game-drawn card
+- **Changed (internal):** one dialog kit for KeelSetup, the crash window and the send window
+- **Changed (internal):** long functions split (start-up, preflight lookups, crash guard, menu cards, overlay, report window, patch guard, watcher); dead code and unused fades removed
+- **Changed (internal):** self-test topics apart; a hand-over check that always passed now checks what it says
 
 ## 0.6.1 - 2026-11-19 - Hotfix: Restore brings the other loader back; KeelSetup downloads BepInEx
 

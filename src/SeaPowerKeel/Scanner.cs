@@ -23,14 +23,10 @@ internal static class Scanner
             return "Keel itself.";
         if (name.Equals("AnchorChain.dll", StringComparison.OrdinalIgnoreCase))
             return "Anchor Chain's own library: Keel uses it as a library for Anchor Chain mods and never as a plugin.";
-        if (name.Equals("AnchorChain.Preloader.dll", StringComparison.OrdinalIgnoreCase))
+        if (name.Equals(KeelNames.AnchorChainPreloaderFile, StringComparison.OrdinalIgnoreCase))
             return "Anchor Chain's preloader (the BepInEx stub that starts Anchor Chain): not a mod.";
         return null;
     }
-
-    /// <summary>Scans without a list of skipped DLLs (the offline tools).</summary>
-    public static List<PluginEntry> Scan(IList<ModFolder> folders, Action<string> warn, params string[] searchDirs) =>
-        Scan(folders, warn, null, searchDirs);
 
     /// <param name="searchDirs">Where Cecil looks for assemblies a DLL's attributes refer to (an enum argument such as
     /// BepInDependency's flags needs BepInEx.dll): the game's Managed folder and BepInEx\core. The mod folders are added.</param>

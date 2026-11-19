@@ -85,24 +85,10 @@ internal static class ModSetups
         if (lines.Count > 0 && lines[lines.Count - 1].Length == 0)
             lines.RemoveAt(lines.Count - 1);
         string entry = $"{id}={(on ? "true" : "false")}";
-        int section = -1, end = lines.Count;
-        for (int i = 0; i < lines.Count; i++)
-        {
-            string l = lines[i].Trim();
-            if (l.StartsWith("["))
-            {
-                if (section >= 0) { end = i; break; }
-                if (l.Equals("[Submods]", StringComparison.OrdinalIgnoreCase)) section = i;
-                continue;
-            }
-            int eq = l.IndexOf('=');
-            if (section >= 0 && eq > 0 && l.Substring(0, eq).Trim().Equals(id, StringComparison.OrdinalIgnoreCase))
-            {
-                lines[i] = entry;
-                return string.Join("\n", lines) + "\n";
-            }
-        }
-        if (section < 0)
+        (int section, int end, int at) = FindSubmod(lines, id);
+        if (at >= 0)
+            lines[at] = entry;
+        else if (section < 0)
         {
             if (lines.Count > 0 && lines[lines.Count - 1].Trim().Length > 0)
                 lines.Add("");
@@ -116,6 +102,28 @@ internal static class ModSetups
             lines.Insert(end, entry);
         }
         return string.Join("\n", lines) + "\n";
+    }
+
+    // Where [Submods] starts (-1: none), where it ends, and the line of the switch in it (-1: none).
+    private static (int section, int end, int at) FindSubmod(List<string> lines, string id)
+    {
+        int section = -1;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            string l = lines[i].Trim();
+            if (l.StartsWith("["))
+            {
+                if (section >= 0)
+                    return (section, i, -1);
+                if (l.Equals("[Submods]", StringComparison.OrdinalIgnoreCase))
+                    section = i;
+                continue;
+            }
+            int eq = l.IndexOf('=');
+            if (section >= 0 && eq > 0 && l.Substring(0, eq).Trim().Equals(id, StringComparison.OrdinalIgnoreCase))
+                return (section, lines.Count, i);
+        }
+        return (section, lines.Count, -1);
     }
 
     /// <param name="enabled">The mod folders switched on.</param>

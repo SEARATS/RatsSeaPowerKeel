@@ -124,15 +124,7 @@ internal sealed class IniApi
         ParameterInfo[] ps = m.GetParameters();
         if (args.Length < ps.Length)
             args = args.Concat(ps.Skip(args.Length).Select(p => p.DefaultValue)).ToArray();
-        try
-        {
-            return m.Invoke(target, args);
-        }
-        catch (TargetInvocationException t) when (t.InnerException != null)
-        {
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(t.InnerException).Throw();
-            throw;
-        }
+        return Reflected.Invoke(m, target, args);
     }
 }
 

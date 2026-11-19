@@ -29,7 +29,7 @@ internal sealed class KeelLog : ILogListener
 
     public KeelLog(int keepSessions)
     {
-        Path = System.IO.Path.Combine(Paths.BepInExRootPath, "Keel-log.txt");
+        Path = System.IO.Path.Combine(Paths.BepInExRootPath, KeelNames.LogFile);
         try
         {
             gameStart = Process.GetCurrentProcess().StartTime;
@@ -69,45 +69,61 @@ internal sealed class KeelLog : ILogListener
             return;
         DateTime now = DateTime.Now;
         string text = e.Data?.ToString() ?? "";
-        // A mod that logs the same line every frame would fill the disk: repeats are counted, not written.
-        string key = (e.Source?.SourceName ?? "?") + "|" + e.Level + "|" + text;
+        string source = e.Source?.SourceName ?? "?";
+        if (Repeated(source + "|" + e.Level + "|" + text))
+            return;
+        var line = new StringBuilder(text.Length + 64)
+            .Append(now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)).Append(' ')
+            .Append('+').Append((now - gameStart).TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture)).Append("s ")
+            .Append('[').Append(Level(e.Level)).Append(" : ").Append(source).Append("] ");
+        string owner = (e.Level & (LogLevel.Error | LogLevel.Fatal)) != 0 && source != Keel.Name ? Owner(text) : null;
+        if (owner != null)
+            line.Append("[from mod: ").Append(owner).Append("] ");
+        // Multi-line messages (stack traces) keep their lines, indented under the time stamp.
+        line.Append(text.Replace("\r\n", "\n").TrimEnd('\n').Replace("\n", Environment.NewLine + "      "));
+        Write(line.ToString(), (e.Level & (LogLevel.Warning | LogLevel.Error | LogLevel.Fatal)) != 0);
+    }
+
+    // A mod that logs the same line every frame would fill the disk: repeats are counted, not written.
+    private bool Repeated(string key)
+    {
         lock (gate)
         {
             if (key == lastKey)
             {
                 repeats++;
-                return;
+                return true;
             }
             WriteRepeats();
             lastKey = key;
+            return false;
         }
-        string owner = null;
-        if ((e.Level & (LogLevel.Error | LogLevel.Fatal)) != 0 && OwnerOf != null && e.Source?.SourceName != Keel.Name)
+    }
+
+    // The mod an error came from, when its stack says so.
+    private string Owner(string text)
+    {
+        if (OwnerOf == null)
+            return null;
+        try
         {
-            try
-            {
-                owner = OwnerOf(text);
-            }
-            catch (Exception)
-            {
-                // attribution is a nicety; never let it break logging
-            }
+            return OwnerOf(text);
         }
-        var line = new StringBuilder(text.Length + 64)
-            .Append(now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)).Append(' ')
-            .Append('+').Append((now - gameStart).TotalSeconds.ToString("0.000", CultureInfo.InvariantCulture)).Append("s ")
-            .Append('[').Append(Level(e.Level)).Append(" : ").Append(e.Source?.SourceName ?? "?").Append("] ");
-        if (owner != null)
-            line.Append("[from mod: ").Append(owner).Append("] ");
-        // Multi-line messages (stack traces) keep their lines, indented under the time stamp.
-        line.Append(text.Replace("\r\n", "\n").TrimEnd('\n').Replace("\n", Environment.NewLine + "      "));
+        catch (Exception)
+        {
+            return null;        // attribution is a nicety; never let it break logging
+        }
+    }
+
+    // Warnings and worse at once (the game may die right after), the rest at most every half second.
+    private void Write(string line, bool now)
+    {
         lock (gate)
         {
             try
             {
-                writer.WriteLine(line.ToString());
-                // Warnings and worse at once (the game may die right after), the rest at most every half second.
-                if ((e.Level & (LogLevel.Warning | LogLevel.Error | LogLevel.Fatal)) != 0 || (DateTime.UtcNow - lastFlush).TotalMilliseconds > 500)
+                writer.WriteLine(line);
+                if (now || (DateTime.UtcNow - lastFlush).TotalMilliseconds > 500)
                 {
                     writer.Flush();
                     lastFlush = DateTime.UtcNow;

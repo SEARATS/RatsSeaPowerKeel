@@ -9,17 +9,6 @@ internal enum PluginKind
     AnchorChain,    // an Anchor Chain mod ([ACPlugin] on an IAnchorChainMod)
 }
 
-internal enum PluginState
-{
-    Pending,
-    Running,            // started, no error so far
-    RunningWithErrors,  // started, but threw while starting or later
-    Failed,             // threw while starting
-    NotStarted,         // a rule kept it from starting: missing dependency, conflict, wrong game version ...
-    Skipped,            // on purpose and harmless: duplicate copy, other game version's build, switched off
-    LeftToAnchorChain,  // an Anchor Chain mod while Anchor Chain itself is running
-}
-
 internal sealed class Dependency
 {
     public string Guid;
@@ -51,10 +40,10 @@ internal sealed class PluginEntry
     public bool UsesAcConfig;
     public bool AcConfigRequired = true;               // [ACConfig(required)]: a config file that cannot be made keeps the mod from starting
     public bool Exported = true;                        // Anchor Chain only sees public (exported) plugin classes
-    public bool StartEarly;
+    public bool StartEarly;                             // asked to start before the load screen ends (EarlyStart)
     /// <summary>GUIDs of the same DLL's backup entries (a BepInEx entry next to the Anchor Chain one): a dependency on one of them
     /// counts as met by this entry. The backup entry itself is not listed (rgreat 2026-11-12: a second entry is by design).</summary>
-    public readonly List<string> AlsoKnownAs = new();                             // asked to start before the load screen ends (EarlyStart)
+    public readonly List<string> AlsoKnownAs = new();
 
     public PluginState State = PluginState.Pending;
     public string Reason = "";

@@ -7,38 +7,24 @@ namespace SeaPowerKeel;
 
 internal static class Report
 {
-    public static string Tag(PluginState s) => s switch
-    {
-        PluginState.Running => "RUNNING",
-        PluginState.RunningWithErrors => "ERRORS",
-        PluginState.Failed => "FAILED",
-        PluginState.NotStarted => "NOT STARTED",
-        PluginState.Skipped => "SKIPPED",
-        PluginState.LeftToAnchorChain => "OTHER LOADER",
-        _ => "WAITING",
-    };
-
-    public static bool IsProblem(PluginEntry p) =>
-        p.State is PluginState.Failed or PluginState.NotStarted or PluginState.RunningWithErrors;
+    public static bool IsProblem(PluginEntry p) => ReportFormat.IsProblem(p.State);
 
     public static int CountOrderWarnings(IEnumerable<PluginEntry> all) => all.Count(p => p.LoadOrderWarning != null);
 
-    public static string Summary(IReadOnlyCollection<PluginEntry> all)
-    {
-        int running = all.Count(p => p.State is PluginState.Running or PluginState.RunningWithErrors);
-        int errors = all.Count(p => p.State == PluginState.RunningWithErrors);
-        int failed = all.Count(p => p.State == PluginState.Failed);
-        int notStarted = all.Count(p => p.State == PluginState.NotStarted);
-        int ac = all.Count(p => p.State == PluginState.LeftToAnchorChain);
-        int orderWarnings = CountOrderWarnings(all);
-        var parts = new List<string> { $"{running} running" };
-        if (errors > 0) parts.Add($"{errors} with errors");
-        if (failed > 0) parts.Add($"{failed} failed");
-        if (notStarted > 0) parts.Add($"{notStarted} not started");
-        if (ac > 0) parts.Add($"{ac} left to another loader");
-        if (orderWarnings > 0) parts.Add($"{orderWarnings} with load order warnings");
-        return string.Join(", ", parts);
-    }
+    public static List<(string text, Tone tone)> SummaryParts(IReadOnlyCollection<PluginEntry> all) => ReportFormat.Summary(
+        all.Count(p => ReportFormat.IsRunning(p.State)),
+        all.Count(p => p.State == PluginState.RunningWithErrors),
+        all.Count(p => p.State == PluginState.Failed),
+        all.Count(p => p.State == PluginState.NotStarted),
+        all.Count(p => p.State == PluginState.LeftToAnchorChain),
+        CountOrderWarnings(all));
+
+    public static string Summary(IReadOnlyCollection<PluginEntry> all) =>
+        string.Join(ReportFormat.SummarySeparator, SummaryParts(all).Select(part => part.text));
+
+    /// <summary>"STATE: Name 1.0 (folder) - reason", the line Keel logs for each mod's result.</summary>
+    public static string ResultLine(PluginEntry p) =>
+        $"{ReportFormat.Tag(p.State)}: {p.Display} {p.Version} ({p.Folder?.Label}){(p.Reason.Length > 0 ? " - " + p.Reason : "")}";
 
     public static string Text(IReadOnlyCollection<PluginEntry> all, string header, IEnumerable<string> notes, IReadOnlyCollection<SkippedDll> skipped = null)
     {
@@ -50,8 +36,8 @@ internal static class Report
         sb.AppendLine();
         foreach (PluginEntry p in Sorted(all))
         {
-            sb.AppendLine($"[{Tag(p.State)}] {p.Display} {p.Version} ({p.Guid}) – {p.Folder?.Label}, {System.IO.Path.GetFileName(p.Dll)}, {p.Kind}" +
-                          (p.State is PluginState.Running or PluginState.RunningWithErrors ? $", started in {p.StartMs:0} ms" : ""));
+            sb.AppendLine($"{ReportFormat.ModLine(p.State, p.Display, p.Version.ToString(), p.Guid)} – {p.Folder?.Label}, {System.IO.Path.GetFileName(p.Dll)}, {p.Kind}" +
+                          (ReportFormat.IsRunning(p.State) ? $", started in {p.StartMs:0} ms" : ""));
             if (!string.IsNullOrEmpty(p.Reason))
                 sb.AppendLine("    " + p.Reason);
             foreach (string w in p.Warnings)
@@ -71,7 +57,8 @@ internal static class Report
             sb.AppendLine($"DLLs left out on purpose ({skipped.Count}):");
             foreach (SkippedDll d in skipped)
                 sb.AppendLine($"[SKIPPED DLL] {System.IO.Path.GetFileName(d.Path)} – {d.Folder?.Label}, {d.Path}{Environment.NewLine}    {d.Reason}");
-        }        sb.AppendLine();
+        }
+        sb.AppendLine();
         sb.AppendLine("R.A.T.S. Keel - Kanalratte");
         return sb.ToString();
     }

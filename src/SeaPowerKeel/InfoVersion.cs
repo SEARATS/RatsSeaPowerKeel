@@ -9,10 +9,32 @@ namespace SeaPowerKeel;
 /// <summary>
 /// What a mod's <c>_info.ini</c> <c>[Compatibility]</c> section says about the game version, judged by the game's own rules
 /// (<c>SeaPower.ModCompatibility.Matches</c>). A backup for what the DLL check cannot see, such as a transpiler that no
-/// longer matches its target: the author's statement is the only sign of those. A statement Keel cannot read is no verdict.
+/// longer matches its target: the author's statement is the only sign of those. A statement Keel cannot read is no verdict
+/// (the game counts it as a mismatch).
+/// This file stands alone (no Keel, Unity or BepInEx types) so other tools can compile the same rule.
 /// </summary>
 internal static class InfoVersion
 {
+    public const string Section = "Compatibility";
+    public const string ExactKey = "ExactVersion", ApproximateKey = "ApproximateVersion", ExcludeKey = "ExcludeVersions";
+
+    /// <summary>One side of the range: the strict key wins over its "or equal" twin, as in the game.</summary>
+    public sealed class Bound
+    {
+        public string StrictKey, OrEqualKey;
+        public string StrictSign, OrEqualSign;          // ">", ">=" ...: how the game's dialog list writes them
+        public string StrictWords, OrEqualWords;        // "newer than {0}", "{0} or newer" ...: the report's words
+        public int Side;                                // +1: the game must be newer, -1: older
+    }
+
+    public static readonly Bound[] Bounds =
+    {
+        new() { StrictKey = "GreaterThanVersion", OrEqualKey = "GreaterThanEqualToVersion", StrictSign = ">", OrEqualSign = ">=",
+                StrictWords = "newer than {0}", OrEqualWords = "{0} or newer", Side = 1 },
+        new() { StrictKey = "LessThanVersion", OrEqualKey = "LessThanEqualToVersion", StrictSign = "<", OrEqualSign = "<=",
+                StrictWords = "older than {0}", OrEqualWords = "{0} or older", Side = -1 },
+    };
+
     /// <summary>The sentence for the report when the mod's folder says it does not fit this game; otherwise null.</summary>
     public static string MismatchInFolder(string folder, string appVersion)
     {
@@ -32,58 +54,39 @@ internal static class InfoVersion
         int[] app = Parse(appVersion);
         if (app == null)
             return null;
-        Dictionary<string, string> c = Section(iniLines);
-        string Get(string key) => c.TryGetValue(key, out string v) ? v : "";
-        string Against(string statement) => $"Its _info.ini says {statement}, and this game is {appVersion}. Keel can't see every incompatibility in a DLL, so expect errors or parts that do nothing.";
-
-        string exact = Get("ExactVersion");
-        if (exact != "")
-        {
-            int[] v = Parse(exact);
-            return v == null || Compare(app, v) == 0 ? null : Against($"exactly {exact}");
-        }
-        string approx = Get("ApproximateVersion");
-        if (approx != "")
-        {
-            int[] v = Parse(approx);
-            return v == null || (app[0] == v[0] && app[1] == v[1] && app[2] >= v[2]) ? null : Against($"about {approx}");
-        }
-        foreach (string excluded in Get("ExcludeVersions").Split(',').Select(s => s.Trim()))
-        {
-            int[] v = Parse(excluded);
-            if (v != null && Compare(app, v) == 0)
-                return Against($"not {excluded}");
-        }
-        string lower = Get("GreaterThanVersion"), lowerEq = Get("GreaterThanEqualToVersion");
-        if (lower != "")
-        {
-            int[] v = Parse(lower);
-            if (v != null && Compare(app, v) <= 0)
-                return Against($"newer than {lower}");
-        }
-        else if (lowerEq != "")
-        {
-            int[] v = Parse(lowerEq);
-            if (v != null && Compare(app, v) < 0)
-                return Against($"{lowerEq} or newer");
-        }
-        string upper = Get("LessThanVersion"), upperEq = Get("LessThanEqualToVersion");
-        if (upper != "")
-        {
-            int[] v = Parse(upper);
-            if (v != null && Compare(app, v) >= 0)
-                return Against($"older than {upper}");
-        }
-        else if (upperEq != "")
-        {
-            int[] v = Parse(upperEq);
-            if (v != null && Compare(app, v) > 0)
-                return Against($"{upperEq} or older");
-        }
-        return null;
+        string statement = Statement(Read(iniLines), app);
+        return statement == null ? null
+            : $"Its _info.ini says {statement}, and this game is {appVersion}. Keel can't see every incompatibility in a DLL, so expect errors or parts that do nothing.";
     }
 
-    private static Dictionary<string, string> Section(IEnumerable<string> lines)
+    // What the section says that this game is not, in the game's order: exact, approximate, excluded, then the two bounds.
+    private static string Statement(Dictionary<string, string> c, int[] app)
+    {
+        string Get(string key) => c.TryGetValue(key, out string v) ? v : "";
+        string exact = Get(ExactKey);
+        if (exact != "")
+            return Parse(exact) is int[] e && Compare(app, e) != 0 ? $"exactly {exact}" : null;
+        string approx = Get(ApproximateKey);
+        if (approx != "")
+            return Parse(approx) is int[] a && !(app[0] == a[0] && app[1] == a[1] && app[2] >= a[2]) ? $"about {approx}" : null;
+        string excluded = Get(ExcludeKey).Split(',').Select(s => s.Trim()).FirstOrDefault(x => Parse(x) is int[] v && Compare(app, v) == 0);
+        if (excluded != null)
+            return $"not {excluded}";
+        return Bounds.Select(b => Outside(b, Get(b.StrictKey), Get(b.OrEqualKey), app)).FirstOrDefault(s => s != null);
+    }
+
+    private static string Outside(Bound b, string strict, string orEqual, int[] app)
+    {
+        bool isStrict = strict != "";
+        string value = isStrict ? strict : orEqual;
+        if (value == "" || Parse(value) is not int[] v)
+            return null;
+        int side = Compare(app, v) * b.Side;            // > 0: on the right side of the bound
+        bool fits = isStrict ? side > 0 : side >= 0;
+        return fits ? null : string.Format(isStrict ? b.StrictWords : b.OrEqualWords, value);
+    }
+
+    private static Dictionary<string, string> Read(IEnumerable<string> lines)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         bool inside = false;
@@ -94,7 +97,7 @@ internal static class InfoVersion
                 continue;
             if (line[0] == '[')
             {
-                inside = line.Equals("[Compatibility]", StringComparison.OrdinalIgnoreCase);
+                inside = line.Equals("[" + Section + "]", StringComparison.OrdinalIgnoreCase);
                 continue;
             }
             int eq = line.IndexOf('=');

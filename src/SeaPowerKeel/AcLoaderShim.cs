@@ -16,8 +16,12 @@ namespace SeaPowerKeel;
 /// - The class implements <c>AnchorChain.Preloader.IPluginLoader</c>, which lives in <c>AnchorChain.Preloader.dll</c>, a
 /// BepInEx plugin. Without that DLL (Keel's setup removes it) the class cannot be loaded at all: a <c>TypeLoadException</c> at
 /// the first call. <see cref="BuildPreloaderStub"/> makes an assembly of that name with just that interface.
-/// - <c>FindFile</c> searches a private static list of mod folders that only Anchor Chain's own loader fills.
-/// <see cref="Prime"/> fills it (and <c>_configPath</c>) the way Anchor Chain's <c>Setup</c> does.
+/// - <c>FindFile</c> searches the mod folders and Anchor Chain's config folder. <see cref="Prime"/> sets them up the way
+/// Anchor Chain's own loader does, for both shapes of the class:
+///   - 1.1.0 (lib\AnchorChain.keel.bin, the copy Keel ships): a private static <c>_allDirectories</c> list that only its
+///     <c>Setup</c> fills, plus <c>_configPath</c>;
+///   - 1.2.0 (the source under anchor-chain\, and a subscribed copy of that version): no list, <c>FindFile</c> reads the game's
+///     own mod folders and then <c>_configPath</c>, so only <c>_configPath</c> needs setting.
 /// </summary>
 internal static class AcLoaderShim
 {
@@ -40,32 +44,40 @@ internal static class AcLoaderShim
         return Assembly.Load(stream.ToArray());
     }
 
-    private static string Norm(string path) => Path.GetFullPath(path).TrimEnd('\\', '/');
+    private const BindingFlags Statics = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
     /// <summary>
-    /// Fills <c>AnchorChainLoader._allDirectories</c> (the folders <c>FindFile</c> searches, top level only) and <c>_configPath</c>.
-    /// Returns null when done, else why it could not (the mods that call <c>FindFile</c> then find nothing).
+    /// Sets up what <c>AnchorChainLoader.FindFile</c> searches (see the class comment for the two shapes). Returns null when done,
+    /// else why it could not (the mods that call <c>FindFile</c> then find nothing).
     /// </summary>
     public static string Prime(Assembly anchorChain, IEnumerable<string> folders, string configDir)
     {
-        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
         Type loader = anchorChain.GetType(LoaderType, throwOnError: false);
         if (loader == null)
             return $"{LoaderType} is not in {anchorChain.GetName().Name} {anchorChain.GetName().Version}";
-        if (loader.GetField("_allDirectories", all)?.GetValue(null) is not HashSet<DirectoryInfo> set)
-            return "AnchorChainLoader has no _allDirectories list (this Anchor Chain version differs)";
-        void Add(string folder)
+        if (loader.GetMethod("FindFile", Statics, null, new[] { typeof(string) }, null) == null)
+            return $"AnchorChainLoader has no FindFile(string) in {anchorChain.GetName().Name} {anchorChain.GetName().Version}";
+        FieldInfo config = loader.GetField("_configPath", Statics);
+        if (config == null || config.FieldType != typeof(string))
+            return $"AnchorChainLoader has no _configPath in {anchorChain.GetName().Name} {anchorChain.GetName().Version}";
+        FieldInfo list = loader.GetField("_allDirectories", Statics);
+        if (list != null)
         {
-            if (!set.Any(d => string.Equals(Norm(d.FullName), Norm(folder), StringComparison.OrdinalIgnoreCase)))
-                set.Add(new DirectoryInfo(folder));
+            if (list.GetValue(null) is not HashSet<DirectoryInfo> set)
+                return $"AnchorChainLoader._allDirectories is a {list.FieldType.Name}, not the folder set of Anchor Chain 1.1.0";
+            foreach (string folder in folders.Where(f => !string.IsNullOrEmpty(f)))
+                AddOnce(set, folder);
+            if (!string.IsNullOrEmpty(configDir) && Directory.Exists(configDir))
+                AddOnce(set, configDir);
         }
-        foreach (string folder in folders.Where(f => !string.IsNullOrEmpty(f)))
-            Add(folder);
-        if (!string.IsNullOrEmpty(configDir) && Directory.Exists(configDir))
-            Add(configDir);
-        FieldInfo config = loader.GetField("_configPath", all);
-        if (config != null && config.FieldType == typeof(string) && !string.IsNullOrEmpty(configDir))
+        if (!string.IsNullOrEmpty(configDir))
             config.SetValue(null, configDir);
         return null;
+    }
+
+    private static void AddOnce(HashSet<DirectoryInfo> set, string folder)
+    {
+        if (!set.Any(d => ModFolders.SamePath(d.FullName, folder)))
+            set.Add(new DirectoryInfo(folder));
     }
 }
