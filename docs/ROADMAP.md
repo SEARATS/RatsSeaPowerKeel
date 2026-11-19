@@ -1,6 +1,6 @@
 # R.A.T.S. Keel roadmap
 
-Small wins first, each one shippable on its own; every step makes the next one easier. Steps marked **[promised]** are the
+Small wins first, every wave makes the next one easier. Each wave ships at once, with one update post. Steps marked **[promised]** are the
 ones named in the plan we sent to the bigger mod teams.
 
 This file is the plan and lives here on GitHub. It is discussed in Discord: one thread per wave in `#proposals`, and the
