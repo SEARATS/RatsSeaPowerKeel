@@ -56,6 +56,8 @@ internal static class Report
                 sb.AppendLine("    " + p.Reason);
             foreach (string w in p.Warnings)
                 sb.AppendLine("    warning: " + w);
+            if (p.OtherMapBuildOf != null)
+                sb.AppendLine($"    note: the build for the other map kind; {p.OtherMapBuildOf} in the same folder is the one for this game build, so the {p.MissingUses.Count} part(s) it lacks here are expected (it stands down on its own)");
             if (p.LoadOrderWarning != null)
                 sb.AppendLine("    warning: " + p.LoadOrderWarning);
             if (p.MissingUses.Count > 2)

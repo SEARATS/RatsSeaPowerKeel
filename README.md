@@ -19,7 +19,8 @@ folders, sort out dependencies and start order, start them), and on top of that:
 
 - **Checks every mod against your game version before loading it.** A mod built for the other game build used to be able
   to stop *every* mission from loading (one of its types built on something this build lacks makes the game's start-up
-  throw). Keel leaves such a DLL out and says why. Smaller mismatches are listed as warnings, including Harmony patches and by-name
+  throw). Keel leaves such a DLL out and says why. A mod's build for the other map kind next to its matching build
+  (`XFlat.dll` beside `X.dll`) gets a note, not a warning. Smaller mismatches are listed as warnings, including Harmony patches and by-name
   reflection lookups (also of internal classes) whose target this build no longer has (a transpiler that no longer matches
   its target's code is not detected).
 - **One broken mod cannot stop the others.** Each mod starts on its own; one that throws is marked and the next one starts.
@@ -65,12 +66,24 @@ Status: run in the game on the 3D globe build since 0.1.0 (0.8.7 up to 0.1.0, no
 
 ## Install
 
-**The easy way:** run `KeelSetup.exe` from Keel's Workshop folder (Steam: right-click Sea Power, Manage, Browse local files, then `..\..\workshop\content\1286220\3835527459`), or download it from the GitHub release. It finds the game, adds BepInEx if needed, installs the starter file and the takeover patcher, and sets another loader's preloader aside; **Restore** undoes it. The setup carries no other program inside: it copies the files next to it, so run it from Keel's folder. Keel ships no BepInEx: when the game has none, the setup downloads the official BepInEx 5.4.23.2 from its GitHub release and checks it against its pinned hash before it unpacks anything (no internet on that PC: put `BepInEx_win_x64_5.4.23.2.zip` from that page next to `KeelSetup.exe`). It is not signed yet, so Windows may say "unknown publisher". The manual steps:
+**The easy way:** run `KeelSetup.exe` from Keel's Workshop folder (Steam: right-click Sea Power, Manage, Browse local files, then `..\..\workshop\content\1286220\3835527459`), or download it from the GitHub release. It finds the game, adds BepInEx if needed, installs the starter file and the takeover patcher, and sets another loader's preloader aside; **Restore** undoes it. The setup carries no other program inside: it copies the files next to it, so run it from Keel's folder. Keel ships no BepInEx: when the game has none, the setup downloads the official BepInEx 5.4.23.2 from its GitHub release and checks it against its pinned hash before it unpacks anything (no internet on that PC: put `BepInEx_win_x64_5.4.23.2.zip` from that page next to `KeelSetup.exe`). It is not signed yet, so Windows may say "unknown publisher".
 
-1. Subscribe to R.A.T.S. Keel on the Workshop and switch it on in the game's Mods menu.
-2. Once: copy `SeaPowerKeel.Stub.dll` from `copy-to-BepInEx-plugins` in Keel's Workshop folder (or from the GitHub release)
-   into `Sea Power\BepInEx\plugins`.
-3. Start the game. Ctrl+Shift+K shows the report.
+### By hand (no setup program)
+
+The same result as the setup, without running any `.exe`:
+
+1. **Subscribe** to R.A.T.S. Keel on the Workshop, start the game, switch Keel on in Mods, close the game.
+2. **BepInEx** (skip if the game folder already has a `BepInEx` folder):
+   - download `BepInEx_win_x64_5.4.23.2.zip` from [BepInEx's GitHub release](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2)
+   - unzip it into the game folder, so `winhttp.dll`, `doorstop_config.ini` and `BepInEx\` sit next to `Sea Power.exe`
+   - make the folder `BepInEx\plugins` if it is not there
+3. **Starter file:** copy `SeaPowerKeel.Stub.dll` from `copy-to-BepInEx-plugins` in Keel's Workshop folder (or from the
+   GitHub release) into `Sea Power\BepInEx\plugins`.
+4. **Start the game.** Keel puts its takeover patcher in place itself. Anchor Chain or Alpine was installed: restart once.
+5. Ctrl+Shift+K shows the report.
+
+- **Undo:** delete `BepInEx\plugins\SeaPowerKeel.Stub.dll` and `BepInEx\patchers\SeaPowerKeel.Patcher.dll`.
+- **Linux (Proton):** BepInEx also needs the Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (BepInEx's own Proton step).
 
 **Restart after every change to the mod list.** The stub runs once, while the game starts, and reads the mod list then. **Or let Keel follow:** after the game's *Reload* in the Mods menu (Mods, Apply), Keel starts the code mods you switched on and takes switched-off ones out as far as the running game allows (their patches come off, a BepInEx plugin is stopped; what a mod set up itself stays until a restart, as the game cannot unload code). The same dialog has a *Restart* button (saves the list, closes the game and starts it again), and the report window (Ctrl+Shift+K) has *Restart the game* (click twice). If Keel
 (or any mod) was switched off at that moment, nothing loads, and switching it on in the running game does not start it: restart the

@@ -719,18 +719,25 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         using (preflight)
         {
-            foreach (IGrouping<string, PluginEntry> dll in Keel.Plugins.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Dll).ToList())
+            List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Dll).ToList();
+            var results = new Dictionary<string, Preflight.Result>(StringComparer.OrdinalIgnoreCase);
+            foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
-                Preflight.Result r;
                 try
                 {
-                    r = preflight.Check(dll.Key);
+                    results[dll.Key] = preflight.Check(dll.Key);
                 }
                 catch (Exception ex)
                 {
                     Warn($"Could not check {dll.Key}: {ex.Message}");
-                    continue;
                 }
+                yield return null;
+            }
+            foreach (IGrouping<string, PluginEntry> dll in dlls)
+            {
+                if (!results.TryGetValue(dll.Key, out Preflight.Result r))
+                    continue;
+                string matching = Preflight.MatchingMapBuild(dll.Key, r, results);
                 foreach (PluginEntry p in dll)
                 {
                     string declared = InfoVersion.MismatchInFolder(p.Folder?.Path, Application.version);
@@ -749,7 +756,9 @@ internal sealed partial class KeelHost : MonoBehaviour
                         if (declared != null)
                             p.Warnings.Add(declared);
                         p.MissingUses.AddRange(r.Uses);
-                        if (r.Uses.Count > 0)
+                        if (r.Uses.Count > 0 && matching != null && r.Lookups.Count == 0)
+                            p.OtherMapBuildOf = matching;           // expected: a note in the report, no warning (Keel reports #13, #16)
+                        else if (r.Uses.Count > 0)
                             p.Warnings.Add($"Uses {r.Uses.Count} thing(s) this game build lacks, e.g. {Report.Short(r.Uses)}. Fine if the mod checks the game version itself; " +
                                            "otherwise expect errors when that part runs.");
                         if (r.Lookups.Count > 0)
@@ -757,7 +766,6 @@ internal sealed partial class KeelHost : MonoBehaviour
                                            "That code cannot find its target here: expect errors from the mod, or a part of it that does nothing. (Keel does not check whether a transpiler still matches.)");
                     }
                 }
-                yield return null;
             }
             if (preflight.IndexMs > 0)
                 log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");

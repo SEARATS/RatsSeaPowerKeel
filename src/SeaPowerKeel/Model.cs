@@ -62,6 +62,8 @@ internal sealed class PluginEntry
     public string LoadOrderWarning;
     /// <summary>Every game method/field/type the DLL uses that this build lacks, as <c>Namespace.Type::Member(args)</c> (the preflight check).</summary>
     public readonly List<string> MissingUses = new();
+    /// <summary>Set when this DLL is the other map kind's build of a mod whose matching build sits in the same folder (XFlat.dll beside X.dll): its missing parts are expected.</summary>
+    public string OtherMapBuildOf;
     public int LaterErrors;
     public string FirstLaterError;
     public float StartMs;

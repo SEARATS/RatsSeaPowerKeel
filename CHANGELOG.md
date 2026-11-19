@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **No more warning for our flat-map builds on the globe** (Keel reports #13, #16)
+  - R.A.T.S. mods ship two builds side by side (`X.dll` for the globe, `XFlat.dll` for the flat map); the one for the other map lacks game parts by design and stands down by itself
+  - Players read the warning as "R.A.T.S. mod broken"
+  - Now: when a DLL's partner build in the same folder lacks nothing, the report shows a short note instead of a warning, and the card stays green
+  - Both builds lacking parts, or no partner in the folder: still a warning, as before
+- **The game-version check runs over all DLLs first, then decides** (needed for the partner check); 6 new self-test checks
+
 ## 0.6.1 - 2026-11-19 - Hotfix: Restore brings the other loader back; KeelSetup downloads BepInEx
 
 ### Restore brings the other loader back

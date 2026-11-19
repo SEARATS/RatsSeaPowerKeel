@@ -18,6 +18,30 @@ internal static class SelfTest
     private static void FakeLoadScreenPostfix(bool __result) { }
     private static void FakeNeedsMore(bool __result, int something) { }
 
+    private static void OtherMapBuild()
+    {
+        static Preflight.Result R(int uses, int classLoad = 0)
+        {
+            var r = new Preflight.Result();
+            for (int i = 0; i < uses; i++) r.Uses.Add("LiveMap.Thing" + i);
+            for (int i = 0; i < classLoad; i++) r.ClassLoad.Add("Gone" + i);
+            return r;
+        }
+        string dir = Path.Combine(Path.GetTempPath(), "mod");
+        string globe = Path.Combine(dir, "SeaPowerTopo.dll"), flat = Path.Combine(dir, "SeaPowerTopoFlat.dll");
+        var both = new Dictionary<string, Preflight.Result> { [globe] = R(0), [flat] = R(11) };
+        Check(Preflight.MatchingMapBuild(flat, both[flat], both) == "SeaPowerTopo.dll", "globe game: the flat build lacking 11 parts beside a clean globe build is the other map's build");
+        Check(Preflight.MatchingMapBuild(globe, both[globe], both) == null, "the clean partner gets no note");
+        var old = new Dictionary<string, Preflight.Result> { [globe] = R(7), [flat] = R(0) };
+        Check(Preflight.MatchingMapBuild(globe, old[globe], old) == "SeaPowerTopoFlat.dll", "0.8.7: the globe build lacking parts beside a clean flat build gets the note");
+        var broken = new Dictionary<string, Preflight.Result> { [globe] = R(2), [flat] = R(11) };
+        Check(Preflight.MatchingMapBuild(flat, broken[flat], broken) == null, "both builds lack parts: still a warning");
+        var alone = new Dictionary<string, Preflight.Result> { [flat] = R(11) };
+        Check(Preflight.MatchingMapBuild(flat, alone[flat], alone) == null, "no partner in the folder: still a warning");
+        var elsewhere = new Dictionary<string, Preflight.Result> { [Path.Combine(Path.GetTempPath(), "other", "SeaPowerTopo.dll")] = R(0), [flat] = R(11) };
+        Check(Preflight.MatchingMapBuild(flat, elsewhere[flat], elsewhere) == null, "a partner in another folder does not count");
+    }
+
     private static void Check(bool ok, string what)
     {
         checks++;
@@ -51,6 +75,8 @@ internal static class SelfTest
             ExportedTypes(tmp, managed, core);
             Console.WriteLine("2. Entry point through the interface");
             EntryPoints();
+            Console.WriteLine("7. The other map kind's build beside its partner: a note, not a warning");
+            OtherMapBuild();
             Console.WriteLine("4+6. Sequence: load all first, start in plan order, drop dependants of a failed load, hand over to a running Anchor Chain");
             Sequence();
             LoadOrderWarnings();
