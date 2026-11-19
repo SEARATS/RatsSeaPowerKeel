@@ -25,7 +25,6 @@ This file is the plan: it lives here on GitHub and in the Discord `#roadmap` cha
 | 1.2 | Get Euromod's feedback on the plan (the message is out): their needs set the order of Wave 2 and 3 |
 | 1.3 | A Tester role in Discord: players who try a Keel build before it ships, named in the release post if they want |
 | 1.4 | Contributors listed in Keel's README credits and in its report window |
-| 1.5 | Two people with access to the repo and the Workshop item, so nothing stops when one is away |
 
 ## Wave 2: Keel becomes the interface
 
@@ -93,8 +92,6 @@ After Wave 3 a game update only needs a Keel update; the mods on its API keep ru
 - **Show that it is safe.** Every release links its VirusTotal results; the source is on GitHub; Keel installs without an exe.
 - **When something breaks, speak first.** A pinned post: what happened, who is affected, what to do now, when the fix comes.
 - **Answer every report** on the board, even if only "seen, looking into it".
-- **Small, finished steps over big promises.** A wave is only announced once its first step is in test; holidays and slow weeks
-  are announced, not discovered.
 
 ## Open for discussion
 
