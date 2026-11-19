@@ -22,9 +22,20 @@ This file is the plan: it lives here on GitHub and in the Discord `#roadmap` cha
 | # | Step |
 |---|---|
 | 1.1 | Mod Manager Restart keeps the launch options (Linux loses `WINEDLLOVERRIDES`, Keel issue #4) |
-| 1.2 | Get Euromod's feedback on the plan (the message is out): their needs set the order of Wave 2 and 3 |
+| 1.2 | Start with the first partner mods (list below): each one runs under Keel, and its author says what it needs |
 | 1.3 | A Tester role in Discord: players who try a Keel build before it ships, named in the release post if they want |
 | 1.4 | Contributors listed in Keel's README credits and in its report window |
+
+## Mods we start with
+
+| Mod | State | First step |
+|---|---|---|
+| VOIP (voice chat) | go from the author, invited to the Discord | run it under Keel on the test machine, list the game methods it patches, ask what it needs from Keel |
+| Pilothouse (bridge view) | go from the author, invited to the Discord | the same; plus the bridge-view freeze from Keel's crash reports, shared with the author |
+| Euromod | interested, full answer still open | their answer to the plan; the AC Pack object-search crash from Keel's reports, shared with them |
+| One more mod team | in talks | name and first step follow |
+
+- Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.
 
 ## Wave 2: Keel becomes the interface
 
