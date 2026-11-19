@@ -8,24 +8,20 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 
 ## Wave 0: ship what is already done
 
-| # | Step |
-|---|---|
-| 0.1 | Keel's loading window counts mods with errors again |
-| 0.2 | No flat-map warning for mods' other-map builds on 0.9.x |
-| 0.3 | Anchor Chain 1.2.0's FindFile works under Keel |
-| 0.4 | Install without an exe, with the by-hand and Linux steps **[promised]** |
-| 0.5 | An install video for the by-hand way |
-| 0.6 | Every release links its VirusTotal results; the GitHub release carries the same files and the source |
-| 0.7 | Answer the open Keel questions on the feedback board |
+- [ ] Keel's loading window counts mods with errors again
+- [ ] No flat-map warning for mods' other-map builds on 0.9.x
+- [ ] Anchor Chain 1.2.0's FindFile works under Keel
+- [ ] Install without an exe, with the by-hand and Linux steps **[promised]**
+- [ ] An install video for the by-hand way
+- [ ] Every release links its VirusTotal results; the GitHub release carries the same files and the source
+- [ ] Answer the open Keel questions on the feedback board
 
 ## Wave 1: small wins
 
-| # | Step |
-|---|---|
-| 1.1 | Mod Manager Restart keeps the launch options (Linux loses `WINEDLLOVERRIDES`, Keel issue #4) |
-| 1.2 | Start with the first partner mods (list below): each one runs under Keel, and its author says what it needs |
-| 1.3 | A Tester role in Discord: players who try a Keel build before it ships, named in the release post if they want |
-| 1.4 | Contributors listed in Keel's README credits and in its report window |
+- [ ] Mod Manager Restart keeps the launch options (Linux loses `WINEDLLOVERRIDES`, Keel issue #4)
+- [ ] Start with the first partner mods (list below): each one runs under Keel, and its author says what it needs
+- [ ] A Tester role in Discord: players who try a Keel build before it ships, named in the release post if they want
+- [ ] Contributors listed in Keel's README credits and in its report window
 
 ## Mods we start with
 
@@ -44,38 +40,32 @@ My R.A.T.S. mods already run on Keel. The first real change is Radio:
 
 The first official partner mods, and hopefully a lot more to come:
 
-| Mod | State |
-|---|---|
-| VOIP | go from the author, invited to the Discord |
-| Pilothouse | go from the author, invited to the Discord |
-| Euromod | interested, full answer still open |
-| One more mod team | in talks, name follows |
+- **VOIP**: go from the author, invited to the Discord
+- **Pilothouse**: go from the author, invited to the Discord
+- **Euromod**: interested, full answer still open
+- **One more mod team**: in talks, name follows
 
 - Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.
 
 ## Wave 2: Keel becomes the interface
 
-| # | Step | **[promised]** item |
-|---|---|---|
-| 2.1 | Anchor Chain carried on inside Keel; Anchor Chain 1.3 offers the switch (draft PR #5) | Keel carries on Anchor Chain |
-| 2.2 | Conflict finder: the report names two mods patching the same game method | conflict finder |
-| 2.3 | Per-mod start and frame cost in the report; safe start (game + Keel only) | performance cost, safe start |
-| 2.4 | Declared dependencies and a load order Keel sorts itself | dependencies and load order |
-| 2.5 | Early start before the load screen (Keel PR #2 by agm-114, Anchor Chain issue #32) | |
-| 2.6 | Compatibility list: which known mods run on which game build under Keel, filled from Keel's reports (with consent) | |
-| 2.7 | After each game update a post in `#game-updates`: what changed and when Keel's update is out | |
+- [ ] Anchor Chain carried on inside Keel; Anchor Chain 1.3 offers the switch (draft PR #5) **[promised]**
+- [ ] Conflict finder: the report names two mods patching the same game method **[promised]**
+- [ ] Per-mod start and frame cost in the report; safe start (game + Keel only) **[promised]**
+- [ ] Declared dependencies and a load order Keel sorts itself **[promised]**
+- [ ] Early start before the load screen (Keel PR #2 by agm-114, Anchor Chain issue #32)
+- [ ] Compatibility list: which known mods run on which game build under Keel, filled from Keel's reports (with consent)
+- [ ] After each game update a post in `#game-updates`: what changed and when Keel's update is out
 
 ## Wave 3: the stable mod API
 
-| # | Step | **[promised]** item |
-|---|---|---|
-| 3.1 | Game events from Keel: mission start/end, unit selected, contact detected, time compression | stable mod API with game events |
-| 3.2 | Version adapters per game build, so a mod built for an older build keeps running; frame time measured from the start | version adapters, backwards compatibility |
-| 3.3 | One shared settings page for all mods in the game's Options | shared settings page |
-| 3.4 | Shared UI bar and hotkey manager | UI bar, hotkeys |
-| 3.5 | API promise: a versioned API; a part marked old keeps working for at least two game updates, announced ahead | backwards compatibility |
-| 3.6 | "Build on Keel" guide and one example mod; a porting checklist for moving a mod from game internals onto Keel's events | opt-in, few changes to existing mods |
-| 3.7 | Shared timestamped logging, and crash reports routed to the author, for mods that build on the API (only those can be told apart) | shared logging, crash routing |
+- [ ] Game events from Keel: mission start/end, unit selected, contact detected, time compression **[promised]**
+- [ ] Version adapters per game build, so a mod built for an older build keeps running; frame time measured from the start **[promised]**
+- [ ] One shared settings page for all mods in the game's Options **[promised]**
+- [ ] Shared UI bar and hotkey manager **[promised]**
+- [ ] API promise: a versioned API; a part marked old keeps working for at least two game updates, announced ahead **[promised]**
+- [ ] "Build on Keel" guide and one example mod; a porting checklist for moving a mod from game internals onto Keel's events **[promised]**
+- [ ] Shared timestamped logging, and crash reports routed to the author, for mods that build on the API (only those can be told apart) **[promised]**
 
 After Wave 3 a game update only needs a Keel update; the mods on its API keep running.
 
@@ -83,12 +73,10 @@ After Wave 3 a game update only needs a Keel update; the mods on its API keep ru
 
 ### One home for each thing
 
-| What | Where |
-|---|---|
-| Code, pull requests, issues | GitHub (`struckl/SeaPowerKeel`) |
-| Ideas and plans | Discord `#proposals`, one thread per idea |
-| Releases and news | Discord `#announcements` + the Workshop change note, the same text |
-| This plan | this file on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave |
+- **Code, pull requests, issues**: GitHub (`struckl/SeaPowerKeel`)
+- **Ideas and plans**: Discord `#proposals`, one thread per idea
+- **Releases and news**: Discord `#announcements` + the Workshop change note, the same text
+- **This plan**: this file on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave
 
 ### How decisions are made
 
