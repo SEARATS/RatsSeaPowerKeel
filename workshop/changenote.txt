@@ -1,8 +1,5 @@
-0.6.0: Keel carries on Anchor Chain (credit to JustOneOther and agm-114); new card look and load-order warning (agm-114); fixes from 183 player reports.
-- KeelSetup.exe carries no other program inside any more: it copies the files next to it and unpacks BepInEx from its official release zip (virus scanners guessed the packed 0.5.4 setup to be a trojan)
-- The official BepInEx 5.4.23.2 download, unchanged, checked by its hash
-- Mod list text corrected: no more "delete Anchor Chain's preloader"
-- No mod is held after the most common 0.9.x crash (Unity's object search): Quick Start, Cities and Borders, Hull Damage were held by mistake; no campaign pack is switched off for it
-- A game closed without Keel's quit mark is no crash when Unity shut it down normally; the crash window waits for the real end of the game and says so when there is no crash record
-- Report bundles carry only the current session's files; Keel looks up the game's objects once (no search every half second, none in missions)
-- What's new pauses between Workshop pages and stops after Steam's "too many requests"; lettered game builds keep their letter
+0.6.1 hotfix: Restore brings Anchor Chain or Alpine back; KeelSetup downloads BepInEx.
+- Fixed: after Restore in KeelSetup no mod started when Keel had taken over from Anchor Chain or Alpine (a leftover entry in BepInEx's cache kept the other loader off)
+- Restore leaves no Keel file behind
+- KeelSetup downloads the official BepInEx 5.4.23.2 only when the game has none, checked by its hash; Keel ships no BepInEx any more
+- No internet on that PC: put BepInEx_win_x64_5.4.23.2.zip from BepInEx's GitHub page next to KeelSetup.exe

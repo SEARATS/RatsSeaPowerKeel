@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 - 2026-11-19 - Hotfix: Restore brings the other loader back; KeelSetup downloads BepInEx
 
 ### Restore brings the other loader back
 
