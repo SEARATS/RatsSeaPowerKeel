@@ -39,7 +39,9 @@ My R.A.T.S. mods already run on Keel. The first real change is Radio:
   - VOIP
   - other sound mods from other authors
 
-### Partner mods
+### Official partner mods
+
+The first official partner mods, and hopefully a lot more to come:
 
 | Mod | State |
 |---|---|
