@@ -28,16 +28,16 @@ This file is the plan: it lives here on GitHub and in the Discord `#roadmap` cha
 
 ## Mods we start with
 
-### I start with my own: Radio becomes an audio overhaul
+### I start with my own: Radio becomes the R.A.T.S. Sound Overhaul
 
 My R.A.T.S. mods already run on Keel. The first real change is Radio:
 
-- R.A.T.S. Radio is rebranded into an audio overhaul (working name **R.A.T.S. Audio**), an addon for Keel.
-- Players subscribe to the radios they want, each one its own addon:
-  - the current R.A.T.S. Radio voices, with every language pack as its own addon (English first, Russian and Spanish later)
-  - VOIP as one more radio, together with its author
-  - more radios and sound packs from other authors on the same base
-- Each radio brings its own lines; the overhaul plays them on the game's radio net.
+- R.A.T.S. Radio becomes the **R.A.T.S. Sound Overhaul**, an addon for Keel.
+- The Sound Overhaul only provides the endpoints: where sound goes in, when it plays, how it mixes with the game.
+- Addons add whatever they want on top, each one its own item:
+  - the R.A.T.S. Radio voices, with every language pack as its own addon
+  - VOIP
+  - other sound mods from other authors
 
 ### Partner mods
 
