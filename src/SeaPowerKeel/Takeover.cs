@@ -18,7 +18,8 @@ internal static class Takeover
     public const string RecordFile = "Keel-takeover.txt";
     public const string StubGuid = "dev.sewerlabs.seapowerkeel.stub";
     public const string LoaderFile = "SeaPowerKeel.dll";
-    public const string ConfigFile = "dev.sewerlabs.seapowerkeel.cfg";
+    public const string ConfigFile = "dev.sewerlabs.seapowerkeel.cfg";     // Keel.Guid + ".cfg"; Keel's settings file
+    public const string ConfigSection = "Loading";
     public const string ConfigKey = "TakeOver";
 
     /// <summary>Plugin ids of other mod loaders, with the name the report uses.</summary>
@@ -58,7 +59,7 @@ internal static class Takeover
             string line = raw.Trim();
             if (line.StartsWith("["))
             {
-                inLoading = line.Equals("[Loading]", StringComparison.OrdinalIgnoreCase);
+                inLoading = line.Equals("[" + ConfigSection + "]", StringComparison.OrdinalIgnoreCase);
                 continue;
             }
             int eq = line.IndexOf('=');
@@ -120,9 +121,8 @@ internal static class Takeover
     /// session is in use: it is renamed to <c>.old</c> (Windows allows that) and the new file takes its place for the next start.
     /// Returns "installed", "updated", "current", or the reason it could not.
     /// </summary>
-    public static string Install(string source, string patchersFolder, out bool changed)
+    public static string Install(string source, string patchersFolder)
     {
-        changed = false;
         if (!File.Exists(source))
             return $"{PatcherFile} is missing from Keel's folder";
         string target = Path.Combine(patchersFolder, PatcherFile);
@@ -154,7 +154,6 @@ internal static class Takeover
                 File.Move(target, old);
                 File.WriteAllBytes(target, wanted);
             }
-            changed = true;
             return had ? "updated" : "installed";
         }
         catch (Exception ex)

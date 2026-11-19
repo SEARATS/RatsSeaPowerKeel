@@ -69,6 +69,8 @@ internal sealed partial class KeelHost : MonoBehaviour
     private ConfigEntry<bool> whatsNewOn, workshopNotes;
     private ConfigEntry<float> whatsNewSeconds;
     private ConfigEntry<float> uiScale;
+    private ConfigEntry<bool> timedLog;
+    private ConfigEntry<int> keepSessions;
     private KeelLog keelLog;
     private CrashGuard crash;
     private ConfigEntry<bool> holdCrashers;
@@ -81,7 +83,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private readonly List<SkippedDll> skippedDlls = new();
     private float noticeUntil;
     private bool showWindow;
-    private Rect window = new(60, 60, 960, 600);
+    private Rect window;                         // sized and centred by OnGUI when it opens
     private Vector2 scroll;
     private string reportPath;
     private KeyCode key = KeyCode.K;
@@ -90,43 +92,11 @@ internal sealed partial class KeelHost : MonoBehaviour
     private void Awake()
     {
         log = BepInEx.Logging.Logger.CreateLogSource(Keel.Name);
-        var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Keel.Guid + ".cfg"), true);
-        loadAcMods = config.Bind("Loading", "AnchorChainMods", true,
-            "Start Anchor Chain mods. Keel runs them itself; Anchor Chain is not needed.");
-        takeOver = config.Bind("Loading", Takeover.ConfigKey, true,
-            @"While Keel is switched on, other mod loaders (Anchor Chain's preloader, Alpine's Mod Loader) do not start, so Keel runs every mod and " +
-            @"nothing starts twice. Keel keeps its patcher in BepInEx\patchers for this; the other loaders' files are not changed. Off: another " +
-            "loader that is installed starts its mods, and Keel leaves those mods to it.");
+        var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
+        BindSettings(config);
         InstallTakeover();
-        versionCheck = config.Bind("Loading", "GameVersionCheck", "Standard", new ConfigDescription(
-            "Standard: a DLL that would stop missions from loading on this game build (a type of it is built on something this build " +
-            "lacks) is not loaded; other missing parts are a warning. Strict: any missing part keeps the DLL from loading. Off: no check.",
-            new AcceptableValueList<string>("Standard", "Strict", "Off")));
-        Runner.GuardPatches = config.Bind("Loading", "RemoveBrokenPatches", true,
-            "When the game throws 'Method not found' / 'Field not found' because a mod's Harmony patch uses something this game build lacks, Keel takes that mod's patch off the failing " +
-            "game method again, names the mod in the report and keeps the game going (instead of the same error popup on every frame). Off: Keel only names the mod.").Value;
-        holdCrashers = config.Bind("Loading", "HoldOutCrashers", true,
-            "When the game dies while Keel is loading or starting a mod, or a crash report shows a mod's code on its stack, Keel names that mod at the next start and keeps it out until the mod " +
-            @"is updated (the list is BepInEx\Keel-held.txt). Off: Keel only names the mod.");
-        try
-        {
-            crash = new CrashGuard(Paths.BepInExRootPath, Path.Combine(Path.GetDirectoryName(Application.consoleLogPath) ?? "", "Player-prev.log"));
-        }
-        catch (Exception ex)
-        {
-            log.LogWarning($"No crash journal this session: {ex.Message}");
-        }
         // As early as possible: a crash in the game's own start-up load is caught too, and the files it opens are on the list.
-        if (crash != null)
-        {
-            string catcher = CrashCatcher.Install(Path.Combine(Paths.BepInExRootPath, CrashText.StackFile));
-            if (catcher != null)
-                log.LogWarning($"Crashes will not be caught this session: {catcher}");
-            string trail = FileTrail.Install();
-            if (trail != null)
-                log.LogWarning($"Keel will not see which file the game was loading in a crash: {trail}");
-            StartWatcher();
-        }
+        InstallCrashCatchers();
         string compat = CompatDialog.Install();
         if (compat != null)
             log.LogInfo($"Game version dialog stays the game's own: {compat}");
@@ -134,64 +104,10 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (loadEnd != null)
             log.LogInfo($"Keel cannot tell mods that wait for the load screen's end: {loadEnd}");
         // Here, in Awake: the game has not read its mod list yet.
-        try
-        {
-            string packOff = ModList.ApplyPackOff(Paths.BepInExRootPath, ModFolders.UserSettings);
-            if (packOff != null)
-            {
-                string off = $"{FolderLabel(packOff)} was switched off after the last crash. Switch it on again in the Mod Manager to try it after an update.";
-                crashNotice = crashNotice == null ? off : crashNotice + "\n" + off;
-                notes.Add(off);
-                log.LogWarning(off);
-            }
-        }
-        catch (Exception ex)
-        {
-            log.LogWarning($"Could not switch the pack off: {ex.Message}");
-        }
-        disabled = config.Bind("Loading", "DisabledPlugins", "",
-            "Plugin ids (comma separated) Keel does not start, even though their mod folder is on.");
-        hotkey = config.Bind("Report", "Hotkey", "Ctrl+Shift+K", "Shows and hides the report window.");
-        notice = config.Bind("Report", "NoticeOnProblems", true,
-            "After start-up, show a short notice in the corner when a mod did not start or threw errors.");
-        whatsNewOn = config.Bind("WhatsNew", "Show", true,
-            "After a start where mods changed since the last one (new, updated, gone, or newly in trouble), show a What's new card at the " +
-            @"top right of the main menu with what each author wrote about the update. Keel remembers the mods in BepInEx\Keel-seen.txt.");
-        workshopNotes = config.Bind("WhatsNew", "WorkshopNotes", true,
-            "For updated Workshop mods, read the author's change notes from the item's Steam Workshop changelog page " +
-            "(steamcommunity.com, only for mods that changed; Keel sends nothing else). Off: the mod's CHANGELOG.md or just the version.");
-        whatsNewSeconds = config.Bind("WhatsNew", "Seconds", 0f,
-            "How long the card stays; 0 = until clicked or a mission starts.");
-        ConfigEntry<bool> timedLog = config.Bind("Logging", "TimestampedLog", true,
-            @"Write BepInEx\Keel-log.txt: every log line of the game, BepInEx and all mods with time of day and seconds since the game " +
-            "started, and the mod an exception came from (with its stack trace).");
-        ConfigEntry<int> keep = config.Bind("Logging", "KeepSessions", 3,
-            "How many earlier sessions' logs to keep (Keel-log.1.txt is the last one).");
-        if (timedLog.Value)
-        {
-            try
-            {
-                keelLog = new KeelLog(Math.Max(0, Math.Min(20, keep.Value)));
-                BepInEx.Logging.Logger.Listeners.Add(keelLog);
-            }
-            catch (Exception ex)
-            {
-                log.LogWarning($"Cannot write the timestamped log: {ex.Message}");
-            }
-        }
-        uiScale = config.Bind("Report", "Scale", 0f, "Size of the report window and notice; 0 = by screen height (2 on a 4K screen).");
+        SwitchPackOff();
+        StartTimedLog();
         ParseHotkey(hotkey.Value);
-        UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) =>
-        {
-            if (mode == UnityEngine.SceneManagement.LoadSceneMode.Single) Loading.LoadingWindow.SceneLoadedTicks = DateTime.UtcNow.Ticks;
-            crash?.Mark("scene", scene.name);
-            // The game's Reload in the Mods menu loads the first scene again: then Keel follows the new mod list.
-            if (mode == UnityEngine.SceneManagement.LoadSceneMode.Single && ModMenuRestart.ReloadRequested && done && !hotLoading)
-            {
-                ModMenuRestart.ReloadRequested = false;
-                StartCoroutine(HotLoad());
-            }
-        };
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
         reportPath = Path.Combine(Paths.BepInExRootPath, "Keel-report.txt");
         Loading.LoadingWindow.Start(config, log);      // first, so it opens before the slow steps that follow (see docs/loading-window.md)
         string hello = $"{Keel.Name} {Keel.Version} (stub {StubVersion}) on the {GameState.BuildName}, from {OwnPath}";
@@ -200,43 +116,130 @@ internal sealed partial class KeelHost : MonoBehaviour
         StartCoroutine(Run());
     }
 
+    private void BindSettings(ConfigFile config)
+    {
+        loadAcMods = config.Bind(Takeover.ConfigSection, "AnchorChainMods", true,
+            "Start Anchor Chain mods. Keel runs them itself; Anchor Chain is not needed.");
+        takeOver = config.Bind(Takeover.ConfigSection, Takeover.ConfigKey, true,
+            @"While Keel is switched on, other mod loaders (Anchor Chain's preloader, Alpine's Mod Loader) do not start, so Keel runs every mod and " +
+            @"nothing starts twice. Keel keeps its patcher in BepInEx\patchers for this; the other loaders' files are not changed. Off: another " +
+            "loader that is installed starts its mods, and Keel leaves those mods to it.");
+        versionCheck = config.Bind(Takeover.ConfigSection, "GameVersionCheck", "Standard", new ConfigDescription(
+            "Standard: a DLL that would stop missions from loading on this game build (a type of it is built on something this build " +
+            "lacks) is not loaded; other missing parts are a warning. Strict: any missing part keeps the DLL from loading. Off: no check.",
+            new AcceptableValueList<string>("Standard", "Strict", "Off")));
+        Runner.GuardPatches = config.Bind(Takeover.ConfigSection, "RemoveBrokenPatches", true,
+            "When the game throws 'Method not found' / 'Field not found' because a mod's Harmony patch uses something this game build lacks, Keel takes that mod's patch off the failing " +
+            "game method again, names the mod in the report and keeps the game going (instead of the same error popup on every frame). Off: Keel only names the mod.").Value;
+        holdCrashers = config.Bind(Takeover.ConfigSection, "HoldOutCrashers", true,
+            "When the game dies while Keel is loading or starting a mod, or a crash report shows a mod's code on its stack, Keel names that mod at the next start and keeps it out until the mod " +
+            @"is updated (the list is BepInEx\Keel-held.txt). Off: Keel only names the mod.");
+        disabled = config.Bind(Takeover.ConfigSection, "DisabledPlugins", "",
+            "Plugin ids (comma separated) Keel does not start, even though their mod folder is on.");
+        hotkey = config.Bind("Report", "Hotkey", "Ctrl+Shift+K", "Shows and hides the report window.");
+        notice = config.Bind("Report", "NoticeOnProblems", true,
+            "After start-up, show a short notice in the corner when a mod did not start or threw errors.");
+        uiScale = config.Bind("Report", "Scale", 0f, "Size of the report window and notice; 0 = by screen height (2 on a 4K screen).");
+        whatsNewOn = config.Bind("WhatsNew", "Show", true,
+            "After a start where mods changed since the last one (new, updated, gone, or newly in trouble), show a What's new card at the " +
+            @"top right of the main menu with what each author wrote about the update. Keel remembers the mods in BepInEx\Keel-seen.txt.");
+        workshopNotes = config.Bind("WhatsNew", "WorkshopNotes", true,
+            "For updated Workshop mods, read the author's change notes from the item's Steam Workshop changelog page " +
+            "(steamcommunity.com, only for mods that changed; Keel sends nothing else). Off: the mod's CHANGELOG.md or just the version.");
+        whatsNewSeconds = config.Bind("WhatsNew", "Seconds", 0f,
+            "How long the card stays; 0 = until clicked or a mission starts.");
+        timedLog = config.Bind("Logging", "TimestampedLog", true,
+            @"Write BepInEx\Keel-log.txt: every log line of the game, BepInEx and all mods with time of day and seconds since the game " +
+            "started, and the mod an exception came from (with its stack trace).");
+        keepSessions = config.Bind("Logging", "KeepSessions", 3,
+            "How many earlier sessions' logs to keep (Keel-log.1.txt is the last one).");
+    }
+
+    private void InstallCrashCatchers()
+    {
+        try
+        {
+            crash = new CrashGuard(Paths.BepInExRootPath, Path.Combine(Path.GetDirectoryName(Application.consoleLogPath) ?? "", "Player-prev.log"));
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"No crash journal this session: {ex.Message}");
+            return;
+        }
+        string catcher = CrashCatcher.Install(Path.Combine(Paths.BepInExRootPath, CrashText.StackFile));
+        if (catcher != null)
+            log.LogWarning($"Crashes will not be caught this session: {catcher}");
+        string trail = FileTrail.Install();
+        if (trail != null)
+            log.LogWarning($"Keel will not see which file the game was loading in a crash: {trail}");
+        StartWatcher();
+    }
+
+    // A pack that took the game down last session is switched off in the game's mod list before the game reads it.
+    private void SwitchPackOff()
+    {
+        try
+        {
+            string packOff = ModList.ApplyPackOff(Paths.BepInExRootPath, ModFolders.UserSettings);
+            if (packOff == null)
+                return;
+            string off = $"{FolderLabel(packOff)} was switched off after the last crash. Switch it on again in the Mod Manager to try it after an update.";
+            crashNotice = crashNotice == null ? off : crashNotice + "\n" + off;
+            notes.Add(off);
+            log.LogWarning(off);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"Could not switch the pack off: {ex.Message}");
+        }
+    }
+
+    private void StartTimedLog()
+    {
+        if (!timedLog.Value)
+            return;
+        try
+        {
+            keelLog = new KeelLog(Math.Max(0, Math.Min(20, keepSessions.Value)));
+            BepInEx.Logging.Logger.Listeners.Add(keelLog);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"Cannot write the timestamped log: {ex.Message}");
+        }
+    }
+
+    private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+    {
+        bool single = mode == UnityEngine.SceneManagement.LoadSceneMode.Single;
+        if (single)
+            Loading.LoadingWindow.SceneLoadedTicks = DateTime.UtcNow.Ticks;
+        crash?.Mark("scene", scene.name);
+        // The game's Reload in the Mods menu loads the first scene again: then Keel follows the new mod list.
+        if (single && ModMenuRestart.ReloadRequested && done && !hotLoading)
+        {
+            ModMenuRestart.ReloadRequested = false;
+            StartCoroutine(HotLoad());
+        }
+    }
+
+    // How long Keel waits for the game, and how often it looks.
+    private const float ModListSeconds = 60, LoadScreenSeconds = 180, PollSeconds = 0.25f;
+
     private IEnumerator Run()
     {
         // One frame first: every plugin in BepInEx\plugins (Anchor Chain's preloader too) has had its Awake by then.
         yield return null;
 
         // 1. The game's mod list. 0.8.7 has it straight away, the globe build after a while; failing that, the same list from disk.
-        var watch = Stopwatch.StartNew();
-        List<ModFolder> folders = null;
-        // A mod that asked to start early (rgreat 2026-11-12: "could be a bit earlier", he replaces the load-screen pictures)
-        // does not wait for the game's own list, which comes about 8 s after Keel: Keel reads the same list from usersettings.ini
-        // at once, so early mods start before the first load-screen picture. Everything else still waits for the load screen.
-        if (GameState.Globe)
-        {
-            List<ModFolder> disk = null;
-            try { disk = ModFolders.FromDisk(); } catch (Exception) { }
-            if (disk != null && disk.Any(f => f.Enabled && EarlyStart.FolderAsks(f.Path)))
-            {
-                folders = disk;
-                log.LogInfo("A mod asked to start early: Keel takes the mod list from usersettings.ini now instead of waiting for the game's.");
-            }
-        }
-        while (folders == null && (folders = GameState.GameModList()) == null && watch.Elapsed.TotalSeconds < 60)
-            yield return new WaitForSecondsRealtime(0.25f);
-        if (folders == null)
-        {
-            folders = ModFolders.FromDisk();
-            notes.Add("The game did not list its mod folders within 60 s; Keel used usersettings.ini instead.");
-        }
-        else
-        {
-            Say($"The game's mod list is there (waited {watch.Elapsed.TotalSeconds:0.0} s).", (w, l) => w.ModListThere(l));
-        }
-
+        listed = GameState.Globe ? EarlyModList() : null;
+        if (listed == null)
+            yield return WaitForModList(startUp: true);
+        List<ModFolder> folders = listed;
         List<ModFolder> enabled = folders.Where(f => f.Enabled).ToList();
 
         // 2. Find the plugins (metadata only, no mod code runs): before the wait, so mods that ask to start early are known.
-        watch.Restart();
+        var watch = Stopwatch.StartNew();
         Keel.Plugins.AddRange(Scanner.Scan(enabled, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory));
         log.LogInfo($"Found {Keel.Plugins.Count} plugin(s) in {Keel.Plugins.Select(p => p.Dll).Distinct().Count()} DLL(s) ({watch.ElapsedMilliseconds} ms).");
         Window?.Found(Keel.Plugins.Count);
@@ -248,13 +251,83 @@ internal sealed partial class KeelHost : MonoBehaviour
         // and waits for the load screen right before the others.
         bool early = GameState.Globe && Keel.Plugins.Any(p => p.StartEarly && p.State == PluginState.Pending);
         if (GameState.Globe && !early)
-            yield return WaitForLoadScreen();
+            yield return WaitForLoadScreen(say: true);
 
         Say($"{enabled.Count} of {folders.Count} mod folders are on.", (w, l) => w.FoldersOn(l));
+        LookBeforeStart(enabled);
+        yield return null;
+
+        liveRunner = NewRunner(enabled);
+        liveFolders = enabled;
+        RuleAnchorChain(enabled, liveRunner);
+
+        // 4. Check, plan and start (see StartPlugins).
+        var pass = new Pass { Enabled = enabled, All = folders, Running = new HashSet<string>(), Early = early };
+        yield return StartPlugins(pass);
+        foreach (string line in LoadScreenEnd.Replay(pass.LoadScreenHooks))
+            log.LogInfo(line);
+        foreach (PluginEntry p in Keel.Plugins.Where(p => p.State is PluginState.NotStarted))
+            LogResult(p);
+        FinishStartUp(pass);
+    }
+
+    // A mod that asked to start early (rgreat 2026-11-12: "could be a bit earlier", he replaces the load-screen pictures) does not
+    // wait for the game's own list, which comes about 8 s after Keel: Keel reads the same list from usersettings.ini at once, so
+    // early mods start before the first load-screen picture. Everything else still waits for the load screen. Null: no mod asked.
+    private List<ModFolder> EarlyModList()
+    {
+        List<ModFolder> disk;
+        try
+        {
+            disk = ModFolders.FromDisk();
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"Could not read the mod list from usersettings.ini early: {ex.Message}");
+            return null;
+        }
+        if (!disk.Any(f => f.Enabled && EarlyStart.FolderAsks(f.Path)))
+            return null;
+        log.LogInfo("A mod asked to start early: Keel takes the mod list from usersettings.ini now instead of waiting for the game's.");
+        return disk;
+    }
+
+    private List<ModFolder> listed;      // what WaitForModList found
+
+    /// <summary>The game's mod list into <see cref="listed"/>; after <see cref="ModListSeconds"/> the same list from disk.</summary>
+    private IEnumerator WaitForModList(bool startUp)
+    {
+        var watch = Stopwatch.StartNew();
+        while ((listed = GameState.GameModList()) == null && watch.Elapsed.TotalSeconds < ModListSeconds)
+            yield return new WaitForSecondsRealtime(PollSeconds);
+        if (listed != null)
+        {
+            if (startUp)
+                Say($"The game's mod list is there (waited {watch.Elapsed.TotalSeconds:0.0} s).", (w, l) => w.ModListThere(l));
+            yield break;
+        }
+        listed = ModFolders.FromDisk();
+        if (startUp)
+            notes.Add($"The game did not list its mod folders within {ModListSeconds:0} s; Keel used usersettings.ini instead.");
+    }
+
+    /// <summary>Waits (up to <see cref="LoadScreenSeconds"/>) until the game's start-up load screen is done.</summary>
+    private IEnumerator WaitForLoadScreen(bool say)
+    {
+        var wait = Stopwatch.StartNew();
+        while (!GameState.StartupDone() && wait.Elapsed.TotalSeconds < LoadScreenSeconds)
+            yield return new WaitForSecondsRealtime(PollSeconds);
+        if (say)
+            Say($"Start-up load screen done (waited {wait.Elapsed.TotalSeconds:0.0} s).", (w, l) => w.LoadScreenDone(l));
+    }
+
+    // Before any mod is touched: the mod setups, What's new, what the last session left (so a mod that took the game down cannot
+    // do it again), and the pack check on its own thread (on a first start it reads the head of every picture and sound).
+    private void LookBeforeStart(List<ModFolder> enabled)
+    {
         DetectSetups(enabled);
         if (whatsNewOn.Value)
             StartWhatsNew(enabled);
-        // Before any mod is touched: what the last session left, so a mod that took the game down cannot do it again.
         crash?.Apply(Keel.Plugins, holdCrashers.Value, n =>
         {
             crashNotice = crashNotice == null ? n : crashNotice + "\n" + n;
@@ -269,7 +342,6 @@ internal sealed partial class KeelHost : MonoBehaviour
                 Loading.LoadingWindow.Alert = crash.Short;
             crash.WriteModsFile(Keel.Plugins);
         }
-        // On its own thread: on a first start it reads the head of every picture and sound in every mod.
         string packCache = Path.Combine(Paths.BepInExRootPath, "Keel-packcheck.txt");
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
@@ -277,114 +349,153 @@ internal sealed partial class KeelHost : MonoBehaviour
             {
                 packProblems = PackCheck.Scan(enabled, packCache);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                log.LogWarning($"Pack check failed, broken files are not listed this start: {ex.Message}");
                 packProblems = new List<string>();
             }
         });
-        yield return null;
+    }
 
+    private Runner NewRunner(List<ModFolder> enabled)
+    {
         var runner = new Runner(log, gameObject, enabled);
-        liveRunner = runner;
-        liveFolders = enabled;
         if (keelLog != null)
             keelLog.OwnerOf = runner.OwnerOf;
         // Unity hands exceptions to BepInEx without saying which mod threw; Keel adds a line that does, with the stack trace,
         // to LogOutput.log and Keel-log.txt alike.
         runner.ModError = (p, message, stack) =>
             log.LogError($"The exception above came from {p.Display} {p.Version} ({p.Guid}, {p.Folder.Label}): {message}{Environment.NewLine}{stack}");
-        RuleAnchorChain(enabled, runner);
+        return runner;
+    }
 
-        // 4. Check every DLL that may start against this game build.
-        watch.Restart();
+    /// <summary>One run of <see cref="StartPlugins"/>: what it works on, and what it found.</summary>
+    private sealed class Pass
+    {
+        public List<ModFolder> Enabled, All;
+        public HashSet<string> Running;         // ids already running in this game (a reload): never started twice
+        public bool Early;                      // start-up with mods that asked to start early
+        public bool Reload;
+        public int Started;
+        public long Ms;
+        public HashSet<string> LoadScreenHooks = new();
+    }
+
+    /// <summary>
+    /// The steps every new set of plugins goes through, at start-up and after a Mods menu reload alike: check each DLL against this
+    /// game build, plan, set up what Anchor Chain's own loader would have, then load and start in order (see Sequencer).
+    /// </summary>
+    private IEnumerator StartPlugins(Pass pass)
+    {
+        var watch = Stopwatch.StartNew();
         yield return Check();
-        log.LogInfo($"Game-version check done ({watch.ElapsedMilliseconds} ms, frames included).");
+        if (!pass.Reload)
+            log.LogInfo($"Game-version check done ({watch.ElapsedMilliseconds} ms, frames included).");
         watch.Restart();
 
-        // 5. Plan, then load everything, then start in order.
         var elsewhere = new HashSet<string>(Chainloader.PluginInfos.Keys);
+        elsewhere.UnionWith(pass.Running);
         elsewhere.UnionWith(Keel.Plugins.Where(p => p.State == PluginState.LeftToAnchorChain).Select(p => p.Guid));
-        var off = new HashSet<string>(disabled.Value.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0));
-        List<PluginEntry> order = Planner.Plan(Keel.Plugins, elsewhere, off, Process.GetCurrentProcess().ProcessName);
+        List<PluginEntry> order = Planner.Plan(Keel.Plugins, elsewhere, DisabledIds(), Process.GetCurrentProcess().ProcessName);
 
         // Anchor Chain may have started in the meantime (the version check took frames): then it starts its mods, not Keel.
-        if (LeaveToAnchorChain(runner, elsewhere, "before Keel loaded the mods"))
+        if (LeaveToAnchorChain(liveRunner, elsewhere, "before Keel loaded the mods"))
             order = Planner.Replan(Keel.Plugins, elsewhere);
 
-        // 5a. What Anchor Chain's own loader would have set up for its mods: the folder list behind AnchorChainLoader.FindFile,
-        // then the [ACConfig] mods' config files (Anchor Chain's first pass).
-        PrimeAnchorChainLoader(runner, enabled, folders, order);
-        PrepareAcConfigs(enabled, folders, order);
+        // What Anchor Chain's own loader would have set up for its mods: the folders behind AnchorChainLoader.FindFile, then the
+        // [ACConfig] mods' config files (Anchor Chain's first pass).
+        PrimeAnchorChainLoader(liveRunner, pass.Enabled, pass.All, order);
+        PrepareAcConfigs(pass.Enabled, pass.All, order);
         if (order.Any(p => p.State != PluginState.Pending))
             order = Planner.Replan(Keel.Plugins, elsewhere);
 
-        // 5b. Load every DLL and create every Anchor Chain mod before any of them starts (as Anchor Chain does: a mod that looks
-        // for another mod's assembly when it starts finds it); then start in dependency order. One step per frame, which changes
-        // nothing about the order (see Sequencer). Anchor Chain is looked for again right before the first start.
-        var sequence = new Sequencer
+        Sequencer sequence = NewSequence(pass, elsewhere);
+        if (pass.Early)
         {
-            Prepare = p =>
-            {
-                crash?.Mark("load", p.Guid);
-                runner.Prepare(p);
-            },
-            Start = p =>
-            {
-                crash?.Mark("start", p.Guid);
-                runner.Start(p);
-            },
-            // Logged before the start: a mod that holds the game up for seconds is named while it does (the loading window shows it).
-            Starting = (p, index, total) =>
-            {
-                log.LogInfo($"STARTING {index}/{total}: {p.Display} {p.Version} ({p.Folder.Label})");
-                Window?.Starting(index, total, $"{p.Display} {p.Version}");
-            },
-            Replan = () => Planner.Replan(Keel.Plugins, elsewhere),
-            HandOver = when => LeaveToAnchorChain(runner, elsewhere, when),
-            Prepared = p =>
-            {
-                if (p.State == PluginState.Failed)
-                    LogResult(p);
-            },
-            Started = LogResult,
-        };
-        int started = 0;
-        if (early)
-        {
-            HashSet<PluginEntry> earlySet = EarlyStart.Set(Keel.Plugins, (p, why) =>
-            {
-                p.Warnings.Add(why);
-                log.LogInfo($"{p.Display}: {why}");
-            });
-            string names = string.Join(", ", earlySet.Select(p => p.Display).Distinct());
-            log.LogInfo($"Starting {earlySet.Count} plugin(s) that asked to start before the load screen ends: {names}.");
-            if (earlySet.Count > 0)
-                notes.Add($"Started before the load screen ended (the mod asked for it): {names}.");
-            Func<List<PluginEntry>> replanAll = sequence.Replan;
-            sequence.Replan = () => replanAll().Where(earlySet.Contains).ToList();
-            foreach (PluginEntry _ in sequence.Run(order.Where(earlySet.Contains).ToList()))
-                yield return null;
-            started += sequence.StartedCount;
-            sequence.StartedCount = 0;
-            yield return WaitForLoadScreen();
-            sequence.Replan = () => replanAll().Where(p => !earlySet.Contains(p)).ToList();
+            yield return StartEarlyMods(sequence, order);
             order = sequence.Replan();
         }
         // Taken after the early mods: their load-screen hooks see the real end and are not called again.
-        HashSet<string> loadScreenHooks = LoadScreenEnd.Owners();
+        pass.LoadScreenHooks = LoadScreenEnd.Owners();
         foreach (PluginEntry _ in sequence.Run(order))
             yield return null;
-        started += sequence.StartedCount;
-        foreach (string line in LoadScreenEnd.Replay(loadScreenHooks))
-            log.LogInfo(line);
-        foreach (PluginEntry p in Keel.Plugins.Where(p => p.State is PluginState.NotStarted))
-            LogResult(p);
+        pass.Started += sequence.StartedCount;
+        pass.Ms = watch.ElapsedMilliseconds;
+    }
 
+    // Load every DLL and create every Anchor Chain mod before any of them starts (as Anchor Chain does: a mod that looks for another
+    // mod's assembly when it starts finds it); then start in dependency order. One step per frame, which changes nothing about the
+    // order (see Sequencer). Anchor Chain is looked for again right before the first start.
+    private Sequencer NewSequence(Pass pass, HashSet<string> elsewhere) => new()
+    {
+        Prepare = p =>
+        {
+            crash?.Mark("load", p.Guid);
+            liveRunner.Prepare(p);
+        },
+        Start = p =>
+        {
+            crash?.Mark("start", p.Guid);
+            liveRunner.Start(p);
+        },
+        // Logged before the start: a mod that holds the game up for seconds is named while it does (the loading window shows it).
+        Starting = (p, index, total) => AnnounceStart(p, index, total, pass.Reload),
+        Replan = () => Planner.Replan(Keel.Plugins, elsewhere),
+        HandOver = when => LeaveToAnchorChain(liveRunner, elsewhere, when),
+        Prepared = p =>
+        {
+            if (p.State == PluginState.Failed)
+                LogResult(p);
+        },
+        Started = p =>
+        {
+            LogResult(p);
+            // A reload writes the report after every mod: a report sent (or a crash) in the middle of it shows how far it got
+            // (a player's report 2026-11-12 showed 3 mods while the log had started 27 of 30).
+            if (pass.Reload)
+                WriteReport();
+        },
+    };
+
+    private void AnnounceStart(PluginEntry p, int index, int total, bool reload)
+    {
+        if (reload)
+        {
+            log.LogInfo($"STARTING (after reload) {index}/{total}: {p.Display} {p.Version} ({p.Folder.Label})");
+            reloadProgress = $"Mods menu reload in progress: starting {index} of {total} ({p.Display}).";
+            return;
+        }
+        log.LogInfo($"STARTING {index}/{total}: {p.Display} {p.Version} ({p.Folder.Label})");
+        Window?.Starting(index, total, $"{p.Display} {p.Version}");
+    }
+
+    // The mods that asked to start early, now; then the load screen's end; then the sequence goes on with the rest.
+    private IEnumerator StartEarlyMods(Sequencer sequence, List<PluginEntry> order)
+    {
+        HashSet<PluginEntry> earlySet = EarlyStart.Set(Keel.Plugins, (p, why) =>
+        {
+            p.Warnings.Add(why);
+            log.LogInfo($"{p.Display}: {why}");
+        });
+        string names = string.Join(", ", earlySet.Select(p => p.Display).Distinct());
+        log.LogInfo($"Starting {earlySet.Count} plugin(s) that asked to start before the load screen ends: {names}.");
+        if (earlySet.Count > 0)
+            notes.Add($"Started before the load screen ended (the mod asked for it): {names}.");
+        Func<List<PluginEntry>> replanAll = sequence.Replan;
+        sequence.Replan = () => replanAll().Where(earlySet.Contains).ToList();
+        foreach (PluginEntry _ in sequence.Run(order.Where(earlySet.Contains).ToList()))
+            yield return null;
+        yield return WaitForLoadScreen(say: true);
+        sequence.Replan = () => replanAll().Where(p => !earlySet.Contains(p)).ToList();
+    }
+
+    private void FinishStartUp(Pass pass)
+    {
         crash?.Mark("done", "");
         done = true;
         UpdateLoadOrderWarnings();
-        log.LogInfo($"Started {started} plugin(s) in {watch.ElapsedMilliseconds} ms, one per frame.");
-        Window?.StartedIn(watch.ElapsedMilliseconds);
+        log.LogInfo($"Started {pass.Started} plugin(s) in {pass.Ms} ms, one per frame.");
+        Window?.StartedIn(pass.Ms);
         string summary = $"Done: {Report.Summary(Keel.Plugins)}. Report: {reportPath} or {hotkey.Value} in the game.";
         log.LogInfo(summary);
         Window?.Done(summary);
@@ -397,6 +508,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         // Errors that come later show up in the window; the file is rewritten when the window opens and at quit.
     }
 
+    private HashSet<string> DisabledIds() => new(disabled.Value.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0));
+
     private Runner liveRunner;
     private List<ModFolder> liveFolders;
     private bool hotLoading;
@@ -406,36 +519,60 @@ internal sealed partial class KeelHost : MonoBehaviour
         a != null && b != null && string.Equals(Path.GetFullPath(a.Path).TrimEnd('\\', '/'), Path.GetFullPath(b.Path).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// After the game's Reload (Mods menu): code mods in folders switched on since start-up are checked and started the normal way,
-    /// mods in folders switched off are taken out as far as the running game allows (<see cref="Runner.TurnOff"/>). A mod that only
-    /// works when started with the game is better served by Restart; the dialog says so.
+    /// After the game's Reload (Mods menu): code mods in folders switched on since start-up go through the same steps as at
+    /// start-up (<see cref="StartPlugins"/>), mods in folders switched off are taken out as far as the running game allows
+    /// (<see cref="Runner.TurnOff"/>). A mod that only works when started with the game is better served by Restart; the dialog says so.
     /// </summary>
     private IEnumerator HotLoad()
     {
         hotLoading = true;
         yield return null;
         yield return null;
-        var watch = Stopwatch.StartNew();
-        List<ModFolder> folders;
-        while ((folders = GameState.GameModList()) == null && watch.Elapsed.TotalSeconds < 60)
-            yield return new WaitForSecondsRealtime(0.25f);
-        folders ??= ModFolders.FromDisk();
+        yield return WaitForModList(startUp: false);
+        List<ModFolder> folders = listed;
         if (GameState.Globe)
-        {
-            watch.Restart();
-            while (!GameState.StartupDone() && watch.Elapsed.TotalSeconds < 180)
-                yield return new WaitForSecondsRealtime(0.25f);
-        }
+            yield return WaitForLoadScreen(say: false);
         List<ModFolder> now = folders.Where(f => f.Enabled).ToList();
         List<ModFolder> added = now.Where(f => !liveFolders.Any(o => SameFolder(o, f))).ToList();
         List<ModFolder> removed = liveFolders.Where(o => !now.Any(f => SameFolder(o, f))).ToList();
         log.LogInfo($"Reload from the Mods menu: {added.Count} mod folder(s) switched on, {removed.Count} switched off.");
 
-        // Switched off: out as far as possible.
+        int turnedOff = TurnOff(removed);
+        liveFolders = now;
+        UpdateLoadOrderWarnings();
+
+        var pass = new Pass { Enabled = now, All = folders, Reload = true };
+        var fresh = new List<PluginEntry>();
+        if (added.Count > 0)
+        {
+            liveRunner.AddFolders(added);
+            pass.Running = new HashSet<string>(Keel.Plugins.Where(p => ReportFormat.IsRunning(p.State)).Select(p => p.Guid));
+            fresh = ScanAdded(added, pass.Running);
+            RuleAnchorChain(now, liveRunner);
+            yield return StartPlugins(pass);
+            reloadProgress = null;
+            crash?.Mark("done", "");
+            crash?.WriteModsFile(Keel.Plugins);
+        }
+
+        UpdateLoadOrderWarnings();
+        string missed = string.Join(", ", fresh.Where(Report.IsProblem).Select(p => p.Display).Distinct());
+        string note = $"Mods menu reload: started {pass.Started} code mod(s), switched {turnedOff} off." +
+                      (missed.Length > 0 ? $" Did not start: {missed} (see below)." : "") +
+                      (turnedOff > 0 ? " A switched-off mod is fully gone only after a restart." : "");
+        notes.Add(note);
+        log.LogInfo(note);
+        WriteReport();
+        hotLoading = false;
+    }
+
+    // Folders switched off in the Mods menu: their mods out as far as possible. Returns how many running mods were turned off.
+    private int TurnOff(List<ModFolder> removed)
+    {
         int turnedOff = 0;
         foreach (PluginEntry p in Keel.Plugins.Where(p => removed.Any(f => SameFolder(f, p.Folder))).ToList())
         {
-            if (p.State is PluginState.Running or PluginState.RunningWithErrors)
+            if (ReportFormat.IsRunning(p.State))
             {
                 int patches = liveRunner.TurnOff(p);
                 turnedOff++;
@@ -448,98 +585,32 @@ internal sealed partial class KeelHost : MonoBehaviour
                 p.Stop(PluginState.Skipped, "Its folder was switched off in the Mods menu.");
             }
         }
-        liveFolders = now;
-        UpdateLoadOrderWarnings();
+        return turnedOff;
+    }
 
-        // Switched on: the same steps as at start-up, for the new folders only.
-        int started = 0;
-        var fresh = new List<PluginEntry>();
-        if (added.Count > 0)
+    // Folders switched on in the Mods menu: their plugins, minus those already running and those switched off earlier in this game.
+    private List<PluginEntry> ScanAdded(List<ModFolder> added, HashSet<string> running)
+    {
+        List<PluginEntry> fresh = Scanner.Scan(added, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+        foreach (PluginEntry p in fresh)
         {
-            liveRunner.AddFolders(added);
-            var running = new HashSet<string>(Keel.Plugins.Where(p => p.State is PluginState.Running or PluginState.RunningWithErrors).Select(p => p.Guid));
-            fresh = Scanner.Scan(added, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
-            foreach (PluginEntry p in fresh)
-            {
-                if (running.Contains(p.Guid))
-                    p.Stop(PluginState.Skipped, "Already running from another folder.");
-                // Its code from the first start is still loaded, with whatever it remembers: a second start in the same game
-                // is not a clean one (seen with Topo: "already loaded, skipping"). A restart is.
-                else if (turnedOffDlls.Contains(Path.GetFullPath(p.Dll)))
-                    p.Stop(PluginState.NotStarted, "Switched off and on again in this game: its code from the first start is still loaded, so it starts again only after a restart.");
-            }
-            // An entry of a mod switched off earlier in this game makes room for the new one.
-            Keel.Plugins.RemoveAll(old => old.State == PluginState.Skipped && fresh.Any(n => n.Guid == old.Guid));
-            Keel.Plugins.AddRange(fresh);
-            RuleAnchorChain(now, liveRunner);
-            yield return Check();
-            var elsewhere = new HashSet<string>(Chainloader.PluginInfos.Keys);
-            elsewhere.UnionWith(running);
-            elsewhere.UnionWith(Keel.Plugins.Where(p => p.State == PluginState.LeftToAnchorChain).Select(p => p.Guid));
-            var off = new HashSet<string>(disabled.Value.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0));
-            List<PluginEntry> order = Planner.Plan(Keel.Plugins, elsewhere, off, Process.GetCurrentProcess().ProcessName);
-            PrimeAnchorChainLoader(liveRunner, now, folders, order);
-            PrepareAcConfigs(now, folders, order);
-            if (order.Any(p => p.State != PluginState.Pending))
-                order = Planner.Replan(Keel.Plugins, elsewhere);
-            var sequence = new Sequencer
-            {
-                Prepare = p =>
-                {
-                    crash?.Mark("load", p.Guid);
-                    liveRunner.Prepare(p);
-                },
-                Start = p =>
-                {
-                    crash?.Mark("start", p.Guid);
-                    liveRunner.Start(p);
-                },
-                Starting = (p, index, total) =>
-                {
-                    log.LogInfo($"STARTING (after reload) {index}/{total}: {p.Display} {p.Version} ({p.Folder.Label})");
-                    reloadProgress = $"Mods menu reload in progress: starting {index} of {total} ({p.Display}).";
-                },
-                Replan = () => Planner.Replan(Keel.Plugins, elsewhere),
-                Started = p =>
-                {
-                    LogResult(p);
-                    // Written after every mod: a report sent (or a crash) in the middle of a reload shows how far it got
-                    // (a player's report 2026-11-12 showed 3 mods while the log had started 27 of 30).
-                    WriteReport();
-                },
-            };
-            foreach (PluginEntry _ in sequence.Run(order))
-                yield return null;
-            reloadProgress = null;
-            started = sequence.StartedCount;
-            crash?.Mark("done", "");
-            crash?.WriteModsFile(Keel.Plugins);
+            if (running.Contains(p.Guid))
+                p.Stop(PluginState.Skipped, "Already running from another folder.");
+            // Its code from the first start is still loaded, with whatever it remembers: a second start in the same game
+            // is not a clean one (seen with Topo: "already loaded, skipping"). A restart is.
+            else if (turnedOffDlls.Contains(Path.GetFullPath(p.Dll)))
+                p.Stop(PluginState.NotStarted, "Switched off and on again in this game: its code from the first start is still loaded, so it starts again only after a restart.");
         }
-
-        UpdateLoadOrderWarnings();
-        string missed = string.Join(", ", fresh.Where(Report.IsProblem).Select(p => p.Display).Distinct());
-        string note = $"Mods menu reload: started {started} code mod(s), switched {turnedOff} off." +
-                      (missed.Length > 0 ? $" Did not start: {missed} (see below)." : "") +
-                      (turnedOff > 0 ? " A switched-off mod is fully gone only after a restart." : "");
-        notes.Add(note);
-        log.LogInfo(note);
-        WriteReport();
-        hotLoading = false;
+        // An entry of a mod switched off earlier in this game makes room for the new one.
+        Keel.Plugins.RemoveAll(old => old.State == PluginState.Skipped && fresh.Any(n => n.Guid == old.Guid));
+        Keel.Plugins.AddRange(fresh);
+        return fresh;
     }
 
     private void UpdateLoadOrderWarnings()
     {
         Planner.UpdateLoadOrderWarnings(Keel.Plugins, liveFolders);
         Loading.LoadingWindow.Progress?.SetOrderWarnings(Report.CountOrderWarnings(Keel.Plugins));
-    }
-
-    /// <summary>Waits (up to 3 min) until the game's start-up load screen is done; logs how long.</summary>
-    private IEnumerator WaitForLoadScreen()
-    {
-        var wait = Stopwatch.StartNew();
-        while (!GameState.StartupDone() && wait.Elapsed.TotalSeconds < 180)
-            yield return new WaitForSecondsRealtime(0.25f);
-        Say($"Start-up load screen done (waited {wait.Elapsed.TotalSeconds:0.0} s).", (w, l) => w.LoadScreenDone(l));
     }
 
     // The window a player sees when the game dies has to come from outside the game.
@@ -568,7 +639,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         try
         {
-            takeoverInstall = Takeover.Install(Path.Combine(Path.GetDirectoryName(OwnPath) ?? "", Takeover.PatcherFile), Paths.PatcherPluginPath, out _);
+            takeoverInstall = Takeover.Install(Path.Combine(Path.GetDirectoryName(OwnPath) ?? "", Takeover.PatcherFile), Paths.PatcherPluginPath);
             if (takeoverInstall is "installed" or "updated")
                 log.LogInfo($"Takeover patcher {takeoverInstall} in {Paths.PatcherPluginPath}: it works from the next start.");
             else if (takeoverInstall != "current")

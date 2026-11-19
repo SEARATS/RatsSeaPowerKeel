@@ -489,18 +489,18 @@ internal static class SelfTest
         string patchers = Path.Combine(tmp, "game", "BepInEx", "patchers");
         Directory.CreateDirectory(keelDir);
         string source = Path.Combine(keelDir, Takeover.PatcherFile);
-        Check(Takeover.Install(source, patchers, out bool changed).Contains("missing") && !changed, "no patcher in Keel's folder: nothing written, the reason given");
+        Check(Takeover.Install(source, patchers).Contains("missing") && !Directory.Exists(patchers), "no patcher in Keel's folder: nothing written, the reason given");
         File.WriteAllBytes(source, new byte[] { 1, 2, 3 });
-        Check(Takeover.Install(source, patchers, out changed) == "installed" && changed, "first start: the patcher is installed");
-        Check(Takeover.Install(source, patchers, out changed) == "current" && !changed, "next start: it is current, nothing written");
+        Check(Takeover.Install(source, patchers) == "installed", "first start: the patcher is installed");
+        Check(Takeover.Install(source, patchers) == "current", "next start: it is current, nothing written");
         File.WriteAllBytes(source, new byte[] { 4, 5, 6, 7 });
         string target = Path.Combine(patchers, Takeover.PatcherFile);
         string result;
         using (new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))   // as BepInEx holds a loaded patcher
-            result = Takeover.Install(source, patchers, out changed);
+            result = Takeover.Install(source, patchers);
         Check(result == "updated" && File.ReadAllBytes(target).SequenceEqual(new byte[] { 4, 5, 6, 7 }) && File.Exists(target + ".old"),
               "a Keel update brings a new patcher even while the old one is in use (it is set aside as .old)");
-        Takeover.Install(source, patchers, out _);
+        Takeover.Install(source, patchers);
         Check(!File.Exists(target + ".old"), "the .old copy is cleared at the next start");
         Check(Directory.GetFiles(patchers, "*.dll").Length == 1, "BepInEx sees one patcher DLL only");
 
