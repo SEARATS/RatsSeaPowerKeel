@@ -3,7 +3,8 @@
 Small wins first, each one shippable on its own; every step makes the next one easier. Steps marked **[promised]** are the
 ones named in the plan we sent to the bigger mod teams.
 
-This file is the plan: it lives here on GitHub and in the Discord `#roadmap` channel, and both are updated together.
+This file is the plan and lives here on GitHub. It is discussed in Discord: one thread per wave in `#proposals`, and the
+`#roadmap` post links here.
 
 ## Wave 0: ship what is already done
 
@@ -87,7 +88,7 @@ After Wave 3 a game update only needs a Keel update; the mods on its API keep ru
 | Code, pull requests, issues | GitHub (`struckl/SeaPowerKeel`) |
 | Ideas and plans | Discord `#proposals`, one thread per idea |
 | Releases and news | Discord `#announcements` + the Workshop change note, the same text |
-| This plan | this file on GitHub and Discord `#roadmap`, updated together; linked from the Workshop page |
+| This plan | this file on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave |
 
 ### How decisions are made
 
