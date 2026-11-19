@@ -56,24 +56,12 @@ internal static class CompatDialog
     {
         try
         {
-            // Every message box the game shows, in one log line: tests (and the loading window) see a box that waits for a
-            // click, whoever opened it (the game's version question, a mod's error box). 2026-11-12: boxes went unclicked.
-            if (!string.IsNullOrEmpty(value))
-            {
-                string first = value.Replace("\r", "").Replace("\n", " / ");
-                BepInEx.Logging.Logger.CreateLogSource(Keel.Name).LogInfo("Game message box: " + (first.Length > 140 ? first.Substring(0, 140) + "..." : first));
-            }
+            LogBox(value);
             header ??= Text("LoadScreen", "WarningMods");
             if (string.IsNullOrEmpty(header) || value == null || !value.StartsWith(header, StringComparison.Ordinal))
             {
                 if (__instance == box && box != null)
-                {
-                    // The game shows another message in the same box: the brand goes.
-                    box = null;
-                    PropertyInfo old = __instance.GetType().GetProperty("Header", Any);
-                    if (old?.CanWrite == true && old.GetValue(__instance) is string was && was.EndsWith("  ·  " + Keel.Name))
-                        old.SetValue(__instance, was.Substring(0, was.Length - ("  ·  " + Keel.Name).Length));
-                }
+                    Unbrand(__instance);
                 return;
             }
             string rewritten = Rewrite(header);
@@ -85,7 +73,7 @@ internal static class CompatDialog
             PropertyInfo h = __instance.GetType().GetProperty("Header", Any);
             if (h?.CanWrite == true)
                 h.SetValue(__instance, Branded(h.GetValue(__instance) as string));
-            BepInEx.Logging.Logger.CreateLogSource(Keel.Name).LogInfo("The game's mod version dialog is shown with Keel's list.");
+            Keel.Log.LogInfo("The game's mod version dialog is shown with Keel's list.");
             Loading.LoadingWindow.WaitingFor = "the game asks about mods (in the game window)";
         }
         catch (Exception)
@@ -94,10 +82,31 @@ internal static class CompatDialog
         }
     }
 
+    // Every message box the game shows, in one log line: tests (and the loading window) see a box that waits for a click,
+    // whoever opened it (the game's version question, a mod's error box). 2026-11-12: boxes went unclicked.
+    private static void LogBox(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+        string first = text.Replace("\r", "").Replace("\n", " / ");
+        Keel.Log.LogInfo("Game message box: " + (first.Length > 140 ? first.Substring(0, 140) + "..." : first));
+    }
+
+    // The game shows another message in the box Keel branded: the brand goes.
+    private static void Unbrand(object instance)
+    {
+        box = null;
+        PropertyInfo old = instance.GetType().GetProperty("Header", Any);
+        if (old?.CanWrite == true && old.GetValue(instance) is string was && was.EndsWith(BrandSuffix))
+            old.SetValue(instance, was.Substring(0, was.Length - BrandSuffix.Length));
+    }
+
+    private const string BrandSuffix = "  ·  " + Keel.Name;
+
     internal static string Branded(string header)
     {
         string h = string.IsNullOrEmpty(header) ? "MESSAGE" : header;
-        return h.Contains(Keel.Name) ? h : $"{h}  ·  {Keel.Name}";
+        return h.Contains(Keel.Name) ? h : h + BrandSuffix;
     }
 
     // The header can be set after the text: it keeps the brand on Keel's dialog.
@@ -146,7 +155,7 @@ internal static class CompatDialog
     private static string Rewrite(string first)
     {
         Type managerType = AccessTools.TypeByName("SeaPower.FileManager");
-        UnityEngine.Object manager = managerType == null ? null : UnityEngine.Object.FindObjectOfType(managerType);
+        UnityEngine.Object manager = GameState.Find(managerType);
         if (manager == null)
             return null;
         object list = managerType.GetProperty("Directories", Any)?.GetValue(manager) ?? managerType.GetField("directories", Any)?.GetValue(manager);
@@ -156,36 +165,37 @@ internal static class CompatDialog
         var data = new List<string>();
         foreach (object d in dirs)
         {
-            if (d == null)
-                continue;
-            Type t = d.GetType();
-            bool settingsMod = t.GetProperty("IsSettingsMod", Any)?.GetValue(d) as bool? ?? false;
-            bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) as bool? ?? false;
-            bool matches = t.GetMethod("MatchesVersion", Any, null, Type.EmptyTypes, null)?.Invoke(d, null) as bool? ?? true;
-            if (!settingsMod || !on || matches)
-                continue;
-            string name = t.GetProperty("Name", Any)?.GetValue(d) as string;
-            string path = (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) as DirectoryInfo)?.FullName;
-            if (string.IsNullOrEmpty(name))
-                name = Path.GetFileName(path ?? "?");
-            string line = "  •  " + name + Declared(t.GetField("_compatibility", Any)?.GetValue(d));
-            (HasCode(path) ? code : data).Add(line);
+            (string line, bool hasCode) = MismatchLine(d);
+            if (line != null)
+                (hasCode ? code : data).Add(line);
         }
         if (code.Count + data.Count == 0)
             return null;
         var sb = new StringBuilder(first).Append("\n");
         if (code.Count > 0)
-        {
-            sb.Append("\nCode mods\n");
-            sb.Append(string.Join("\n", code)).Append("\n");
-        }
+            sb.Append("\nCode mods\n").Append(string.Join("\n", code)).Append("\n");
         if (data.Count > 0)
-        {
-            sb.Append("\nData mods  (units, sounds, pictures, missions)\n");
-            sb.Append(string.Join("\n", data)).Append("\n");
-        }
+            sb.Append("\nData mods  (units, sounds, pictures, missions)\n").Append(string.Join("\n", data)).Append("\n");
         sb.Append("\nIgnore keeps them on; the other button switches them off and reloads.");
         return sb.ToString();
+    }
+
+    // One of the game's mod folders: its list line when it is switched on and does not match this game version, else null.
+    private static (string line, bool hasCode) MismatchLine(object d)
+    {
+        if (d == null)
+            return (null, false);
+        Type t = d.GetType();
+        bool settingsMod = t.GetProperty("IsSettingsMod", Any)?.GetValue(d) as bool? ?? false;
+        bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) as bool? ?? false;
+        bool matches = t.GetMethod("MatchesVersion", Any, null, Type.EmptyTypes, null)?.Invoke(d, null) as bool? ?? true;
+        if (!settingsMod || !on || matches)
+            return (null, false);
+        string name = t.GetProperty("Name", Any)?.GetValue(d) as string;
+        string path = (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) as DirectoryInfo)?.FullName;
+        if (string.IsNullOrEmpty(name))
+            name = Path.GetFileName(path ?? "?");
+        return ("  •  " + name + Declared(t.GetField("_compatibility", Any)?.GetValue(d)), HasCode(path));
     }
 
     private static bool HasCode(string path)
@@ -206,18 +216,16 @@ internal static class CompatDialog
         if (c == null)
             return "";
         string Field(string n) => c.GetType().GetField(n, Any)?.GetValue(c) as string;
-        string exact = Field("ExactVersion"), approx = Field("ApproximateVersion");
+        string exact = Field(InfoVersion.ExactKey), approx = Field(InfoVersion.ApproximateKey);
         if (!string.IsNullOrEmpty(exact))
             return $"  -  made for {exact} only";
         if (!string.IsNullOrEmpty(approx))
             return $"  -  made for {approx}";
-        var parts = new List<string>();
-        foreach ((string key, string word) in new[] { ("GreaterThanEqualToVersion", ">="), ("GreaterThanVersion", ">"), ("LessThanEqualToVersion", "<="), ("LessThanVersion", "<") })
-        {
-            string v = Field(key);
-            if (!string.IsNullOrEmpty(v))
-                parts.Add(word + " " + v);
-        }
+        List<string> parts = InfoVersion.Bounds
+            .SelectMany(b => new[] { (b.OrEqualKey, b.OrEqualSign), (b.StrictKey, b.StrictSign) })
+            .Select(k => (sign: k.Item2, value: Field(k.Item1)))
+            .Where(k => !string.IsNullOrEmpty(k.value))
+            .Select(k => k.sign + " " + k.value).ToList();
         return parts.Count > 0 ? "  -  made for game " + string.Join(", ", parts) : "  -  excludes this version";
     }
 }

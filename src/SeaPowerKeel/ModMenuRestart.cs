@@ -72,7 +72,7 @@ internal static class ModMenuRestart
         }
         catch (Exception ex)
         {
-            BepInEx.Logging.Logger.CreateLogSource(Keel.Name).LogWarning($"No Restart button in the Mods menu: {ex.Message}");
+            Keel.Log.LogWarning($"No Restart button in the Mods menu: {ex.Message}");
         }
     }
 
@@ -106,7 +106,7 @@ internal static class ModMenuRestart
         catch (Exception ex)
         {
             // A restart now would lose the change: the player still has the game's own Reload.
-            BepInEx.Logging.Logger.CreateLogSource(Keel.Name).LogWarning($"Restart from the Mods menu: the mod list could not be saved ({ex.InnerException?.Message ?? ex.Message}), so the game keeps running. Use Reload only, then restart the game yourself.");
+            Keel.Log.LogWarning($"Restart from the Mods menu: the mod list could not be saved ({ex.InnerException?.Message ?? ex.Message}), so the game keeps running. Use Reload only, then restart the game yourself.");
             return;
         }
         Restart?.Invoke();

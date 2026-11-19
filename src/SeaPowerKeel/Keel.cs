@@ -28,6 +28,10 @@ public static class Keel
 
     internal static readonly List<PluginEntry> Plugins = new();
 
+    private static ManualLogSource log;
+    /// <summary>Keel's one log source; every part of Keel writes through it.</summary>
+    internal static ManualLogSource Log => log ??= BepInEx.Logging.Logger.CreateLogSource(Name);
+
     /// <summary>For other mods: is this plugin id running under Keel?</summary>
     public static bool IsRunning(string guid) =>
         Plugins.Any(p => p.Guid == guid && p.State is PluginState.Running or PluginState.RunningWithErrors);
@@ -91,7 +95,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private void Awake()
     {
-        log = BepInEx.Logging.Logger.CreateLogSource(Keel.Name);
+        log = Keel.Log;
         var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
         BindSettings(config);
         InstallTakeover();
@@ -1266,7 +1270,7 @@ internal sealed partial class KeelHost : MonoBehaviour
                 DrawBody(r, 1f);
                 GUI.DrawTexture(new Rect(r.x, r.y, r.width, 23), headerBack);
             }
-            GUI.Label(new Rect(r.x + 8, r.y + 1, r.width - 16, 23), "MESSAGE  ·  R.A.T.S. KEEL", headStyle);
+            GUI.Label(new Rect(r.x + 8, r.y + 1, r.width - 16, 23), CompatDialog.Branded(null).ToUpperInvariant(), headStyle);
             GUI.Label(new Rect(r.x + 10, r.y + 31, r.width - 20, r.height - 36),
                       (crashNotice != null ? $"<b>{crashNotice}</b>\n" : "") +
                       (restartForTakeover ? "<b>Keel set up its takeover: restart the game once, then Keel runs every mod.</b>\n" : "") +

@@ -30,7 +30,7 @@ internal static class GameState
     private static readonly Dictionary<Type, UnityEngine.Object> found = new();
     private static readonly Dictionary<Type, float> missedAt = new();
 
-    private static UnityEngine.Object Find(Type type)
+    internal static UnityEngine.Object Find(Type type)
     {
         if (type == null)
             return null;
