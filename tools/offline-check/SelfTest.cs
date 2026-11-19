@@ -476,7 +476,9 @@ internal static class SelfTest
         s.Install(new byte[] { 1 }, Array.Empty<byte>(), new byte[] { 9, 9 });
         string setupPatcher = Path.Combine(game, "BepInEx", "patchers", Takeover.PatcherFile);
         Check(File.Exists(setupPatcher), "KeelSetup installs the takeover patcher");
+        File.WriteAllText(setupPatcher + ".old", "the copy Keel kept when it updated its patcher");
         s.Restore();
+        Check(!File.Exists(setupPatcher + ".old"), "Restore also removes the old patcher copy Keel kept");
         Check(!File.Exists(setupPatcher) && File.Exists(Path.Combine(game, "winhttp.dll")), "Restore removes it and leaves BepInEx that was there");
     }
 

@@ -5,6 +5,8 @@
 ### Restore brings the other loader back
 
 - **Fixed: after Restore no mod started** when Keel had taken over from Anchor Chain or Alpine: Keel's takeover entry stayed in BepInEx's plugin cache, so BepInEx kept skipping the other loader; Restore now removes that cache file (found in the test VM, 2026-11-18)
+- **Restore leaves no Keel file behind**: it also removes the old patcher copy (`SeaPowerKeel.Patcher.dll.old`) Keel keeps when it updates its patcher
+- **Run in the test VM** (2026-11-19, 2 starts): Keel took over Anchor Chain, Restore removed its files and the cache entry, the next start ran Anchor Chain 1.3 with all mods and no error
 
 ### KeelSetup downloads BepInEx
 

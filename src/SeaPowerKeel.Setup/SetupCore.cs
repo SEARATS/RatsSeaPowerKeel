@@ -118,6 +118,11 @@ internal sealed class SetupCore
     /// <summary>Undoes what <see cref="Install"/> recorded.</summary>
     public void Restore()
     {
+        // The copy Keel keeps when it replaces its patcher while BepInEx has it loaded (Takeover.Install): Keel's own file, never
+        // in the record, and it would keep the patchers folder from going (VM test 2026-11-19).
+        string oldPatcher = At(@"BepInEx\patchers\" + PatcherName + ".old");
+        if (File.Exists(oldPatcher))
+            File.Delete(oldPatcher);
         List<string> manifest = ReadManifest();
         manifest.Reverse();
         foreach (string[] parts in manifest.Select(l => l.Split('\t')).Where(p => p.Length == 2))
