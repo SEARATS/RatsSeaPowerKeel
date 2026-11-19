@@ -184,16 +184,22 @@ internal static class CompatDialog
         if (d == null)
             return (null, false);
         Type t = d.GetType();
-        bool settingsMod = t.GetProperty("IsSettingsMod", Any)?.GetValue(d) as bool? ?? false;
-        bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) as bool? ?? false;
-        bool matches = t.GetMethod("MatchesVersion", Any, null, Type.EmptyTypes, null)?.Invoke(d, null) as bool? ?? true;
-        if (!settingsMod || !on || matches)
+        if (!OnAndOffVersion(d, t))
             return (null, false);
         string name = t.GetProperty("Name", Any)?.GetValue(d) as string;
         string path = (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) as DirectoryInfo)?.FullName;
         if (string.IsNullOrEmpty(name))
             name = Path.GetFileName(path ?? "?");
         return ("  •  " + name + Declared(t.GetField("_compatibility", Any)?.GetValue(d)), HasCode(path));
+    }
+
+    // A mod folder the game counts (a settings mod), switched on, whose _info.ini does not match this game version.
+    private static bool OnAndOffVersion(object d, Type t)
+    {
+        bool settingsMod = t.GetProperty("IsSettingsMod", Any)?.GetValue(d) as bool? ?? false;
+        bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) as bool? ?? false;
+        bool matches = t.GetMethod("MatchesVersion", Any, null, Type.EmptyTypes, null)?.Invoke(d, null) as bool? ?? true;
+        return settingsMod && on && !matches;
     }
 
     private static bool HasCode(string path)

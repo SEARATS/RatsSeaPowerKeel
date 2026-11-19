@@ -177,33 +177,39 @@ internal static class WhatsNew
     /// <summary>Steam's <c>timeupdated</c> per installed Workshop item, from steamapps\workshop\appworkshop_&lt;app&gt;.acf.</summary>
     public static Dictionary<ulong, long> SteamTimes(string workshopRoot)
     {
-        var times = new Dictionary<ulong, long>();
         try
         {
             string acf = Path.GetFullPath(Path.Combine(workshopRoot, "..", "..", $"appworkshop_{ModFolders.SteamAppId}.acf"));
-            if (!File.Exists(acf))
-                return times;
-            ulong current = 0;
-            bool installed = false;
-            int depth = 0;
-            foreach (string raw in File.ReadAllLines(acf))
-            {
-                string line = raw.Trim();
-                if (line == "{") { depth++; continue; }
-                if (line == "}") { depth--; if (depth <= 1) installed = false; continue; }
-                MatchCollection q = Regex.Matches(line, "\"([^\"]*)\"");
-                if (q.Count == 1 && depth == 1)
-                    installed = q[0].Groups[1].Value == "WorkshopItemsInstalled";
-                else if (q.Count == 1 && depth == 2 && installed)
-                    ulong.TryParse(q[0].Groups[1].Value, out current);
-                else if (q.Count == 2 && depth == 3 && installed && current != 0 && q[0].Groups[1].Value == "timeupdated"
-                         && long.TryParse(q[1].Groups[1].Value, out long t))
-                    times[current] = t;
-            }
+            if (File.Exists(acf))
+                return InstalledTimes(File.ReadAllLines(acf));
         }
         catch (Exception)
         {
             // no manifest: Workshop items are compared by their files alone
+        }
+        return new Dictionary<ulong, long>();
+    }
+
+    // The manifest's "WorkshopItemsInstalled" block: { "<id>" { "timeupdated" "<unix seconds>" ... } ... }.
+    private static Dictionary<ulong, long> InstalledTimes(IEnumerable<string> acf)
+    {
+        var times = new Dictionary<ulong, long>();
+        ulong current = 0;
+        bool installed = false;
+        int depth = 0;
+        foreach (string raw in acf)
+        {
+            string line = raw.Trim();
+            if (line == "{") { depth++; continue; }
+            if (line == "}") { depth--; if (depth <= 1) installed = false; continue; }
+            MatchCollection q = Regex.Matches(line, "\"([^\"]*)\"");
+            if (q.Count == 1 && depth == 1)
+                installed = q[0].Groups[1].Value == "WorkshopItemsInstalled";
+            else if (q.Count == 1 && depth == 2 && installed)
+                ulong.TryParse(q[0].Groups[1].Value, out current);
+            else if (q.Count == 2 && depth == 3 && installed && current != 0 && q[0].Groups[1].Value == "timeupdated"
+                     && long.TryParse(q[1].Groups[1].Value, out long t))
+                times[current] = t;
         }
         return times;
     }
@@ -336,29 +342,12 @@ internal static class WhatsNew
         bool first = true;
         foreach (NewsItem n in news.Where(n => n.Kind is NewsKind.Updated or NewsKind.New))
         {
-            // Steam answers 429 (too many requests) after many pages in a row (issue keel-workshop-429): a short pause between
-            // pages, and after the first refusal no more pages this start; the CHANGELOG below fills in.
-            if (n.SteamId != 0 && fetch != null && !SteamRefused)
+            List<string> lines = n.SteamId != 0 && fetch != null && !SteamRefused ? WorkshopLines(n, fetch, ref first) : new List<string>();
+            if (lines.Count > 0)
             {
-                string page = null;
-                try
-                {
-                    if (!first)
-                        System.Threading.Thread.Sleep(PagePauseMs);
-                    first = false;
-                    page = fetch(n.SteamId);
-                }
-                catch (Exception)
-                {
-                    // offline or Steam unreachable: the CHANGELOG below
-                }
-                List<string> lines = page == null ? new List<string>() : WorkshopNotes(page, n.Kind == NewsKind.New ? 0 : n.PrevUpdated, n.Updated);
-                if (lines.Count > 0)
-                {
-                    n.Lines.AddRange(lines);
-                    n.Source = "Workshop";
-                    continue;
-                }
+                n.Lines.AddRange(lines);
+                n.Source = "Workshop";
+                continue;
             }
             List<string> log = ChangelogNotes(n.Folder, n.Kind == NewsKind.New ? "" : n.From);
             if (log.Count > 0)
@@ -372,6 +361,25 @@ internal static class WhatsNew
                 n.Lines.Add(n.From.Length > 0 && n.From == n.To ? "Same version number, new files (a new build)."
                             : n.From.Length == 0 && n.To.Length == 0 ? "Its files changed." : "No change notes from the author.");
         }
+    }
+
+    // Steam answers 429 (too many requests) after many pages in a row (issue keel-workshop-429): a short pause between pages, and
+    // after the first refusal no more pages this start; the CHANGELOG fills in.
+    private static List<string> WorkshopLines(NewsItem n, Func<ulong, string> fetch, ref bool first)
+    {
+        string page = null;
+        try
+        {
+            if (!first)
+                System.Threading.Thread.Sleep(PagePauseMs);
+            first = false;
+            page = fetch(n.SteamId);
+        }
+        catch (Exception)
+        {
+            // offline or Steam unreachable: the CHANGELOG
+        }
+        return page == null ? new List<string>() : WorkshopNotes(page, n.Kind == NewsKind.New ? 0 : n.PrevUpdated, n.Updated);
     }
 
     /// <summary>

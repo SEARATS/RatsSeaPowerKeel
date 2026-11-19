@@ -77,27 +77,33 @@ internal static class GameState
         string streaming = Path.GetFullPath(Application.streamingAssetsPath).TrimEnd('\\', '/');
         foreach (object d in dirs)
         {
-            if (d == null)
+            ModFolder folder = d == null ? null : ModOf(d, streaming);
+            if (folder == null)
                 continue;
-            Type t = d.GetType();
-            if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
-                continue;
-            // The globe build lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
-            // 0.8.7 has no kinds.
-            string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
-            if (kind != null && kind != "Mod")
-                continue;
-            string full = info.FullName.TrimEnd('\\', '/');
-            if (string.Equals(full, streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user")
-                continue;
-            ulong steamId = 0;
-            object id = t.GetField("steamId", Any)?.GetValue(d);
-            if (id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u)
-                steamId = u;
-            bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
-            list.Add(new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on, Order = list.Count });
+            folder.Order = list.Count;
+            list.Add(folder);
         }
         return list.Count > 0 ? list : null;
+    }
+
+    // One entry of the game's list as a mod folder; null for the game's own folders.
+    private static ModFolder ModOf(object d, string streaming)
+    {
+        Type t = d.GetType();
+        if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
+            return null;
+        // The globe build lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
+        // 0.8.7 has no kinds.
+        string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
+        if (kind != null && kind != "Mod")
+            return null;
+        string full = info.FullName.TrimEnd('\\', '/');
+        if (string.Equals(full, streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user")
+            return null;
+        object id = t.GetField("steamId", Any)?.GetValue(d);
+        ulong steamId = id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u ? u : 0;
+        bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
+        return new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on };
     }
 
     /// <summary>
