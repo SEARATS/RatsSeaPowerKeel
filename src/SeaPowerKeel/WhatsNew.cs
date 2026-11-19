@@ -32,7 +32,7 @@ internal sealed class NewsItem
         _ => "PROBLEM",
     };
 
-    /// <summary>"1.0 → 1.1" for an update, else the version it has (may be empty).</summary>
+    /// <summary>For an update both versions joined by the arrow the card shows, else the version it has (may be empty).</summary>
     public string VersionText => Kind == NewsKind.Updated && From != To && From.Length > 0 && To.Length > 0 ? $"{From} → {To}" : To;
 
     /// <summary>The name with <see cref="VersionText"/>; a gone mod by its name only.</summary>
