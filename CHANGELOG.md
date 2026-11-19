@@ -10,7 +10,7 @@
 - **The game-version check runs over all DLLs first, then decides** (needed for the partner check); 6 new self-test checks
 - **The loading window counts mods with errors again**
   - It read Keel's log lines back and waited for words Keel no longer wrote (`RUNNING WITH ERRORS`, `LEFT TO ANCHOR CHAIN`)
-  - A mod that started with errors was not counted at all: the summary card could say "No problems" with a broken mod
+  - A mod that started with errors was not counted at all: neither counted as running nor as a problem, so the summary card could say "No problems" while a mod threw errors
   - Now Keel hands each result to the window directly; the state words are defined once, for the report, the window and the crash window
 - **Anchor Chain 1.2.0's `FindFile` no longer reported as broken**
   - Keel ships Anchor Chain 1.1.0, whose `FindFile` searches a folder list Keel fills; 1.2.0 (a subscribed copy) reads the game's list itself
