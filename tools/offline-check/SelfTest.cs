@@ -476,7 +476,9 @@ internal static class SelfTest
         s.Install(new byte[] { 1 }, Array.Empty<byte>(), new byte[] { 9, 9 });
         string setupPatcher = Path.Combine(game, "BepInEx", "patchers", Takeover.PatcherFile);
         Check(File.Exists(setupPatcher), "KeelSetup installs the takeover patcher");
+        File.WriteAllText(setupPatcher + ".old", "the copy Keel kept when it updated its patcher");
         s.Restore();
+        Check(!File.Exists(setupPatcher + ".old"), "Restore also removes the old patcher copy Keel kept");
         Check(!File.Exists(setupPatcher) && File.Exists(Path.Combine(game, "winhttp.dll")), "Restore removes it and leaves BepInEx that was there");
     }
 
@@ -517,7 +519,10 @@ internal static class SelfTest
         File.WriteAllText(Path.Combine(plugins, "AnchorChain.Preloader.dll"), "other");
         s.Install(stub, zip);
         Check(!s.HasOtherPreloader && File.Exists(Path.Combine(plugins, "AnchorChain.Preloader.dll.keel-off")), "another loader's preloader is set aside, not deleted");
+        string typeCache = Path.Combine(game, "BepInEx", "cache", "chainloader_typeloader.dat");
+        File.WriteAllText(typeCache, "the takeover's entry");
         s.Restore();
+        Check(!File.Exists(typeCache) && File.Exists(Path.Combine(game, "BepInEx", "cache", "made-by-the-game.txt")), "restore drops BepInEx's plugin cache, so the other loader is scanned again, and leaves the rest of the cache");
         Check(s.HasOtherPreloader && s.HasBepInEx && File.ReadAllText(Path.Combine(game, "winhttp.dll")) == "theirs", "restore brings it back and leaves a BepInEx setup did not install");
     }
 
