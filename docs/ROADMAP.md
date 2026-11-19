@@ -28,12 +28,25 @@ This file is the plan: it lives here on GitHub and in the Discord `#roadmap` cha
 
 ## Mods we start with
 
-| Mod | State | First step |
-|---|---|---|
-| VOIP (voice chat) | go from the author, invited to the Discord | run it under Keel on the test machine, list the game methods it patches, ask what it needs from Keel |
-| Pilothouse (bridge view) | go from the author, invited to the Discord | the same; plus the bridge-view freeze from Keel's crash reports, shared with the author |
-| Euromod | interested, full answer still open | their answer to the plan; the AC Pack object-search crash from Keel's reports, shared with them |
-| One more mod team | in talks | name and first step follow |
+### Our own R.A.T.S. mods first
+
+| Mod | On Keel |
+|---|---|
+| R.A.T.S. Radio | an addon for Keel; each language pack becomes its own addon for Radio |
+| R.A.T.S. Command Tools | an addon for Keel |
+| R.A.T.S. Cities and Borders | an addon for Keel |
+| R.A.T.S. Topographic Map | an addon for Keel |
+| R.A.T.S. Pop-Out Windows | an addon for Keel |
+| R.A.T.S. Sensor Views | an addon for Keel |
+
+### Partner mods
+
+| Mod | State |
+|---|---|
+| VOIP | go from the author, invited to the Discord |
+| Pilothouse | go from the author, invited to the Discord |
+| Euromod | interested, full answer still open |
+| One more mod team | in talks, name follows |
 
 - Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.
 
