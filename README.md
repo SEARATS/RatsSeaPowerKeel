@@ -10,6 +10,7 @@ Keel is the mod loader for Sea Power's code mods: it finds the mod DLLs, checks 
 | Get it | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459) |
 | Settings | `BepInEx\config\dev.sewerlabs.seapowerkeel.cfg`, see [docs/settings.md](docs/settings.md) |
 | Feedback | [R.A.T.S. feedback board](https://hub.sewerlabs.dev/s/keel) |
+| Video | [Install on a clean game](https://youtu.be/m66tiCyWSNw) (more: [when a mod breaks](https://youtu.be/JrRR7d8NbhU), [switching loaders](https://youtu.be/vc_UddZHn0g)) |
 | Source | R.A.T.S. Source License, see `LICENSE` |
 
 ![Keel's cards in the main menu](workshop/screenshots/01-cards-whats-new.jpg)
