@@ -75,7 +75,7 @@ and tells you what happened. It runs Anchor Chain mods and plain BepInEx plugins
   - Each comes with the first lines of what the author wrote:
     - Workshop mods: the change notes written since your last start, read from the item's public Steam changelog page, only for mods that changed (`WhatsNew.WorkshopNotes = false` switches that off)
     - else the mod's `CHANGELOG.md`, the sections above the version you had
-  - Its × closes it. A click anywhere else on it opens the full list in the report window. The card goes when a mission starts.
+  - Its x button closes it. A click anywhere else on it opens the full list in the report window. The card goes when a mission starts.
   - Keel remembers the loaded mods in `BepInEx\Keel-seen.txt`; the first start with it says nothing (nothing to compare with yet).
 - The loading window and the summary card are described in [Loading window](#loading-window).
 
@@ -184,7 +184,7 @@ The same result as the setup, without running any `.exe`:
 | `Loading window.Opacity` | `0.92` | 0.4 to 1 |
 | `Loading window.SecondsAfterLastMod` | `2` | The full window stays this long after every mod has started, then glides to the corner |
 | `Loading window.LongestSeconds` | `300` | The full window is done this long after the game process started, whatever happens |
-| `Loading window.ClickHides` | `true` | A click hides the full window; a click on the summary opens Keel's report, its × closes it |
+| `Loading window.ClickHides` | `true` | A click hides the full window; a click on the summary opens Keel's report, its x button closes it |
 
 ## Loading window
 
@@ -196,7 +196,7 @@ it was started, "Waiting 19 s after Dynamic Campaign Mod").
 - It sits on the main menu's blank band by default.
 - It belongs to the game's window: it stays above the game but not above other programs, and goes when the game is minimized. It never takes the keyboard focus.
 - When every mod has started it shrinks and glides to the bottom left, above the game's version text, as a summary card ("Keel 0.1.5 started 19 mods in 40 s", the time until the game was ready, skipped mods, problems or the slowest mod).
-  - A click on the card opens Keel's report, its × closes it; it stays until then.
+  - A click on the card opens Keel's report, its x button closes it; it stays until then.
 - Keel logs a `STARTING i/n: name` line before each mod, so `Keel-log.txt` names the mod that was running when the game stood still.
 - More on where the start-up time goes and how it works: [docs/loading-window.md](docs/loading-window.md). `tools/loading-preview` draws the window from a log without the game.
 
