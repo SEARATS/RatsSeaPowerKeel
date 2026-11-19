@@ -14,8 +14,13 @@ internal static class MissionHooks
     public static event Action Started;
     public static event Action Ended;
 
-    /// <summary>Declares the two hooks as a load-stage feature; without them the mod has nothing to start from.</summary>
-    public static Feature Declare() => HookRegistry.Add(FeatureName, HookStage.Load, "mod inactive")
+    /// <summary>
+    /// Declares the two hooks as a load-stage feature. Required by default: most mods have nothing to start from without them.
+    /// A mod with features that work outside missions too (Command Tools' links, roles, RTB colours) passes optional, so a game
+    /// update that moves these methods switches off only the mission-bound features (those check IsActive("Mission")).
+    /// </summary>
+    public static Feature Declare(bool optional = false) =>
+        HookRegistry.Add(FeatureName, HookStage.Load, optional ? "mission-bound features off" : "mod inactive", optional)
         .Hook("SeapowerUI.ViewModels.MainGameViewModel", "OnStart", Type.EmptyTypes, typeof(MissionHooks), postfix: nameof(MissionReady))
         .Hook("SeaPower.GameMain", "OnDestroy", Type.EmptyTypes, typeof(MissionHooks), prefix: nameof(MissionUnloading));
 
