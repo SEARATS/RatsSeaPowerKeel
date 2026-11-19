@@ -44,8 +44,6 @@ internal static class AcLoaderShim
         return Assembly.Load(stream.ToArray());
     }
 
-    private static string Norm(string path) => Path.GetFullPath(path).TrimEnd('\\', '/');
-
     private const BindingFlags Statics = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
     /// <summary>
@@ -79,7 +77,7 @@ internal static class AcLoaderShim
 
     private static void AddOnce(HashSet<DirectoryInfo> set, string folder)
     {
-        if (!set.Any(d => string.Equals(Norm(d.FullName), Norm(folder), StringComparison.OrdinalIgnoreCase)))
+        if (!set.Any(d => ModFolders.SamePath(d.FullName, folder)))
             set.Add(new DirectoryInfo(folder));
     }
 }

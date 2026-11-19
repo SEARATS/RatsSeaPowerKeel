@@ -518,8 +518,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private bool hotLoading;
     private readonly HashSet<string> turnedOffDlls = new(StringComparer.OrdinalIgnoreCase);
 
-    private static bool SameFolder(ModFolder a, ModFolder b) =>
-        a != null && b != null && string.Equals(Path.GetFullPath(a.Path).TrimEnd('\\', '/'), Path.GetFullPath(b.Path).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    private static bool SameFolder(ModFolder a, ModFolder b) => a != null && b != null && ModFolders.SamePath(a.Path, b.Path);
 
     /// <summary>
     /// After the game's Reload (Mods menu): code mods in folders switched on since start-up go through the same steps as at

@@ -28,10 +28,6 @@ internal static class Scanner
         return null;
     }
 
-    /// <summary>Scans without a list of skipped DLLs (the offline tools).</summary>
-    public static List<PluginEntry> Scan(IList<ModFolder> folders, Action<string> warn, params string[] searchDirs) =>
-        Scan(folders, warn, null, searchDirs);
-
     /// <param name="searchDirs">Where Cecil looks for assemblies a DLL's attributes refer to (an enum argument such as
     /// BepInDependency's flags needs BepInEx.dll): the game's Managed folder and BepInEx\core. The mod folders are added.</param>
     /// <param name="skipped">Receives every DLL left out on purpose, with the reason (may be null).</param>

@@ -42,6 +42,11 @@ internal static class SelfTest
         Check(Preflight.MatchingMapBuild(flat, elsewhere[flat], elsewhere) == null, "a partner in another folder does not count");
     }
 
+    // The folders switched on in a usersettings.ini text, in its order.
+    private static List<string> ListOn(string settings) =>
+        settings.Replace("\r\n", "\n").Split('\n').Select(l => System.Text.RegularExpressions.Regex.Match(l, @"^Mod\d+Directory=([^,]+),True,"))
+                .Where(m => m.Success).Select(m => m.Groups[1].Value).ToList();
+
     private static void Check(bool ok, string what)
     {
         checks++;
@@ -658,8 +663,8 @@ internal static class SelfTest
         string ini = Path.Combine(tmp, "packoff.ini");
         File.WriteAllText(ini, "Mod1Directory=77,True,77\r\nMod2Directory=88,True,88\r\n");
         File.WriteAllText(Path.Combine(tmp, KeelNames.PackOffFile), "77");
-        Check(ModList.ApplyPackOff(tmp, ini) == "77" && ModList.ListOn(File.ReadAllText(ini)).SequenceEqual(new[] { "88" }) && !File.Exists(Path.Combine(tmp, KeelNames.PackOffFile)), "the crash window's choice switches the pack off in the game's list, once");
-        string edited = ModList.SetFolders("Mod1Directory=A,True,0\r\nMod2Directory=B,True,11\r\nOther=1\r\n", new[] { "B" }, new[] { "B" });
+        Check(ModList.ApplyPackOff(tmp, ini) == "77" && ListOn(File.ReadAllText(ini)).SequenceEqual(new[] { "88" }) && !File.Exists(Path.Combine(tmp, KeelNames.PackOffFile)), "the crash window's choice switches the pack off in the game's list, once");
+        string edited = ModList.SwitchOff("Mod1Directory=A,True,0\r\nMod2Directory=B,True,11\r\nOther=1\r\n", "B");
         Check(edited.Contains("Mod2Directory=B,False,11") && edited.Contains("Mod1Directory=A,True,0") && edited.Contains("Other=1\r\n"), "one folder off, its id and every other line kept");
     }
 
@@ -761,7 +766,7 @@ internal static class SelfTest
     private static void ExportedTypes(string tmp, string managed, string core)
     {
         string dir = MakeFolder(tmp, "exp", "Mods.dll");
-        List<PluginEntry> found = Scanner.Scan(new[] { Folder(dir) }, _ => { }, managed, core);
+        List<PluginEntry> found = Scanner.Scan(new[] { Folder(dir) }, _ => { }, null, managed, core);
         PluginEntry Get(string guid) => found.Single(p => p.Guid == guid);
         Check(Get("test.public").State == PluginState.Pending && Get("test.public").Exported, "public class: a plugin");
         Check(Get("test.nested.public").State == PluginState.Pending, "public class nested in a public class: a plugin (exported)");

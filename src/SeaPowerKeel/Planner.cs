@@ -62,11 +62,7 @@ internal static class Planner
         for (bool changed = true; changed;)
         {
             changed = false;
-            Dictionary<string, PluginEntry> starting = live().ToDictionary(p => p.Guid);
-            foreach (PluginEntry s in starting.Values.ToList())
-                foreach (string alias in s.AlsoKnownAs)
-                    if (!starting.ContainsKey(alias))
-                        starting[alias] = s;
+            Dictionary<string, PluginEntry> starting = ByGuid(live());
             foreach (PluginEntry p in starting.Values.Distinct())
             {
                 string why = null;
@@ -117,13 +113,20 @@ internal static class Planner
                            "Anchor Chain's loader would not: it drops every mod with an [ACIncompatibility], named mod present or not (an upstream bug).");
     }
 
-    private static Dictionary<PluginEntry, HashSet<PluginEntry>> Prerequisites(List<PluginEntry> plugins)
+    // Every plugin by its id and by the ids of its backup entries (AlsoKnownAs), unless a plugin of that id is there itself.
+    private static Dictionary<string, PluginEntry> ByGuid(List<PluginEntry> plugins)
     {
         Dictionary<string, PluginEntry> byGuid = plugins.ToDictionary(p => p.Guid);
         foreach (PluginEntry p in plugins)
             foreach (string alias in p.AlsoKnownAs)
                 if (!byGuid.ContainsKey(alias))
                     byGuid[alias] = p;
+        return byGuid;
+    }
+
+    private static Dictionary<PluginEntry, HashSet<PluginEntry>> Prerequisites(List<PluginEntry> plugins)
+    {
+        Dictionary<string, PluginEntry> byGuid = ByGuid(plugins);
         var after = plugins.ToDictionary(p => p, _ => new HashSet<PluginEntry>());   // p -> must start before p
         foreach (PluginEntry p in plugins)
         {

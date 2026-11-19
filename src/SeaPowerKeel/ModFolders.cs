@@ -154,6 +154,12 @@ internal static class ModFolders
         }
     }
 
+    /// <summary>Do the two paths name the same folder (full paths, any case, with or without a closing slash)?</summary>
+    public static bool SamePath(string a, string b) =>
+        a != null && b != null && string.Equals(Full(a), Full(b), StringComparison.OrdinalIgnoreCase);
+
+    private static string Full(string path) => System.IO.Path.GetFullPath(path).TrimEnd('\\', '/');
+
     /// <summary>A file in the mod folder or one level below (some mods keep their DLL in a sub folder).</summary>
     public static IEnumerable<string> FindFile(string folder, string fileName)
     {
