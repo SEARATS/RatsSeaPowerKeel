@@ -139,11 +139,9 @@ internal static class CompatDialog
 
     private static string Text(string section, string key)
     {
-        Type handler = AccessTools.TypeByName("SeaPower.LanguageResourceHandler");
-        Type singleton = AccessTools.TypeByName("SeaPower.Singleton`1")?.MakeGenericType(handler);
-        object instance = singleton?.GetProperty("Instance", Any)?.GetValue(null);
+        object instance = Reflected.Singleton("SeaPower.LanguageResourceHandler");
         // getText(section, key) on 0.8.7, getText(section, key, logError, verboseError) on 0.9.0: fill what follows with defaults.
-        MethodInfo get = handler?.GetMethods(Any).FirstOrDefault(m => m.Name == "getText" && m.GetParameters().Length >= 2
+        MethodInfo get = instance?.GetType().GetMethods(Any).FirstOrDefault(m => m.Name == "getText" && m.GetParameters().Length >= 2
                                                                   && m.GetParameters()[0].ParameterType == typeof(string) && m.GetParameters()[1].ParameterType == typeof(string));
         if (instance == null || get == null)
             return null;

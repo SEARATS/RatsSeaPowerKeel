@@ -99,7 +99,7 @@ internal static class LoadScreenEnd
             }
             catch (Exception ex)
             {
-                Exception e = ex is TargetInvocationException { InnerException: not null } t ? t.InnerException : ex;
+                Exception e = Reflected.Unwrap(ex);
                 lines.Add($"{patch.owner}: calling {m.DeclaringType?.Name}.{m.Name} for the passed load screen failed: {e.GetType().Name}: {e.Message}");
             }
         }

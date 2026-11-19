@@ -125,8 +125,7 @@ internal sealed class Runner
                 HarmonyLib.Patches info = HarmonyLib.Harmony.GetPatchInfo(target);
                 if (info == null)
                     continue;
-                foreach (HarmonyLib.Patch patch in info.Prefixes.Concat(info.Postfixes).Concat(info.Transpilers).Concat(info.Finalizers)
-                                                        .Where(x => x.PatchMethod?.DeclaringType?.Assembly == asm).ToList())
+                foreach (HarmonyLib.Patch patch in AllPatches(info).Where(x => x.PatchMethod?.DeclaringType?.Assembly == asm).ToList())
                 {
                     try
                     {
@@ -147,8 +146,6 @@ internal sealed class Runner
         }
         return removed;
     }
-
-    public bool HasLibrary(string assemblyName) => libraryIndex.ContainsKey(assemblyName);
 
     private Assembly Resolve(object sender, ResolveEventArgs args)
     {
@@ -214,7 +211,7 @@ internal sealed class Runner
         }
         catch (Exception ex)
         {
-            Exception inner = ex is TargetInvocationException t && t.InnerException != null ? t.InnerException : ex;
+            Exception inner = Reflected.Unwrap(ex);
             return $"{inner.GetType().Name}: {inner.Message}";
         }
     }
@@ -305,7 +302,7 @@ internal sealed class Runner
         }
         catch (Exception ex)
         {
-            Exception inner = ex is TargetInvocationException t && t.InnerException != null ? t.InnerException : ex;
+            Exception inner = Reflected.Unwrap(ex);
             p.Stop(PluginState.Failed, Explain(inner));
             log.LogError($"{p.Display} ({p.Guid}) failed to load: {inner}");
         }
@@ -345,7 +342,7 @@ internal sealed class Runner
         }
         catch (Exception ex)
         {
-            Exception inner = ex is TargetInvocationException t && t.InnerException != null ? t.InnerException : ex;
+            Exception inner = Reflected.Unwrap(ex);
             p.Stop(PluginState.Failed, inner is MissingMethodException && inner.Message.Contains(AcEntry.MethodName) ? "Entry point not found: " + inner.Message : Explain(inner));
             log.LogError($"{p.Display} ({p.Guid}) failed to start: {inner}");
         }
@@ -418,13 +415,9 @@ internal sealed class Runner
     {
         if (message == null || !(message.StartsWith("MissingMethodException") || message.StartsWith("MissingFieldException")))
             return null;
-        int at = message.IndexOf(" not found: ", StringComparison.Ordinal);
-        if (at < 0)
+        string sig = NotFound(message);          // e.g. List`1<string> SeaPower.FileManager.GetDirectories(string)
+        if (sig == null)
             return null;
-        string sig = FirstLine(message.Substring(at + 12));          // e.g. List`1<string> SeaPower.FileManager.GetDirectories(string)
-        int due = sig.IndexOf(" Due to:", StringComparison.Ordinal);   // Mono adds " Due to: Could not find field in class" (on the same line in the Unity log)
-        if (due > 0)
-            sig = sig.Substring(0, due);
         int paren = sig.IndexOf('(');
         string head = paren < 0 ? sig : sig.Substring(0, paren);
         int space = head.LastIndexOf(' ');
@@ -435,6 +428,23 @@ internal sealed class Runner
             return null;
         return head.Substring(0, dot).Replace('+', '/') + "::" + head.Substring(dot + 1);
     }
+
+    private const string NotFoundMark = " not found: ";
+
+    // What a "... not found: X" message names, without Mono's " Due to: Could not find field in class" (on the same line in the
+    // Unity log); null for another message.
+    private static string NotFound(string message)
+    {
+        int at = message.IndexOf(NotFoundMark, StringComparison.Ordinal);
+        if (at < 0)
+            return null;
+        string what = FirstLine(message.Substring(at + NotFoundMark.Length));
+        int due = what.IndexOf(" Due to:", StringComparison.Ordinal);
+        return due > 0 ? what.Substring(0, due) : what;
+    }
+
+    private static IEnumerable<HarmonyLib.Patch> AllPatches(HarmonyLib.Patches info) =>
+        info.Prefixes.Concat(info.Postfixes).Concat(info.Transpilers).Concat(info.Finalizers);
 
     /// <summary>The game methods a stack trace shows as patched ("SeaPower.GameMain.DMD&lt;SeaPower.GameMain::FixedUpdate&gt;"): type name and method name.</summary>
     internal static List<(string type, string method)> PatchedMethodsIn(string stackTrace)
@@ -464,75 +474,27 @@ internal sealed class Runner
             .Where(p => p.MissingUses.Any(u => u == key || u.StartsWith(key + "(", StringComparison.Ordinal))).ToList();
         if (candidates.Count == 0)
             return null;
-        string what = FirstLine(message.Substring(message.IndexOf(" not found: ", StringComparison.Ordinal) + 12));
-        int dueAt = what.IndexOf(" Due to:", StringComparison.Ordinal);
-        if (dueAt > 0)
-            what = what.Substring(0, dueAt);
-        var culprits = new List<PluginEntry>();
-        var where = new Dictionary<PluginEntry, (string method, int removed)>();
-        if (GuardPatches)
+        string what = NotFound(message);
+        Dictionary<PluginEntry, (string method, int removed)> taken = GuardPatches ? TakeOffPatches(candidates, stackTrace) : new();
+        foreach (KeyValuePair<PluginEntry, (string method, int removed)> t in taken)
         {
-            try
-            {
-                foreach ((string typeName, string methodName) in PatchedMethodsIn(stackTrace))
-                {
-                    Type type = HarmonyLib.AccessTools.TypeByName(typeName);
-                    if (type == null)
-                        continue;
-                    foreach (MethodBase original in HarmonyLib.AccessTools.GetDeclaredMethods(type).Where(m => m.Name == methodName).Cast<MethodBase>().ToList())
-                    {
-                        HarmonyLib.Patches info = HarmonyLib.Harmony.GetPatchInfo(original);
-                        if (info == null)
-                            continue;
-                        var patches = info.Prefixes.Concat(info.Postfixes).Concat(info.Transpilers).Concat(info.Finalizers).ToList();
-                        foreach (HarmonyLib.Patch patch in patches)
-                        {
-                            string asm = patch.PatchMethod?.DeclaringType?.Assembly.GetName().Name;
-                            PluginEntry owner = candidates.FirstOrDefault(c => c.AssemblyName == asm);
-                            if (owner == null)
-                                continue;
-                            new HarmonyLib.Harmony("dev.sewerlabs.seapowerkeel.guard").Unpatch(original, patch.PatchMethod);
-                            if (!culprits.Contains(owner))
-                                culprits.Add(owner);
-                            where.TryGetValue(owner, out var w);
-                            where[owner] = (typeName + "." + methodName, w.removed + 1);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                log.LogWarning($"Keel could not take a failing patch off: {ex.GetType().Name}: {ex.Message}");
-            }
+            if (blamed.Add(t.Key.Guid + "|" + key + "|guard"))
+                Warn(t.Key, $"The game threw 'not found: {what}'. {t.Key.Display} calls it and this game build does not have it: the mod was made for another game version. " +
+                            $"Its patch on {t.Value.method} caused the error; Keel took {t.Value.removed} patch(es) of the mod off that method so the game can go on. The rest of the mod keeps running (see its warnings).");
         }
-        foreach (PluginEntry p in culprits)
-        {
-            if (!blamed.Add(p.Guid + "|" + key + "|guard"))
-                continue;
-            (string method, int removed) = where[p];
-            string why = $"The game threw 'not found: {what}'. {p.Display} calls it and this game build does not have it: the mod was made for another game version. " +
-                         $"Its patch on {method} caused the error; Keel took {removed} patch(es) of the mod off that method so the game can go on. The rest of the mod keeps running (see its warnings).";
-            p.Warnings.Add(why);
-            log.LogWarning(why);
-        }
-        if (culprits.Count > 0)
-            return culprits[0];
+        if (taken.Count > 0)
+            return taken.Keys.First();
         if (candidates.Count == 1)
         {
             PluginEntry p = candidates[0];
             if (blamed.Add(p.Guid + "|" + key))
-            {
-                string why = $"The game threw 'not found: {what}'. {p.Display} calls it and this game build does not have it: the mod was made for another game version (see its warnings in the report).";
-                p.Warnings.Add(why);
-                log.LogWarning(why);
-            }
+                Warn(p, $"The game threw 'not found: {what}'. {p.Display} calls it and this game build does not have it: the mod was made for another game version (see its warnings in the report).");
             return p;
         }
         if (blamed.Add("many|" + key))
         {
-            string names = string.Join(", ", candidates.Select(c => c.Display));
-            string why = $"The game threw 'not found: {what}'. These mods call it and this game build does not have it: {names}. One of them was made for another game version " +
-                         "(Keel could not tell which one from the stack; switching one off at a time finds it).";
+            string why = $"The game threw 'not found: {what}'. These mods call it and this game build does not have it: {string.Join(", ", candidates.Select(c => c.Display))}. " +
+                         "One of them was made for another game version (Keel could not tell which one from the stack; switching one off at a time finds it).";
             foreach (PluginEntry c in candidates)
                 c.Warnings.Add(why);
             log.LogWarning(why);
@@ -540,13 +502,58 @@ internal sealed class Runner
         return null;
     }
 
+    private void Warn(PluginEntry p, string why)
+    {
+        p.Warnings.Add(why);
+        log.LogWarning(why);
+    }
+
+    // The candidates' patches on the game methods the stack shows come off: per mod, on which method and how many (in the
+    // order they were found).
+    private Dictionary<PluginEntry, (string method, int removed)> TakeOffPatches(List<PluginEntry> candidates, string stackTrace)
+    {
+        var where = new Dictionary<PluginEntry, (string method, int removed)>();
+        try
+        {
+            foreach ((string typeName, string methodName) in PatchedMethodsIn(stackTrace))
+            {
+                Type type = HarmonyLib.AccessTools.TypeByName(typeName);
+                if (type == null)
+                    continue;
+                foreach (MethodBase original in HarmonyLib.AccessTools.GetDeclaredMethods(type).Where(m => m.Name == methodName).Cast<MethodBase>().ToList())
+                {
+                    HarmonyLib.Patches info = HarmonyLib.Harmony.GetPatchInfo(original);
+                    if (info == null)
+                        continue;
+                    foreach (HarmonyLib.Patch patch in AllPatches(info).ToList())
+                    {
+                        string asm = patch.PatchMethod?.DeclaringType?.Assembly.GetName().Name;
+                        PluginEntry owner = candidates.FirstOrDefault(c => c.AssemblyName == asm);
+                        if (owner == null)
+                            continue;
+                        new HarmonyLib.Harmony("dev.sewerlabs.seapowerkeel.guard").Unpatch(original, patch.PatchMethod);
+                        where.TryGetValue(owner, out var w);
+                        where[owner] = (typeName + "." + methodName, w.removed + 1);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"Keel could not take a failing patch off: {ex.GetType().Name}: {ex.Message}");
+        }
+        return where;
+    }
+
+    // A message's first line, cut for the report.
+    private const int LineLength = 240;
+
     private static string FirstLine(string s)
     {
         int nl = s.IndexOf('\n');
         string line = nl < 0 ? s : s.Substring(0, nl);
-        return line.Length > 240 ? line.Substring(0, 240) + "…" : line.Trim();
+        return line.Length > LineLength ? line.Substring(0, LineLength) + "…" : line.Trim();
     }
-
     // Namespaces a mod may put types into that are not its own: matching them would blame it for the game's errors.
     internal static readonly HashSet<string> SharedNamespaces = new()
     {

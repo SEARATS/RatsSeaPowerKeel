@@ -96,12 +96,10 @@ internal static class ModMenuRestart
         {
             // What the game's own button saves first: the mod list, so the next start reads it.
             object directories = Traverse.Create(menu).Property("Directories").GetValue();
-            Type manager = AccessTools.TypeByName("SeaPower.FileManager");
-            Type singleton = AccessTools.TypeByName("SeaPower.Singleton`1")?.MakeGenericType(manager);
-            object files = singleton?.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            object files = Reflected.Singleton("SeaPower.FileManager");
             if (files == null || directories == null)
                 throw new InvalidOperationException("the game's file manager was not found");
-            AccessTools.Method(manager, "SaveDirectories").Invoke(files, new[] { directories });
+            AccessTools.Method(files.GetType(), "SaveDirectories").Invoke(files, new[] { directories });
         }
         catch (Exception ex)
         {
