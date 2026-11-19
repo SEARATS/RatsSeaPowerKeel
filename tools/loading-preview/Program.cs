@@ -21,7 +21,6 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        LoadingWindow.Alert = Environment.GetEnvironmentVariable("KEEL_ALERT");   // to see the card as it looks after a crash
         if (args.Length == 1 && args[0] == "live") return Live();
         if (args.Length < 2) { Console.WriteLine("usage: preview <Keel-log.txt> <out folder> [scale]  |  preview live"); return 1; }
         float scale = args.Length > 2 ? float.Parse(args[2], CultureInfo.InvariantCulture) : 1f;
@@ -107,17 +106,20 @@ internal static class Program
         return overlay.Opened && overlay.Closed ? 0 : 2;
     }
 
+    // KEEL_ALERT: to see the card as it looks after a crash.
+    private static readonly string Alert = Environment.GetEnvironmentVariable("KEEL_ALERT");
+
     private static void Render(Progress progress, float scale, string path, bool summary = false)
     {
         int w = (int)((summary ? Overlay.Layout.SummaryWidth : Overlay.Layout.Width) * scale);
-        int h = (int)((summary ? Overlay.Layout.SummaryHeight : Overlay.Layout.Height(8)) * scale);
+        int h = (int)((summary ? Overlay.Layout.SummaryHeight : Overlay.Layout.Height(Overlay.Layout.Rows)) * scale);
         IntPtr screen = Native.GetDC(IntPtr.Zero);
         IntPtr mem = Native.CreateCompatibleDC(screen);
         IntPtr bmp = Native.CreateCompatibleBitmap(screen, w, h);
         IntPtr old = Native.SelectObject(mem, bmp);
-        IntPtr f1 = Overlay.Font(12, 400, scale), f2 = Overlay.Font(14, 700, scale), f3 = Overlay.Font(10, 400, scale);
-        if (summary) Overlay.DrawSummary(mem, w, h, progress.Take(8), scale, f1, f2, f3);
-        else Overlay.Draw(mem, w, h, progress.Take(8), scale, f1, f2, f3);
+        IntPtr f1 = Overlay.Font(Overlay.Layout.TextPoints, 400, scale), f3 = Overlay.Font(Overlay.Layout.SmallPoints, 400, scale);
+        if (summary) Overlay.DrawSummary(mem, w, h, progress.Take(Overlay.Layout.Rows), scale, f3, Alert);
+        else Overlay.Draw(mem, w, h, progress.Take(Overlay.Layout.Rows), scale, f1, f3, null);
 
         var bi = new BITMAPINFO { biSize = Marshal.SizeOf(typeof(BITMAPINFO)), biWidth = w, biHeight = h, biPlanes = 1, biBitCount = 32 };
         var bits = new byte[w * h * 4];
@@ -130,20 +132,20 @@ internal static class Program
         bw.Write(40); bw.Write(w); bw.Write(h); bw.Write((short)1); bw.Write((short)32); bw.Write(0); bw.Write(bits.Length); bw.Write(0); bw.Write(0); bw.Write(0); bw.Write(0);
         bw.Write(bits);
 
-        foreach (IntPtr f in new[] { f1, f2, f3 }) Native.DeleteObject(f);
+        foreach (IntPtr f in new[] { f1, f3 }) Native.DeleteObject(f);
         Native.DeleteObject(bmp);
         Native.DeleteDC(mem);
         Native.ReleaseDC(IntPtr.Zero, screen);
     }
 }
 
-// The game-side switches the overlay reads; the preview has no game.
+// The game-side switches the overlay window reads while it runs (the live smoke test); the preview has no game.
+#pragma warning disable CS0649 // set by the game in Keel; here they keep their defaults
 internal static class LoadingWindow
 {
     public static bool MissionRunning, OnMenuSubPage;
     public static long SceneLoadedTicks;
-    public static string Alert;
-    public static string WaitingFor;
+    public static string Alert, WaitingFor;
     public static bool SummaryReady, GameDrawsSummary, OverlayGone;
     public static int SummaryX, SummaryY, SummaryW, SummaryH;
     public static float SummaryScale;

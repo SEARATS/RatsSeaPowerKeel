@@ -1267,7 +1267,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             EnsureStyles();
             if (Event.current.type == EventType.Repaint)
             {
-                DrawBody(r, 1f);
+                DrawBody(r);
                 GUI.DrawTexture(new Rect(r.x, r.y, r.width, 23), headerBack);
             }
             GUI.Label(new Rect(r.x + 8, r.y + 1, r.width - 16, 23), CompatDialog.Branded(null).ToUpperInvariant(), headStyle);

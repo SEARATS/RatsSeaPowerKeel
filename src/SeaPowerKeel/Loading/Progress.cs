@@ -55,6 +55,10 @@ internal sealed class Progress
         public int Running, WithErrors, Skipped, NotStarted, OrderWarnings;
         public bool HasProblems => WithErrors + NotStarted + OrderWarnings > 0;
 
+        // The summary card's lines, the same on the loading window's card and the game-drawn one.
+        public string Title => "R.A.T.S. KEEL" + (string.IsNullOrEmpty(KeelVersion) ? "" : " " + KeelVersion);
+        public string ReadyLine => $"{Running} running · Game ready in {Clock(DoneElapsed > 0 ? DoneElapsed : Elapsed)}" + (Skipped > 0 ? $" · {Skipped} skipped" : "");
+
         public string SummaryLine(string alert)
         {
             if (alert != null) return alert + " - click for details";
@@ -92,6 +96,9 @@ internal sealed class Progress
     }
 
     public void SetOrderWarnings(int count) { lock (gate) orderWarnings = count; }
+
+    /// <summary>"1:05" for 65 seconds.</summary>
+    public static string Clock(double seconds) => ((int)seconds / 60) + ":" + ((int)seconds % 60).ToString("00");
 
     // Keel's own steps, told by Keel: each takes the line Keel logs with it, which the window shows as the last event.
 

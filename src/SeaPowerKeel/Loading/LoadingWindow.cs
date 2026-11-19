@@ -45,7 +45,6 @@ internal static class LoadingWindow
     internal static volatile bool OverlayGone;
     /// <summary>Keel's GUI draws the summary card now: the overlay fades out.</summary>
     internal static volatile bool GameDrawsSummary;
-    internal const string ProfileUrl = "https://steamcommunity.com/profiles/76561198169349193";
 
     public static void Start(ConfigFile config, ManualLogSource log)
     {
