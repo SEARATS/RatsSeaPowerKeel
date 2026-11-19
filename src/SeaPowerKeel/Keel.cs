@@ -80,7 +80,6 @@ internal sealed partial class KeelHost : MonoBehaviour
     private ConfigEntry<bool> holdCrashers;
     private string crashNotice;
     private bool heldClicked;
-    private Rect heldRect;
     private float nextFlush;
     private readonly List<string> notes = new();
     private bool done;
@@ -822,33 +821,7 @@ internal sealed partial class KeelHost : MonoBehaviour
                     continue;
                 string matching = Preflight.MatchingMapBuild(dll.Key, r, results);
                 foreach (PluginEntry p in dll)
-                {
-                    string declared = InfoVersion.MismatchInFolder(p.Folder?.Path, Application.version);
-                    if (declared != null && mode == "Strict" && r.ClassLoad.Count == 0 && r.Uses.Count == 0 && r.Lookups.Count == 0)
-                        p.Stop(PluginState.NotStarted, $"Made for another game version. {declared} (GameVersionCheck = Strict.)");
-                    else if (r.ClassLoad.Count > 0)
-                        p.Stop(PluginState.NotStarted,
-                               $"Made for another game version: this build has no {Report.Short(r.ClassLoad)}. Loading it would stop missions from loading, so Keel leaves it out.");
-                    else if (r.Fatal.Count > 0)
-                        p.Stop(PluginState.NotStarted,
-                               $"A patch of this mod does not fit the game and would read or write the wrong memory: {Report.Short(r.Fatal)}. That can crash the game, so Keel leaves it out.");
-                    else if ((r.Uses.Count > 0 || r.Lookups.Count > 0) && mode == "Strict")
-                        p.Stop(PluginState.NotStarted, $"Made for another game version: this build has no {Report.Short(r.Uses.Concat(r.Lookups).ToList())} (GameVersionCheck = Strict).");
-                    else
-                    {
-                        if (declared != null)
-                            p.Warnings.Add(declared);
-                        p.MissingUses.AddRange(r.Uses);
-                        if (r.Uses.Count > 0 && matching != null && r.Lookups.Count == 0)
-                            p.OtherMapBuildOf = matching;           // expected: a note in the report, no warning (Keel reports #13, #16)
-                        else if (r.Uses.Count > 0)
-                            p.Warnings.Add($"Uses {r.Uses.Count} thing(s) this game build lacks, e.g. {Report.Short(r.Uses)}. Fine if the mod checks the game version itself; " +
-                                           "otherwise expect errors when that part runs.");
-                        if (r.Lookups.Count > 0)
-                            p.Warnings.Add($"Looks up {r.Lookups.Count} type(s)/method(s) by name that this game build lacks, e.g. {Report.Short(r.Lookups)} (Harmony patch targets, AccessTools and reflection lookups). " +
-                                           "That code cannot find its target here: expect errors from the mod, or a part of it that does nothing. (Keel does not check whether a transpiler still matches.)");
-                    }
-                }
+                    Preflight.Judge(p, r, matching, mode == "Strict", InfoVersion.MismatchInFolder(p.Folder?.Path, Application.version));
             }
             if (preflight.IndexMs > 0)
                 log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");
@@ -881,7 +854,6 @@ internal sealed partial class KeelHost : MonoBehaviour
     private string setupLine;   // e.g. "Euromod setup: Euromod + AC Pack + Extended Guidance ON (experimental)." or null
     private ModSetups.Euromod euromod;      // what DetectSetups found, for the Extended Guidance button
     private bool? egNext;                   // Extended Guidance as switched in the report window, for the next start; null = not touched
-    private Rect egRect;
 
     private volatile string reloadProgress;     // set while a Mods menu reload starts mods
 
@@ -969,199 +941,92 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private int lastToggleFrame = -1;
     private bool keyWasDown;
-    private Func<bool> hotkeyDown;
-    private bool hotkeyProbed;
-
-    /// <summary>
-    /// The globe build does not always hand keys to IMGUI, so the hotkey is also read from the keyboard: through the Input
-    /// System package where the game has it, else the old Input class. Found by name, so Keel references neither.
-    /// </summary>
-    private Func<bool> ProbeHotkey()
-    {
-        const BindingFlags pub = BindingFlags.Public | BindingFlags.Instance;
-        try
-        {
-            Type kbType = Type.GetType("UnityEngine.InputSystem.Keyboard, Unity.InputSystem");
-            PropertyInfo current = kbType?.GetProperty("current", BindingFlags.Public | BindingFlags.Static);
-            if (current != null)
-            {
-                string keyName = key.ToString();
-                keyName = char.ToLowerInvariant(keyName[0]) + keyName.Substring(1) + "Key";
-                bool Pressed(object kb, string name) =>
-                    kb.GetType().GetProperty(name, pub)?.GetValue(kb) is object control &&
-                    control.GetType().GetProperty("isPressed", pub)?.GetValue(control) is bool b && b;
-                return () =>
-                {
-                    object kb = current.GetValue(null);
-                    return kb != null && Pressed(kb, keyName)
-                        && (!keyCtrl || Pressed(kb, "ctrlKey")) && (!keyShift || Pressed(kb, "shiftKey")) && (!keyAlt || Pressed(kb, "altKey"));
-                };
-            }
-        }
-        catch (Exception)
-        {
-            // no Input System package: try the old input
-        }
-        try
-        {
-            MethodInfo getKey = Type.GetType("UnityEngine.Input, UnityEngine.InputLegacyModule")?.GetMethod("GetKey", new[] { typeof(KeyCode) });
-            if (getKey != null)
-            {
-                bool Down(KeyCode k) => (bool)getKey.Invoke(null, new object[] { k });
-                Down(key);   // throws right away when the game has the old input switched off
-                return () => Down(key)
-                             && (!keyCtrl || Down(KeyCode.LeftControl) || Down(KeyCode.RightControl))
-                             && (!keyShift || Down(KeyCode.LeftShift) || Down(KeyCode.RightShift))
-                             && (!keyAlt || Down(KeyCode.LeftAlt) || Down(KeyCode.RightAlt));
-            }
-        }
-        catch (Exception)
-        {
-            // old input switched off
-        }
-        return null;
-    }
-
-    // ---- the report's mouse and Esc, read from the device ----
-    // Like the hotkey: the globe build does not reliably hand clicks and keys to IMGUI, so the report's buttons did nothing. Update
-    // reads the mouse button, the pointer and Esc straight from the Input System (else the old Input) and hit-tests the two
-    // buttons itself; IMGUI's own handling stays as it was.
-
-    private Rect closeRect, copyRect;      // in the report's GUI units (screen pixels / scale), set while the report draws
+    private bool devicesProbed;
+    private DeviceInput hotkeyDevice, pointerDevice;     // each dropped on its first error
     private float guiScale = 1f;
-    // click = left button pressed this frame, right = right button (unused for the cards since 0.5.4: they close with their ×)
-    private Func<(bool click, bool right, Vector2 pos, bool esc)> pointer;
-    private bool pointerProbed;
 
-    private Func<(bool click, bool right, Vector2 pos, bool esc)> ProbePointer()
+    private bool HotkeyHeld() =>
+        hotkeyDevice.Held(key)
+        && (!keyCtrl || hotkeyDevice.Held(DeviceInput.Modifier.Ctrl))
+        && (!keyShift || hotkeyDevice.Held(DeviceInput.Modifier.Shift))
+        && (!keyAlt || hotkeyDevice.Held(DeviceInput.Modifier.Alt));
+
+    private void PollHotkey()
     {
-        const BindingFlags pub = BindingFlags.Public | BindingFlags.Instance;
+        if (hotkeyDevice == null)
+            return;
+        bool down;
         try
         {
-            Type mouseType = Type.GetType("UnityEngine.InputSystem.Mouse, Unity.InputSystem");
-            Type kbType = Type.GetType("UnityEngine.InputSystem.Keyboard, Unity.InputSystem");
-            PropertyInfo mouseNow = mouseType?.GetProperty("current", BindingFlags.Public | BindingFlags.Static);
-            PropertyInfo kbNow = kbType?.GetProperty("current", BindingFlags.Public | BindingFlags.Static);
-            if (mouseNow != null && kbNow != null)
-            {
-                return () =>
-                {
-                    object m = mouseNow.GetValue(null), k = kbNow.GetValue(null);
-                    bool click = false, right = false, esc = false;
-                    Vector2 pos = default;
-                    if (m != null)
-                    {
-                        object left = m.GetType().GetProperty("leftButton", pub)?.GetValue(m);
-                        click = left?.GetType().GetProperty("wasPressedThisFrame", pub)?.GetValue(left) is bool c && c;
-                        object rb = m.GetType().GetProperty("rightButton", pub)?.GetValue(m);
-                        right = rb?.GetType().GetProperty("wasPressedThisFrame", pub)?.GetValue(rb) is bool r && r;
-                        object p = m.GetType().GetProperty("position", pub)?.GetValue(m);
-                        if (p?.GetType().GetMethod("ReadValue", Type.EmptyTypes)?.Invoke(p, null) is Vector2 v) pos = v;
-                    }
-                    if (k != null)
-                    {
-                        object escKey = k.GetType().GetProperty("escapeKey", pub)?.GetValue(k);
-                        esc = escKey?.GetType().GetProperty("wasPressedThisFrame", pub)?.GetValue(escKey) is bool e && e;
-                    }
-                    return (click, right, pos, esc);
-                };
-            }
+            down = HotkeyHeld();
         }
         catch (Exception)
         {
-            // no Input System package: try the old input
+            down = false;
+            hotkeyDevice = null;
         }
-        try
-        {
-            Type input = Type.GetType("UnityEngine.Input, UnityEngine.InputLegacyModule");
-            MethodInfo mouseDown = input?.GetMethod("GetMouseButtonDown", new[] { typeof(int) });
-            MethodInfo keyDown = input?.GetMethod("GetKeyDown", new[] { typeof(KeyCode) });
-            PropertyInfo mousePos = input?.GetProperty("mousePosition", BindingFlags.Public | BindingFlags.Static);
-            if (mouseDown != null && keyDown != null && mousePos != null)
-            {
-                mouseDown.Invoke(null, new object[] { 0 });      // throws right away when the old input is switched off
-                return () => ((bool)mouseDown.Invoke(null, new object[] { 0 }), (bool)mouseDown.Invoke(null, new object[] { 1 }), (Vector3)mousePos.GetValue(null),
-                              (bool)keyDown.Invoke(null, new object[] { KeyCode.Escape }));
-            }
-        }
-        catch (Exception)
-        {
-            // old input switched off
-        }
-        return null;
+        if (down && !keyWasDown)
+            ToggleWindow();
+        keyWasDown = down;
     }
 
+    // The report's and the cards' clicks and Esc, read from the device and hit-tested here (see DeviceInput).
     private void PollReportInput()
     {
-        if (!showWindow && !NewsVisible && !CardVisible) return;
-        if (!pointerProbed) { pointerProbed = true; pointer = ProbePointer(); }
-        if (pointer == null) return;
-        if (!showWindow)
-        {
-            // The cards at the bottom left: What's new (its × closes it, a click elsewhere opens the full list) and the Keel card.
-            try
-            {
-                var (click, _, pos, _) = pointer();
-                if (click)
-                {
-                    var at = new Vector2(pos.x / guiScale, (Screen.height - pos.y) / guiScale);
-                    if (!NewsClick(at))
-                        CardClick(at, 0);
-                }
-            }
-            catch (Exception) { pointer = null; }
+        if (pointerDevice == null || (!showWindow && !NewsVisible && !CardVisible))
             return;
-        }
         try
         {
-            var (click, _, pos, esc) = pointer();
-            if (esc) { showWindow = false; return; }
-            if (!click) return;
+            (bool click, Vector2 pos, bool esc) = pointerDevice.Pointer();
             var gui = new Vector2(pos.x / guiScale, (Screen.height - pos.y) / guiScale);       // the pointer's y runs from the bottom
-            if (closeRect.Contains(gui) || titleCloseRect.Contains(gui)) showWindow = false;
-            else if (logsRect.Contains(gui)) SaveLogs();
-            else if (sendRect.Contains(gui)) SendReport();
-            else if (HeldOffered && heldRect.Contains(gui)) HeldButton();
-            else if (!HeldOffered && restartRect.Contains(gui)) RestartButton();
-            else if (copyRect.Contains(gui)) GUIUtility.systemCopyBuffer = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
-            else if (euromod is { AcPack: true } && egRect.Contains(gui)) EgButton();
-            else if (new Rect(window.x + newsScrollRect.x, window.y + newsScrollRect.y, newsScrollRect.width, newsScrollRect.height).Contains(gui))
+            if (!showWindow)
             {
-                // Screen GUI units -> the scroll view's content: minus the window, the scroll view's place in it, plus the scroll.
-                var inContent = new Vector2(gui.x - window.x - newsScrollRect.x + scroll.x, gui.y - window.y - newsScrollRect.y + scroll.y);
-                foreach (KeyValuePair<NewsItem, Rect> row in newsRowRects)
-                    if (row.Value.Contains(inContent)) { ToggleNews(row.Key); break; }
+                // The cards at the bottom left: What's new (its × closes it, a click elsewhere opens the full list) and the Keel card.
+                if (click && !NewsClick(gui))
+                    CardClick(gui, 0);
+                return;
+            }
+            if (esc)
+                showWindow = false;
+            else if (click)
+                ReportClick(gui);
+        }
+        catch (Exception)
+        {
+            pointerDevice = null;
+        }
+    }
+
+    private void ReportClick(Vector2 gui)
+    {
+        foreach ((Rect spot, Action act) in buttonSpots)
+        {
+            if (spot.Contains(gui))
+            {
+                act();
+                return;
             }
         }
-        catch (Exception) { pointer = null; }
+        if (new Rect(window.x + newsScrollRect.x, window.y + newsScrollRect.y, newsScrollRect.width, newsScrollRect.height).Contains(gui))
+        {
+            // Screen GUI units -> the scroll view's content: minus the window, the scroll view's place in it, plus the scroll.
+            var inContent = new Vector2(gui.x - window.x - newsScrollRect.x + scroll.x, gui.y - window.y - newsScrollRect.y + scroll.y);
+            foreach (KeyValuePair<NewsItem, Rect> row in newsRowRects)
+                if (row.Value.Contains(inContent)) { ToggleNews(row.Key); break; }
+        }
     }
 
     private float nextMissionCheck;
 
     private void Update()
     {
+        if (!devicesProbed)
+        {
+            devicesProbed = true;
+            hotkeyDevice = pointerDevice = DeviceInput.Probe();
+        }
         PollReportInput();
-        if (!hotkeyProbed)
-        {
-            hotkeyProbed = true;
-            hotkeyDown = ProbeHotkey();
-        }
-        if (hotkeyDown != null)
-        {
-            bool down;
-            try
-            {
-                down = hotkeyDown();
-            }
-            catch (Exception)
-            {
-                down = false;
-                hotkeyDown = null;
-            }
-            if (down && !keyWasDown)
-                ToggleWindow();
-            keyWasDown = down;
-        }
+        PollHotkey();
         if (Time.unscaledTime > nextMissionCheck)
         {
             nextMissionCheck = Time.unscaledTime + 0.5f;
@@ -1173,23 +1038,30 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (Loading.LoadingWindow.ReportRequested)      // a click on the loading window's summary
         {
             Loading.LoadingWindow.ReportRequested = false;
-            ToggleWindow();      // a click on the summary opens the report, the next one closes it
+            ToggleWindow();
         }
         if (Time.unscaledTime > nextFlush)
         {
             nextFlush = Time.unscaledTime + 1f;
-            CrashCatcher.KeepInstalled();
-            TakePackProblems();
-            keelLog?.Flush();
-            HookModMenu();
-            FinishWhatsNew();
-            if (wantNotice && !noticeArmed && GameState.StartupDone())
-            {
-                noticeArmed = true;
-                noticeUntil = Time.realtimeSinceStartup + 30;
-            }
+            EverySecond();
         }
     }
+
+    private void EverySecond()
+    {
+        CrashCatcher.KeepInstalled();
+        TakePackProblems();
+        keelLog?.Flush();
+        HookModMenu();
+        FinishWhatsNew();
+        if (wantNotice && !noticeArmed && GameState.StartupDone())
+        {
+            noticeArmed = true;
+            noticeUntil = Time.realtimeSinceStartup + NoticeSeconds;
+        }
+    }
+
+    private const float NoticeSeconds = 30;
 
     private bool modMenuHooked;
 
@@ -1250,34 +1122,21 @@ internal sealed partial class KeelHost : MonoBehaviour
             ToggleWindow();
             e.Use();
         }
-        if (showWindow && e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape) { showWindow = false; e.Use(); }      // Esc closes the report
+        if (showWindow && e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
+        {
+            showWindow = false;
+            e.Use();
+        }
         // IMGUI draws in screen pixels: scale it so the report reads the same on 1080p and 4K (Report.Scale, 0 = by screen height).
         float scale = uiScale.Value > 0 ? uiScale.Value : Mathf.Max(1f, Screen.height / 1080f);
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
         guiScale = scale;
         float screenW = Screen.width / scale, screenH = Screen.height / scale;
 
-        if (!showWindow && Time.realtimeSinceStartup < noticeUntil)
-        {
-            int bad = Keel.Plugins.Count(Report.IsProblem);
-            // Above the cards at the bottom left of the main menu (the Keel card, What's new), which are there for the same half minute.
-            float height = crashNotice != null ? 170 : restartForTakeover ? 120 : 70;
-            float above = StackTop;
-            var r = new Rect(20, (float.IsNaN(above) ? screenH - 135 : above - 8) - height, 470, height);
-            EnsureStyles();
-            if (Event.current.type == EventType.Repaint)
-            {
-                DrawBody(r);
-                GUI.DrawTexture(new Rect(r.x, r.y, r.width, 23), headerBack);
-            }
-            GUI.Label(new Rect(r.x + 8, r.y + 1, r.width - 16, 23), CompatDialog.Branded(null).ToUpperInvariant(), headStyle);
-            GUI.Label(new Rect(r.x + 10, r.y + 31, r.width - 20, r.height - 36),
-                      (crashNotice != null ? $"<b>{crashNotice}</b>\n" : "") +
-                      (restartForTakeover ? "<b>Keel set up its takeover: restart the game once, then Keel runs every mod.</b>\n" : "") +
-                      $"{bad} mod(s) did not start or threw errors. {Report.Summary(Keel.Plugins)}.\n<b>{hotkey.Value}</b> opens the report.", noteStyle);
-        }
         if (!showWindow)
         {
+            if (Time.realtimeSinceStartup < noticeUntil)
+                DrawNotice(screenH);
             windowCentered = false;
             DrawMenuCards(screenW, screenH);
             return;
@@ -1295,6 +1154,29 @@ internal sealed partial class KeelHost : MonoBehaviour
         EnsureStyles();
         GUI.DrawTexture(new Rect(0, 0, screenW, screenH), shade);
         window = GUI.Window(0x4B45454C, window, DrawWindow, GUIContent.none, windowStyle);
+    }
+
+    // For players who switched the loading window off: a game-style message above the cards at the bottom left of the main menu
+    // (the Keel card, What's new), which are there for the same half minute. Taller with a crash note or the takeover note.
+    private const float NoticeHeight = 70, NoticeHeightTakeover = 120, NoticeHeightCrash = 170;
+
+    private void DrawNotice(float screenH)
+    {
+        int bad = Keel.Plugins.Count(Report.IsProblem);
+        float height = crashNotice != null ? NoticeHeightCrash : restartForTakeover ? NoticeHeightTakeover : NoticeHeight;
+        float above = StackTop;
+        var r = new Rect(20, (float.IsNaN(above) ? screenH - 135 : above - 8) - height, 470, height);
+        EnsureStyles();
+        if (Event.current.type == EventType.Repaint)
+        {
+            DrawBody(r);
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 23), headerBack);
+        }
+        GUI.Label(new Rect(r.x + 8, r.y + 1, r.width - 16, 23), CompatDialog.Branded(null).ToUpperInvariant(), headStyle);
+        GUI.Label(new Rect(r.x + 10, r.y + 31, r.width - 20, r.height - 36),
+                  (crashNotice != null ? $"<b>{crashNotice}</b>\n" : "") +
+                  (restartForTakeover ? "<b>Keel set up its takeover: restart the game once, then Keel runs every mod.</b>\n" : "") +
+                  $"{bad} mod(s) did not start or threw errors. {Report.Summary(Keel.Plugins)}.\n<b>{hotkey.Value}</b> opens the report.", noteStyle);
     }
 
     // ---- What's new (see WhatsNew.cs) ----
@@ -1414,7 +1296,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     // His layout 2026-11-12: the card is a glance (one line per mod), the report window shows two lines per mod and a click on a
     // mod opens all its notes there.
-    private const int NewsMods = 5, NewsLines = 1, ReportNewsLines = 2;
+    private const int NewsMods = 5, ReportNewsLines = 2;
     private readonly HashSet<NewsItem> newsOpen = new();                      // mods opened in the report window
     private readonly Dictionary<NewsItem, Rect> newsRowRects = new();         // their rows, in the scroll view's content
     private Rect newsScrollRect;                                              // the scroll view, in the window
@@ -1439,52 +1321,46 @@ internal sealed partial class KeelHost : MonoBehaviour
         return true;
     }
 
-    /// <summary>One mod in the card (<paramref name="maxLines"/> of its notes) or in the report window (all of them).</summary>
-    private void NewsRow(NewsItem n, int maxLines, bool inReport = false)
+    /// <summary>One mod in the report window's What's new list: two lines of its notes, all of them once clicked open.</summary>
+    private void NewsRow(NewsItem n)
     {
-        bool open = inReport && newsOpen.Contains(n);
-        if (inReport)
-            maxLines = open ? int.MaxValue : ReportNewsLines;
-        int cut = inReport ? 160 : 64;          // the card's line is one row of its width
-        // Clickable in the report when anything is hidden: more lines than shown, or a shown line cut short.
-        bool more = inReport && (n.Lines.Count > ReportNewsLines || n.Lines.Take(ReportNewsLines).Any(l => l.Length > cut));
+        const int cut = 160;
+        bool open = newsOpen.Contains(n);
+        int maxLines = open ? int.MaxValue : ReportNewsLines;
+        // Clickable when anything is hidden: more lines than shown, or a shown line cut short.
+        bool more = n.Lines.Count > ReportNewsLines || n.Lines.Take(ReportNewsLines).Any(l => l.Length > cut);
         EnsureNewsStyles();
         GUILayout.BeginHorizontal(rowStyle);
         GUILayout.Label(n.Tag, newsPills[n.Kind], GUILayout.Width(74), GUILayout.Height(18));
         GUILayout.BeginVertical();
-        string head = n.Kind == NewsKind.Updated && n.From.Length > 0 && n.To.Length > 0 && n.From != n.To
-            ? $"{n.Name}  <color=#{KeelPalette.Muted:X6}>{n.From} → {n.To}</color>"
-            : $"{n.Name}{(n.To.Length > 0 ? $"  <color=#{KeelPalette.Muted:X6}>{n.To}</color>" : "")}";
-        GUILayout.Label(head, newsName);
-        int shown = 0;
-        foreach (string line in n.Lines)
-        {
-            if (shown++ >= maxLines)
-            {
-                if (inReport)
-                    GUILayout.Label($"<color=#7f8a98>… {n.Lines.Count - maxLines} more line(s): click to read all</color>", newsLine);
-                break;
-            }
+        GUILayout.Label(n.VersionText.Length > 0 ? $"{n.Name}  <color=#{KeelPalette.Muted:X6}>{n.VersionText}</color>" : n.Name, newsName);
+        foreach (string line in n.Lines.Take(maxLines))
             GUILayout.Label(maxLines < int.MaxValue && line.Length > cut ? line.Substring(0, cut - 3) + "…" : line, newsLine);
-        }
+        if (n.Lines.Count > maxLines)
+            Hint($"… {n.Lines.Count - maxLines} more line(s): click to read all");
         if (open && more)
-            GUILayout.Label("<color=#7f8a98>click to close</color>", newsLine);
+            Hint("click to close");
         else if (more && n.Lines.Count <= ReportNewsLines)
-            GUILayout.Label("<color=#7f8a98>click to read all</color>", newsLine);
+            Hint("click to read all");
         GUILayout.EndVertical();
         GUILayout.EndHorizontal();
         if (more)
-        {
-            Rect r = GUILayoutUtility.GetLastRect();
-            if (Event.current.type == EventType.Repaint)
-                newsRowRects[n] = r;
-            else if (Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition))
-            {
-                ToggleNews(n);
-                Event.current.Use();
-            }
-        }
+            NewsRowClick(n);
         GUILayout.Space(6);
+    }
+
+    private void Hint(string text) => GUILayout.Label($"<color=#{KeelPalette.Faint:X6}>{text}</color>", newsLine);
+
+    private void NewsRowClick(NewsItem n)
+    {
+        Rect r = GUILayoutUtility.GetLastRect();
+        if (Event.current.type == EventType.Repaint)
+            newsRowRects[n] = r;
+        else if (Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition))
+        {
+            ToggleNews(n);
+            Event.current.Use();
+        }
     }
 
     private void ToggleNews(NewsItem n)
@@ -1501,12 +1377,17 @@ internal sealed partial class KeelHost : MonoBehaviour
     private float lastButton = -10f;
     private bool restarting;
 
-    // A click can arrive through IMGUI and through the device check alike.
-    private bool FreshClick()
+    // A click arrives through IMGUI and through the device check alike: it counts once. A button that starts a program
+    // (KeelWatcher's windows) waits longer, so an impatient second click does not open a second window.
+    private const float ClickSeconds = 0.7f, ProgramClickSeconds = 3f;
+
+    private bool FreshClick() => Cooled(ref lastButton, ClickSeconds);
+
+    private static bool Cooled(ref float at, float seconds)
     {
-        if (Time.realtimeSinceStartup - lastButton < 0.7f)
+        if (Time.realtimeSinceStartup - at < seconds)
             return false;
-        lastButton = Time.realtimeSinceStartup;
+        at = Time.realtimeSinceStartup;
         return true;
     }
 
@@ -1559,7 +1440,6 @@ internal sealed partial class KeelHost : MonoBehaviour
         notes.Add("The held mods run again from the next start: exit and start the game.");
     }
 
-    private Rect restartRect;
     private bool restartArmed;
 
     // Two clicks: a mission in progress is lost with the restart.
@@ -1575,15 +1455,13 @@ internal sealed partial class KeelHost : MonoBehaviour
         RestartGame();
     }
 
-    private Rect logsRect;
     private float logsAt = -10f;
 
     // The zip is made outside the game, by the same program as the crash window.
     private void SaveLogs()
     {
-        if (Time.realtimeSinceStartup - logsAt < 3f)
-            return;     // the game may deliver the click through IMGUI and through the device check alike
-        logsAt = Time.realtimeSinceStartup;
+        if (!Cooled(ref logsAt, ProgramClickSeconds))
+            return;
         WriteReport();
         keelLog?.Flush();
         try
@@ -1598,15 +1476,13 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
     }
 
-    private Rect sendRect;
     private float sendAt = -10f;
 
     // Send report: KeelWatcher packs the logs without the Windows user name, shows them and sends only on the player's click.
     private void SendReport()
     {
-        if (Time.realtimeSinceStartup - sendAt < 3f)
-            return;     // the game may deliver the click through IMGUI and through the device check alike
-        sendAt = Time.realtimeSinceStartup;
+        if (!Cooled(ref sendAt, ProgramClickSeconds))
+            return;
         WriteReport();
         keelLog?.Flush();
         try
@@ -1644,7 +1520,6 @@ internal sealed partial class KeelHost : MonoBehaviour
     // ---- the look of the report ----
 
     private bool windowCentered;
-    private Rect titleCloseRect;
     private GUIStyle windowStyle, headStyle, metaStyle, statsStyle, lineStyle, alertStyle, noteStyle, groupStyle, rowStyle, nameStyle, sourceStyle, bodyStyle, warnStyle, buttonStyle;
     private readonly Dictionary<PluginState, GUIStyle> statusStyles = new();
     private Texture2D shade, track, thumb, headerBack;
@@ -1765,33 +1640,31 @@ internal sealed partial class KeelHost : MonoBehaviour
         GUILayout.EndHorizontal();
     }
 
-    private bool Button(string text, float width, ref Rect rect)
+    // The report's buttons as last drawn (GUI units), each with what it does: a click read from the device hits the same buttons.
+    private readonly List<(Rect spot, Action act)> buttonSpots = new();
+
+    private void Button(string text, float width, Action act)
     {
         bool clicked = GUILayout.Button(text, buttonStyle, GUILayout.Width(width), GUILayout.Height(27));
         if (Event.current.type == EventType.Repaint)
         {
             Rect r = GUILayoutUtility.GetLastRect();
-            rect = new Rect(window.x + r.x, window.y + r.y, r.width, r.height);
+            buttonSpots.Add((new Rect(window.x + r.x, window.y + r.y, r.width, r.height), act));
         }
-        return clicked;
+        if (clicked)
+            act();
     }
+
+    private const float HeaderHeight = 28;
 
     private void DrawWindow(int id)
     {
-        const float headerHeight = 28;
-        var caption = new Rect(0, 0, window.width, headerHeight);
-        var close = new Rect(window.width - 25, 2, 23, 24);
         if (Event.current.type == EventType.Repaint)
-        {
-            GUI.DrawTexture(caption, headerBack);
-            titleCloseRect = new Rect(window.x + close.x, window.y + close.y, close.width, close.height);
-        }
-        GUI.Label(new Rect(9, 0, window.width - 45, headerHeight), "R.A.T.S. KEEL  ·  MOD REPORT", headStyle);
-        GUI.Label(new Rect(0, 0, window.width - 34, headerHeight), $"{Keel.Version}  ·  {GameState.BuildName}", metaStyle);
-        if (GUI.Button(close, "×", buttonStyle)) showWindow = false;
+            buttonSpots.Clear();
+        var close = new Rect(window.width - 25, 2, 23, 24);
+        DrawCaption(close);
         GUILayout.Label(done ? Coloured(Report.SummaryParts(Keel.Plugins)) : "Still starting mods …", statsStyle);
         GUILayout.Box(GUIContent.none, lineStyle, GUILayout.Height(1), GUILayout.ExpandWidth(true));
-
         foreach (string n in notes)
             GUILayout.Label(n, crashNotice != null && crashNotice.Contains(n) ? alertStyle : noteStyle);
         if (setupLine != null)
@@ -1806,11 +1679,44 @@ internal sealed partial class KeelHost : MonoBehaviour
         knob.normal.background = thumb;
         bar.fixedWidth = knob.fixedWidth = 8;
         scroll = GUILayout.BeginScrollView(scroll, false, false, GUIStyle.none, bar, GUIStyle.none);
+        DrawReportList();
+        GUILayout.EndScrollView();
+        if (Event.current.type == EventType.Repaint)
+            newsScrollRect = GUILayoutUtility.GetLastRect();
+        bar.normal.background = barWas;
+        knob.normal.background = knobWas;
+        bar.fixedWidth = barWidth;
+        knob.fixedWidth = knobWidth;
+
+        GUILayout.Space(6);
+        GUILayout.Box(GUIContent.none, lineStyle, GUILayout.Height(1), GUILayout.ExpandWidth(true));
+        DrawButtonRow();
+        GUI.DragWindow(new Rect(0, 0, close.x, HeaderHeight));
+    }
+
+    private void DrawCaption(Rect close)
+    {
+        if (Event.current.type == EventType.Repaint)
+        {
+            GUI.DrawTexture(new Rect(0, 0, window.width, HeaderHeight), headerBack);
+            buttonSpots.Add((new Rect(window.x + close.x, window.y + close.y, close.width, close.height), CloseWindow));
+        }
+        GUI.Label(new Rect(9, 0, window.width - 45, HeaderHeight), "R.A.T.S. KEEL  ·  MOD REPORT", headStyle);
+        GUI.Label(new Rect(0, 0, window.width - 34, HeaderHeight), $"{Keel.Version}  ·  {GameState.BuildName}", metaStyle);
+        if (GUI.Button(close, "×", buttonStyle))
+            CloseWindow();
+    }
+
+    private void CloseWindow() => showWindow = false;
+
+    // What's new, the plugins by group, the DLLs left out, inside the scroll view.
+    private void DrawReportList()
+    {
         if (news is { Count: > 0 })
         {
             GUILayout.Label($"WHAT'S NEW SINCE THE LAST START  ({news.Count})", groupStyle);
             foreach (NewsItem n in news)
-                NewsRow(n, int.MaxValue, inReport: true);
+                NewsRow(n);
             GUILayout.Space(8);
         }
         int group = -1;
@@ -1833,46 +1739,35 @@ internal sealed partial class KeelHost : MonoBehaviour
             GUILayout.Space(8);
             GUILayout.Label($"DLLS LEFT OUT ON PURPOSE  ({skippedDlls.Count})", groupStyle);
             foreach (SkippedDll d in skippedDlls)
-                GUILayout.Label($"<color=#d7dde5>{Path.GetFileName(d.Path)}</color>  ({d.Folder?.Label}): {d.Reason}", noteStyle);
+                GUILayout.Label($"<color=#{KeelPalette.Light:X6}>{Path.GetFileName(d.Path)}</color>  ({d.Folder?.Label}): {d.Reason}", noteStyle);
         }
         GUILayout.Space(8);
         GUILayout.Label($"The same report is in {reportPath}", sourceStyle);
-        GUILayout.EndScrollView();
-        if (Event.current.type == EventType.Repaint)
-        {
-            newsScrollRect = GUILayoutUtility.GetLastRect();
-        }
-        bar.normal.background = barWas;
-        knob.normal.background = knobWas;
-        bar.fixedWidth = barWidth;
-        knob.fixedWidth = knobWidth;
+    }
 
-        GUILayout.Space(6);
-        GUILayout.Box(GUIContent.none, lineStyle, GUILayout.Height(1), GUILayout.ExpandWidth(true));
+    // The row of buttons; on a narrow window the second half goes on a line of its own.
+    private const float ButtonRowWidth = 710, ButtonRowWidthWithEg = 890;
+
+    private void DrawButtonRow()
+    {
         GUILayout.BeginHorizontal();
-        if (Button("Copy report", 120, ref copyRect))
-            GUIUtility.systemCopyBuffer = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
-        if (Button("Save logs", 110, ref logsRect))
-            SaveLogs();
-        if (Button("Send report", 120, ref sendRect))
-            SendReport();
-        bool stackedActions = window.width < (euromod is { AcPack: true } ? 890 : 710);
-        if (stackedActions)
+        Button("Copy report", 120, () => GUIUtility.systemCopyBuffer = Report.Text(Keel.Plugins, Header(), notes, skippedDlls));
+        Button("Save logs", 110, SaveLogs);
+        Button("Send report", 120, SendReport);
+        if (window.width < (euromod is { AcPack: true } ? ButtonRowWidthWithEg : ButtonRowWidth))
         {
             GUILayout.EndHorizontal();
             GUILayout.Space(4);
             GUILayout.BeginHorizontal();
         }
-        if (HeldOffered && Button(heldClicked ? "Restart the game" : "Let held mods run", 160, ref heldRect))
-            HeldButton();
-        if (!HeldOffered && Button(restartArmed ? "Click again to restart" : "Restart the game", 180, ref restartRect))
-            RestartButton();
-        if (euromod is { AcPack: true } && Button(EgLabel(), 170, ref egRect))
-            EgButton();
+        if (HeldOffered)
+            Button(heldClicked ? "Restart the game" : "Let held mods run", 160, HeldButton);
+        else
+            Button(restartArmed ? "Click again to restart" : "Restart the game", 180, RestartButton);
+        if (euromod is { AcPack: true })
+            Button(EgLabel(), 170, EgButton);
         GUILayout.FlexibleSpace();
-        if (Button("Close", 100, ref closeRect))
-            showWindow = false;
+        Button("Close", 100, CloseWindow);
         GUILayout.EndHorizontal();
-        GUI.DragWindow(new Rect(0, 0, close.x, headerHeight));
     }
 }

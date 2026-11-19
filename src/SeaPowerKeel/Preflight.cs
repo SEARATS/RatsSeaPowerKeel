@@ -51,6 +51,47 @@ internal sealed class Preflight : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// What the check of a plugin's DLL means for it, in the game and in the offline check alike: kept out (and why), or started
+    /// with its warnings. <paramref name="matching"/>: see <see cref="MatchingMapBuild"/>; <paramref name="declared"/>: what its
+    /// _info.ini says against this game (InfoVersion), or null.
+    /// </summary>
+    internal static void Judge(PluginEntry p, Result r, string matching, bool strict, string declared)
+    {
+        string why = KeptOutBecause(r, declared, strict);
+        if (why != null)
+        {
+            p.Stop(PluginState.NotStarted, why);
+            return;
+        }
+        if (declared != null)
+            p.Warnings.Add(declared);
+        p.MissingUses.AddRange(r.Uses);
+        if (r.Uses.Count > 0 && matching != null && r.Lookups.Count == 0)
+            p.OtherMapBuildOf = matching;           // expected: a note in the report, no warning (Keel reports #13, #16)
+        else if (r.Uses.Count > 0)
+            p.Warnings.Add($"Uses {r.Uses.Count} thing(s) this game build lacks, e.g. {Report.Short(r.Uses)}. Fine if the mod checks the game version itself; " +
+                           "otherwise expect errors when that part runs.");
+        if (r.Lookups.Count > 0)
+            p.Warnings.Add($"Looks up {r.Lookups.Count} type(s)/method(s) by name that this game build lacks, e.g. {Report.Short(r.Lookups)} (Harmony patch targets, AccessTools and reflection lookups). " +
+                           "That code cannot find its target here: expect errors from the mod, or a part of it that does nothing. (Keel does not check whether a transpiler still matches.)");
+    }
+
+    /// <summary>Why the check keeps a DLL out (GameVersionCheck Standard or Strict), or null when it may start.</summary>
+    internal static string KeptOutBecause(Result r, string declared, bool strict)
+    {
+        bool nothingMissing = r.ClassLoad.Count == 0 && r.Uses.Count == 0 && r.Lookups.Count == 0;
+        if (declared != null && strict && nothingMissing)
+            return $"Made for another game version. {declared} (GameVersionCheck = Strict.)";
+        if (r.ClassLoad.Count > 0)
+            return $"Made for another game version: this build has no {Report.Short(r.ClassLoad)}. Loading it would stop missions from loading, so Keel leaves it out.";
+        if (r.Fatal.Count > 0)
+            return $"A patch of this mod does not fit the game and would read or write the wrong memory: {Report.Short(r.Fatal)}. That can crash the game, so Keel leaves it out.";
+        if (!nothingMissing && strict)
+            return $"Made for another game version: this build has no {Report.Short(r.Uses.Concat(r.Lookups).ToList())} (GameVersionCheck = Strict).";
+        return null;
+    }
+
     private readonly HashSet<string> gameAssemblies;
     private readonly DefaultAssemblyResolver resolver = new();
     private readonly Dictionary<string, bool> exists = new();

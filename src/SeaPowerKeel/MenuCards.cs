@@ -356,7 +356,7 @@ internal sealed partial class KeelHost
         foreach (NewsItem n in news.Take(count))
         {
             float tx = r.x + padX + 84, tw = inner - 84;
-            string ver = n.Kind == NewsKind.Updated && n.From.Length > 0 && n.To.Length > 0 && n.From != n.To ? $"{n.From} → {n.To}" : n.To;
+            string ver = n.VersionText;
             // name and version on one line: the version goes first when it does not fit, then the name is cut
             string head = ver.Length > 0 && oneName.CalcSize(new GUIContent($"{n.Name}  {ver}")).x <= tw
                 ? $"{n.Name}  <color=#{KeelPalette.Muted:X6}>{ver}</color>"

@@ -32,17 +32,11 @@ internal sealed class NewsItem
         _ => "PROBLEM",
     };
 
-    public string Headline
-    {
-        get
-        {
-            if (Kind == NewsKind.Updated && From != To && From.Length > 0 && To.Length > 0)
-                return $"{Name}  {From} → {To}";
-            if (Kind != NewsKind.Gone && To.Length > 0)
-                return $"{Name}  {To}";
-            return Name;
-        }
-    }
+    /// <summary>"1.0 → 1.1" for an update, else the version it has (may be empty).</summary>
+    public string VersionText => Kind == NewsKind.Updated && From != To && From.Length > 0 && To.Length > 0 ? $"{From} → {To}" : To;
+
+    /// <summary>The name with <see cref="VersionText"/>; a gone mod by its name only.</summary>
+    public string Headline => Kind == NewsKind.Gone || VersionText.Length == 0 ? Name : $"{Name}  {VersionText}";
 }
 
 /// <summary>What Keel saw of one mod folder at a start.</summary>
