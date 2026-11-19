@@ -10,9 +10,9 @@ namespace SeaPowerKeel;
 /// <summary>
 /// Checks a mod DLL against the game that is running, before it is loaded: every type, method and field it uses from the
 /// game's own assemblies must exist in this build. The same check as the workspace's compat-check tool, done in the game.
-/// <para>Two kinds of findings. A <b>class-load</b> problem (a type of the mod derives from, implements or has a field of a
+/// <para>Two kinds of findings. A class-load problem (a type of the mod derives from, implements or has a field of a
 /// type this build lacks) breaks more than the mod: Unity's ECS start-up walks every type of every loaded assembly, throws
-/// on such a type, and then no mission loads at all. Such a DLL is never loaded. A missing <b>method or field use</b> only
+/// on such a type, and then no mission loads at all. Such a DLL is never loaded. A missing method or field use only
 /// fails when that code runs, so the mod may well work (it can check the build itself first); that is a warning.</para>
 /// </summary>
 internal sealed class Preflight : IDisposable

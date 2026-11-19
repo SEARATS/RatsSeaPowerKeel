@@ -6,12 +6,10 @@ namespace SeaPowerKeel;
 
 /// <summary>
 /// The order of work once the plan is made, kept apart from Unity so it can be tested offline:
-/// <list type="number">
-/// <item>every plugin is loaded, every Anchor Chain mod created (<see cref="Prepare"/>), one per step;</item>
-/// <item>whatever dropped out meanwhile takes its dependants with it (<see cref="Replan"/>);</item>
-/// <item>Anchor Chain is looked for once more (<see cref="HandOver"/>): if it is running, its mods are its own;</item>
-/// <item>the rest starts in plan order (<see cref="Start"/>), one per step, and Anchor Chain is looked for before each of its mods.</item>
-/// </list>
+/// - every plugin is loaded, every Anchor Chain mod created (<see cref="Prepare"/>), one per step;
+/// - whatever dropped out meanwhile takes its dependants with it (<see cref="Replan"/>);
+/// - Anchor Chain is looked for once more (<see cref="HandOver"/>): if it is running, its mods are its own;
+/// - the rest starts in plan order (<see cref="Start"/>), one per step, and Anchor Chain is looked for before each of its mods.
 /// The game gets a frame between steps (the caller yields for each element this returns).
 /// </summary>
 internal sealed class Sequencer

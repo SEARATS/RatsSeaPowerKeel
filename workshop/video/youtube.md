@@ -4,7 +4,7 @@
 
 - Live: https://youtu.be/m66tiCyWSNw · thumbnail `thumb-install.jpg`
 
-**Title:** R.A.T.S. Keel – Install the Sea Power mod loader on a clean game
+**Title:** R.A.T.S. Keel - Install the Sea Power mod loader on a clean game
 
 **Description:**
 - R.A.T.S. Keel: the mod loader for Sea Power. Replaces Anchor Chain and Alpine's Mod Loader.
@@ -17,7 +17,7 @@
 
 - Live: https://youtu.be/JrRR7d8NbhU · thumbnail `thumb-breaks.jpg`
 
-**Title:** R.A.T.S. Keel – What happens when a Sea Power mod breaks
+**Title:** R.A.T.S. Keel - What happens when a Sea Power mod breaks
 
 **Description:**
 - A mod that fails: the Keel card turns amber, the report says which mod and why.
@@ -29,7 +29,7 @@
 
 - Live: https://youtu.be/vc_UddZHn0g · thumbnail `thumb-switch.jpg`
 
-**Title:** R.A.T.S. Keel – Switch from Anchor Chain or Alpine's Mod Loader
+**Title:** R.A.T.S. Keel - Switch from Anchor Chain or Alpine's Mod Loader
 
 **Description:**
 - Nothing to uninstall: KeelSetup sets the other loader aside, Keel runs every mod.

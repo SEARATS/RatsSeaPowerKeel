@@ -11,7 +11,7 @@ namespace SeaPowerKeel;
 /// <summary>
 /// <c>BepInEx\Keel-log.txt</c>: everything BepInEx logs (the game's own Unity log lines included, and every mod's), each line
 /// with the time of day and the time since the game started, plus the mod an error belongs to when Keel can tell. BepInEx 5's
-/// LogOutput.log has no times and is overwritten at every start; Keel keeps the last sessions (Keel-log.1.txt, .2.txt …).
+/// LogOutput.log has no times and is overwritten at every start; Keel keeps the last sessions (Keel-log.1.txt, .2.txt ...).
 /// </summary>
 internal sealed class KeelLog : ILogListener
 {

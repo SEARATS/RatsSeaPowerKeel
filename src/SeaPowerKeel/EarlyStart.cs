@@ -11,10 +11,8 @@ namespace SeaPowerKeel;
 /// only after the game's start-up load screen is done, because mods started during it can keep the unit data from loading (and
 /// can crash in Noesis). A mod that knows it is safe there, and needs to be running while the game loads, asks for it, without
 /// referencing Keel:
-/// <list type="bullet">
-/// <item>in its <c>_info.ini</c>: a <c>[Keel]</c> section with <c>StartEarly=true</c> (every plugin in that mod folder), or</item>
-/// <item>in its DLL: <c>[assembly: System.Reflection.AssemblyMetadata("Keel.StartEarly", "true")]</c> (every plugin in that DLL).</item>
-/// </list>
+/// - in its <c>_info.ini</c>: a <c>[Keel]</c> section with <c>StartEarly=true</c> (every plugin in that mod folder), or
+/// - in its DLL: <c>[assembly: System.Reflection.AssemblyMetadata("Keel.StartEarly", "true")]</c> (every plugin in that DLL).
 /// Early mods start as soon as Keel has checked them, before the load screen ends; every other mod waits as before. An early mod
 /// that needs (or must start after) a mod that waits starts with the others, and the report says why.
 /// </summary>

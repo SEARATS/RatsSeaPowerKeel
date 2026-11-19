@@ -443,7 +443,7 @@ internal sealed partial class KeelHost
         newsLink = One(Text(newsFoot.fontSize, KeelPalette.Accent));
     }
 
-    /// <summary><paramref name="text"/> cut (with …) to what fits <paramref name="width"/> in <paramref name="style"/> on one line.</summary>
+    /// <summary><paramref name="text"/> cut (with ...) to what fits <paramref name="width"/> in <paramref name="style"/> on one line.</summary>
     private static string Fit(string text, GUIStyle style, float width)
     {
         if (string.IsNullOrEmpty(text) || style.CalcSize(new GUIContent(text)).x <= width)

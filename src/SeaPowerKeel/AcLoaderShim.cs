@@ -13,13 +13,11 @@ namespace SeaPowerKeel;
 /// What a mod that touches Anchor Chain's <c>AnchorChainLoader</c> class needs when Keel, not Anchor Chain, runs the mods.
 /// Euromod's Sonar Audio Loader (CustomAudioLoader.dll) calls <c>AnchorChainLoader.FindFile</c> to find audio and mapping
 /// files that live in OTHER mods' folders. Two things are then missing:
-/// <list type="bullet">
-/// <item>The class implements <c>AnchorChain.Preloader.IPluginLoader</c>, which lives in <c>AnchorChain.Preloader.dll</c>, a
+/// - The class implements <c>AnchorChain.Preloader.IPluginLoader</c>, which lives in <c>AnchorChain.Preloader.dll</c>, a
 /// BepInEx plugin. Without that DLL (Keel's setup removes it) the class cannot be loaded at all: a <c>TypeLoadException</c> at
-/// the first call. <see cref="BuildPreloaderStub"/> makes an assembly of that name with just that interface.</item>
-/// <item><c>FindFile</c> searches a private static list of mod folders that only Anchor Chain's own loader fills.
-/// <see cref="Prime"/> fills it (and <c>_configPath</c>) the way Anchor Chain's <c>Setup</c> does.</item>
-/// </list>
+/// the first call. <see cref="BuildPreloaderStub"/> makes an assembly of that name with just that interface.
+/// - <c>FindFile</c> searches a private static list of mod folders that only Anchor Chain's own loader fills.
+/// <see cref="Prime"/> fills it (and <c>_configPath</c>) the way Anchor Chain's <c>Setup</c> does.
 /// </summary>
 internal static class AcLoaderShim
 {

@@ -1320,7 +1320,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private Rect newsScrollRect;                                              // the scroll view, in the window
 
     // A click at a GUI position: the X closes the card, anywhere else on it opens the report window at its What's new list
-    // (every changed mod, old → new version, all of the author's lines). The card stays until its X is clicked. A click reaches
+    // (every changed mod, old -> new version, all of the author's lines). The card stays until its X is clicked. A click reaches
     // Keel through IMGUI and through the device check alike: it counts once.
     private bool NewsClick(Vector2 gui, int button = 0)
     {

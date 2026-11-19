@@ -25,7 +25,7 @@ For the build after 0.4.0 (takeover, self-installing patcher) together with the 
 
 1. Close the game. Rename `AnchorChain.Preloader.dll.keel-off` back to `AnchorChain.Preloader.dll` (Alpine's file, 0.2.1).
 2. Start. **Expect:** the patcher (installed in run 1) keeps it from starting: LogOutput "Not starting Alpine's Mod
-   Loader …", `Keel-takeover.txt` lists it, Keel's report says "Takeover: Alpine's Mod Loader is installed but was kept from
+   Loader ...", `Keel-takeover.txt` lists it, Keel's report says "Takeover: Alpine's Mod Loader is installed but was kept from
    starting", every mod RUNNING under Keel (no OTHER LOADER), Euromod's AC Pack included. **Screenshot of the report.**
 3. Run a mission (Intro 01) briefly: no double start (no mod's log line twice).
 

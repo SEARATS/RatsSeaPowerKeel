@@ -10,7 +10,7 @@
 
 > **Status (18 November 2026, game 0.9.3):** 0.6.0 was run in the test VM on game 0.9.3, public and beta: setup and Restore, cards, report, What's new, two missions, a game ended from outside and the start after it; every row green. Test notes: [docs/test-2026-11-18-0.6.0.md](docs/test-2026-11-18-0.6.0.md).
 
-*R.A.T.S. – Reconnaissance, Acoustics, Terrain & Signals*
+*R.A.T.S. - Reconnaissance, Acoustics, Terrain & Signals*
 
 **Bugs, ideas, questions:** [R.A.T.S. feedback board](https://hub.sewerlabs.dev/s/keel)
 
@@ -37,7 +37,7 @@ folders, sort out dependencies and start order, start them), and on top of that:
 - **Stops what it can see coming.** A patch whose parameters do not fit the game method is kept out, because it would corrupt memory. Empty or broken pictures and sounds in mods are listed in the report.
 - **Crashes from packs get a name too:** if the game was loading a mod's file just before it crashed, the window says which one and can switch that mod off.
 - **Says what happened.** Ctrl+Shift+K in the game shows every mod: running, running with errors, not started and why
-  (missing dependency and the version it needs, a conflict, the wrong game build …). Errors a mod throws later are counted
+  (missing dependency and the version it needs, a conflict, the wrong game build ...). Errors a mod throws later are counted
   against it. The same report is in `BepInEx\Keel-report.txt`, and a short notice appears after start-up when something
   went wrong.
 - **Always works on the beta branch.** Keel uses nothing of the game that changes between builds; on the 3D globe beta, where
@@ -47,11 +47,11 @@ folders, sort out dependencies and start order, start them), and on top of that:
   button (writes the AC Pack's own switch, counts from the next start), and an AC Pack older than its 0.9 fix is named.
 - **Mods that wait for the end of the start-up load screen** (to add menu entries, like the Alternative mods) get it once after Keel
   started them, since Keel starts mods after that screen.
-- **What's new since your last game.** Keel remembers the mods it loaded (`BepInEx\Keel-seen.txt`). When something changed, What's new splits off the Keel card at the bottom left of the main menu (it grows upwards and pushes the Keel card above it, never over EXIT) and names the mods that are new, updated (with the version jump), gone, or ran last time and fail now, with the first lines of what the author wrote about the update: for Workshop mods the change notes written since your last start (read from the item's public Steam changelog page, only for mods that changed; `WhatsNew.WorkshopNotes = false` switches that off), else the mod's `CHANGELOG.md` (the sections above the version you had). Its × closes it; a click anywhere else on it opens the full list (every changed mod, old → new version, all of the author's lines) in Keel's report window, which Ctrl+Shift+K shows too; the card goes when a mission starts. The first start with it says nothing (nothing to compare with yet).
+- **What's new since your last game.** Keel remembers the mods it loaded (`BepInEx\Keel-seen.txt`). When something changed, What's new splits off the Keel card at the bottom left of the main menu (it grows upwards and pushes the Keel card above it, never over EXIT) and names the mods that are new, updated (with the version jump), gone, or ran last time and fail now, with the first lines of what the author wrote about the update: for Workshop mods the change notes written since your last start (read from the item's public Steam changelog page, only for mods that changed; `WhatsNew.WorkshopNotes = false` switches that off), else the mod's `CHANGELOG.md` (the sections above the version you had). Its × closes it; a click anywhere else on it opens the full list (every changed mod, old -> new version, all of the author's lines) in Keel's report window, which Ctrl+Shift+K shows too; the card goes when a mission starts. The first start with it says nothing (nothing to compare with yet).
 - **A log with times.** `BepInEx\Keel-log.txt` has every log line of the game, BepInEx and all mods with the time of day and
   the seconds since the game started; an exception gets a line saying which mod it came from, with its stack trace (also in
   LogOutput.log). BepInEx's own log has no times and is overwritten at every start; Keel keeps the last sessions too
-  (`Keel-log.1.txt`, `.2.txt`, …).
+  (`Keel-log.1.txt`, `.2.txt`, ...).
 - **One DLL for both game builds** (the flat map of 0.8.7 and the 3D globe build): Keel references no game assembly.
 - **The hand-installed part never changes.** The stub in `BepInEx\plugins` only finds and starts Keel; every update comes
   through the Workshop.
@@ -246,4 +246,4 @@ Keel reads Anchor Chain mods through their public attributes and interface so pl
   plugin ids `dev.sewerlabs.seapowerkeel*` belong to the author; all rights reserved.
 - Anchor Chain's library (`lib/`, MIT) and BepInEx keep their own licenses: [lib/THIRD-PARTY.txt](lib/THIRD-PARTY.txt).
 
-*R.A.T.S. – Ratte's Assorted Tactical Systems*
+*R.A.T.S. - Ratte's Assorted Tactical Systems*

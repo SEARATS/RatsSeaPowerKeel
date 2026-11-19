@@ -27,7 +27,7 @@ After `test-plan-takeover.md` is green and the release is on the Workshop, so th
 
 ## Finishing
 
-- Short title cards in the R.A.T.S. look (`..\..\BRANDING.md`): "R.A.T.S. Keel – install in one click", one line per
+- Short title cards in the R.A.T.S. look (`..\..\BRANDING.md`): "R.A.T.S. Keel - install in one click", one line per
   step, the footer line. No voice, no music needed; 60-90 s.
 - Output `workshop/video/keel-install.mp4`, shown to him first.
 - The Workshop takes only a YouTube link. **He uploads it to YouTube** (his account); then

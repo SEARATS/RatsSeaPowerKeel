@@ -27,7 +27,7 @@ Left as: Euromod Main, US Naval Aviation, Cost Tracker and AC Pack ticked in his
 | AC Pack settings gear writes `submods.ini` | **Yes:** a click on *Enable Extended Guidance* wrote `euromod.extended-guidance=true` at once. |
 | Mod Manager+ (3716097076) and Boost Loader (3606934378), both Anchor Chain mods by sebase11 | **Start under Keel**, 43 mods "No problems". Boost Loader (last update 2025-11) calls `FileManager.GetAllFiles(String, String)`, gone in 0.9.x: Keel warns, its part that uses it will fail. Mod Manager+ patches the game's compatibility check and Mod Manager; Keel's Restart button still showed (Mod Manager+'s own menu not looked at). Both subscribed for the test, unticked afterwards. |
 | ALTERNATIVE MODS menu entry missing on some starts | **Found and fixed:** the Alternative mods add it when the load screen's coroutine ends; Keel started them after that end. Keel now calls such a postfix once (`LoadScreenEnd`); in the game the entry is there and the log names the three mods. |
-| What's new | Author notes clean (*Fixes: fixed RAM launch angles…*); card below the AC Pack's gear; CHANGELOG lines of our own mods shown. |
+| What's new | Author notes clean (*Fixes: fixed RAM launch angles...*); card below the AC Pack's gear; CHANGELOG lines of our own mods shown. |
 | Version question top bar | *MESSAGE · R.A.T.S. KEEL*, list without the Keel sentence. |
 | AC Pack OptimalTargetDist | Its two transpilers do not fit 0.9.1 ("Unrecognized launch layout", "Unknown AAW rejection layout"); under Alpine it is a dialog, under Keel two log lines. The AC Pack's own issue. |
 
@@ -42,7 +42,7 @@ Run from TESTING.md, plan `docs/test-plan-0.5.0.md`. Two runs and one fix run be
 | 1 | Version question | GREEN: top bar *MESSAGE · R.A.T.S. KEEL*, list without the Keel sentence (driver picture) |
 | 2 | Keel card | GREEN: "Keel 0.5.0 started 41 mods in 19 s" |
 | 3 | Hand-over and split | GREEN: hand-over without a blink, split seen live by him ("very cool animation"); frames of the later phases in the burst |
-| 3a | Inside the grey panel, under EXIT | run 1 RED (cards wider than the panel, notes wrapping) → fixed → run 2 GREEN: panel width, one line each, above the version text |
+| 3a | Inside the grey panel, under EXIT | run 1 RED (cards wider than the panel, notes wrapping) -> fixed -> run 2 GREEN: panel width, one line each, above the version text |
 | 3b | Behaviour | GREEN: × closes What's new and the Keel card glides down; right click leaves it (always visible); Scenarios hides both |
 | 4/5 | Card click, report rows | GREEN: report opens at WHAT'S NEW; Radio row opens all notes, "click to close" |
 | 6 | Report line 1 | GREEN: `Sea Power 0.9.1-261112, 3D globe map` |
@@ -81,7 +81,7 @@ in run 2: panel width and one-line text; the Keel card no longer fades. Driver a
 
 | # | Check | Result |
 |---|---|---|
-| 1 | Keel card has an × | **GREEN:** × top right, title not cut. His finding: not at the same spot as What's new's → fixed (`CloseSpot`, both cards), second start: both × line up |
+| 1 | Keel card has an × | **GREEN:** × top right, title not cut. His finding: not at the same spot as What's new's -> fixed (`CloseSpot`, both cards), second start: both × line up |
 | 2 | No fade | **GREEN:** both cards still up 102 s after they showed |
 | 3 | Right click does nothing | **GREEN:** right click on both cards, both stay |
 | 4 | What's new × | **GREEN:** closes, the Keel card glides down |

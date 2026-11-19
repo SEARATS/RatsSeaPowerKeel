@@ -19,7 +19,7 @@ His wish 2026-11-12. **Built in 0.5.0** (`src/SeaPowerKeel/MenuCards.cs`, the ov
   - It pushes the Keel summary card up above it.
 - **Hard limit:** the summary card must never cover the main menu's **EXIT** entry (nor any other menu entry). If there is not
   enough room, What's new gets shorter (fewer mods, "+N more") instead of pushing the summary card higher.
-- No What's new (nothing changed) → no split, the summary card stays as today.
+- No What's new (nothing changed) -> no split, the summary card stays as today.
 
 ## What stays as today
 
