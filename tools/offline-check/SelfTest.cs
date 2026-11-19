@@ -964,19 +964,49 @@ internal static class SelfTest
         Check(loaderInterface != null && loaderInterface.IsInterface && loaderInterface.IsPublic && load != null && load.ReturnType == typeof(void) && load.GetParameters().Length == 0,
               "  with public interface AnchorChain.Preloader.IPluginLoader { void LoadPlugins(); }");
 
-        // FindFile finds nothing until Keel fills the folder list; then it finds a file of another mod, as under Anchor Chain
         string a = MakeFolder(tmp, "ff-a"), b = MakeFolder(tmp, "ff-b"), cfg = Path.Combine(tmp, "ff-config");
         Directory.CreateDirectory(cfg);
         File.WriteAllText(Path.Combine(b, "Sonar-X.wav"), "x");
-        Check(AnchorChainLoader.FindFile("Sonar-X.wav") == null, "before: FindFile finds nothing (Anchor Chain's loader never ran)");
+        File.WriteAllText(Path.Combine(cfg, "mod.x_user.ini"), "x");
+        ShippedLoaderShim(stub, a, b, cfg);
+
+        // Anchor Chain 1.2.0 (the source under anchor-chain\): FindFile reads the game's mod list itself, then _configPath
         string why = AcLoaderShim.Prime(typeof(AnchorChainLoader).Assembly, new[] { a, b }, cfg);
-        Check(why == null, "Prime reports success");
-        Check(AnchorChainLoader.FindFile("Sonar-X.wav") == Path.Join(b, "Sonar-X.wav"), "after: FindFile finds a file in another mod's folder");
-        Check(AnchorChainLoader.ConfigPath == cfg, "  _configPath is set like Anchor Chain's Setup does");
-        AcLoaderShim.Prime(typeof(AnchorChainLoader).Assembly, new[] { b }, cfg);
-        Check(AnchorChainLoader.FolderCount == 3, "  priming twice does not list a folder twice (" + AnchorChainLoader.FolderCount + " folders)");
+        Check(why == null && AnchorChainLoader.FindFile("mod.x_user.ini") == Path.Join(cfg, "mod.x_user.ini"),
+              "1.2.0 shape: only _configPath is set, and FindFile finds a player config there (" + why + ")");
         string missing = AcLoaderShim.Prime(stub, new[] { a }, cfg);
         Check(missing != null && missing.Contains("is not in"), "an Anchor Chain DLL without AnchorChainLoader: reported, not thrown (" + missing + ")");
+    }
+
+    // Anchor Chain 1.1.0, the very library Keel ships (lib\AnchorChain.keel.bin, copied next to this tool): its FindFile searches a
+    // folder list only its own loader fills. Run against the real file, so a library of another shape fails here.
+    private static void ShippedLoaderShim(Assembly stub, string a, string b, string cfg)
+    {
+        string bin = Path.Combine(AppContext.BaseDirectory, "AnchorChain.keel.bin");
+        ResolveEventHandler preloader = (_, e) => new AssemblyName(e.Name).Name == AcLoaderShim.PreloaderAssembly ? stub : null;
+        AppDomain.CurrentDomain.AssemblyResolve += preloader;
+        try
+        {
+            Assembly shipped = Assembly.LoadFile(bin);
+            Type loader = shipped.GetType(AcLoaderShim.LoaderType, throwOnError: true);
+            string FindFile(string name) => (string)loader.GetMethod("FindFile").Invoke(null, new object[] { name });
+            Check(shipped.GetName().Version == new Version(1, 1, 0, 0), "the shipped library is Anchor Chain 1.1.0: " + shipped.GetName().FullName);
+            Check(FindFile("Sonar-X.wav") == null, "before: FindFile finds nothing (Anchor Chain's loader never ran)");
+            string why = AcLoaderShim.Prime(shipped, new[] { a, b }, cfg);
+            Check(why == null && FindFile("Sonar-X.wav") == Path.Join(b, "Sonar-X.wav"), "after: FindFile finds a file in another mod's folder (" + why + ")");
+            Check(FindFile("mod.x_user.ini") == Path.Join(cfg, "mod.x_user.ini"), "  and a player config in _configPath's folder, like Anchor Chain's Setup");
+            AcLoaderShim.Prime(shipped, new[] { b }, cfg);
+            int count = ((HashSet<DirectoryInfo>)loader.GetField("_allDirectories", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null)).Count;
+            Check(count == 3, "  priming twice does not list a folder twice (" + count + " folders)");
+        }
+        catch (Exception ex)
+        {
+            Check(false, "the shipped Anchor Chain library could not be primed: " + (ex.InnerException ?? ex).Message);
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.AssemblyResolve -= preloader;
+        }
     }
 
     // ---- 7. incompatibility ----
@@ -1088,23 +1118,14 @@ namespace AnchorChain
     [AttributeUsage(AttributeTargets.Class)] public class ACConfig : Attribute { public ACConfig(bool required = true) { } }
     public interface IAnchorChainMod { void TriggerEntryPoint(); }
 
-    // The part of Anchor Chain's AnchorChainLoader that mods call (FindFile), as in its source.
+    // The part of Anchor Chain 1.2.0's AnchorChainLoader that mods call (FindFile), as in anchor-chain\AnchorChain\Main.cs; the
+    // game's checked mod folders it reads first are not there outside the game.
     public class AnchorChainLoader
     {
-        private static HashSet<System.IO.DirectoryInfo> _allDirectories = new();
         private static string _configPath = string.Empty;
-        public static string ConfigPath => _configPath;
-        public static int FolderCount => _allDirectories.Count;
 
-        public static string FindFile(string fileName)
-        {
-            foreach (System.IO.DirectoryInfo dir in _allDirectories)
-            {
-                string path = System.IO.Path.Join(dir.FullName, fileName);
-                if (System.IO.File.Exists(path)) return path;
-            }
-            return null;
-        }
+        public static string FindFile(string fileName) =>
+            new[] { System.IO.Path.Join(_configPath, fileName) }.FirstOrDefault(System.IO.File.Exists);
     }
 }
 

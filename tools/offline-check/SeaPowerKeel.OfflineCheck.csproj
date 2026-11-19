@@ -18,6 +18,8 @@
     <Reference Include="Mono.Cecil"><HintPath>$(BepInExCore)\Mono.Cecil.dll</HintPath></Reference>
     <Reference Include="BepInEx"><HintPath>$(BepInExCore)\BepInEx.dll</HintPath></Reference>
     <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>
+    <!-- the Anchor Chain library Keel ships: the self-test primes it as Keel does in the game -->
+    <None Include="..\..\lib\AnchorChain.keel.bin" CopyToOutputDirectory="PreserveNewest" Link="AnchorChain.keel.bin" />
   </ItemGroup>
 
 </Project>
