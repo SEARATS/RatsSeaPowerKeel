@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="..\SeaPowerKeel\CrashText.cs" Link="CrashText.cs" />
     <Compile Include="..\SeaPowerKeel\ReportFacts.cs" Link="ReportFacts.cs" />
+    <Compile Include="..\SeaPowerKeel\ReportFormat.cs" Link="ReportFormat.cs" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />

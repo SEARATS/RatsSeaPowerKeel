@@ -194,7 +194,9 @@ internal sealed partial class KeelHost : MonoBehaviour
         };
         reportPath = Path.Combine(Paths.BepInExRootPath, "Keel-report.txt");
         Loading.LoadingWindow.Start(config, log);      // first, so it opens before the slow steps that follow (see docs/loading-window.md)
-        log.LogInfo($"{Keel.Name} {Keel.Version} (stub {StubVersion}) on the {GameState.BuildName}, from {OwnPath}");
+        string hello = $"{Keel.Name} {Keel.Version} (stub {StubVersion}) on the {GameState.BuildName}, from {OwnPath}";
+        log.LogInfo(hello);
+        Window?.KeelStarted(Keel.Version, hello);
         StartCoroutine(Run());
     }
 
@@ -228,7 +230,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         else
         {
-            log.LogInfo($"The game's mod list is there (waited {watch.Elapsed.TotalSeconds:0.0} s).");
+            Say($"The game's mod list is there (waited {watch.Elapsed.TotalSeconds:0.0} s).", (w, l) => w.ModListThere(l));
         }
 
         List<ModFolder> enabled = folders.Where(f => f.Enabled).ToList();
@@ -237,6 +239,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         watch.Restart();
         Keel.Plugins.AddRange(Scanner.Scan(enabled, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory));
         log.LogInfo($"Found {Keel.Plugins.Count} plugin(s) in {Keel.Plugins.Select(p => p.Dll).Distinct().Count()} DLL(s) ({watch.ElapsedMilliseconds} ms).");
+        Window?.Found(Keel.Plugins.Count);
         foreach (SkippedDll d in skippedDlls)
             log.LogInfo($"DLL left out: {d.Path} - {d.Reason}");
 
@@ -247,7 +250,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (GameState.Globe && !early)
             yield return WaitForLoadScreen();
 
-        log.LogInfo($"{enabled.Count} of {folders.Count} mod folders are on.");
+        Say($"{enabled.Count} of {folders.Count} mod folders are on.", (w, l) => w.FoldersOn(l));
         DetectSetups(enabled);
         if (whatsNewOn.Value)
             StartWhatsNew(enabled);
@@ -331,16 +334,19 @@ internal sealed partial class KeelHost : MonoBehaviour
                 runner.Start(p);
             },
             // Logged before the start: a mod that holds the game up for seconds is named while it does (the loading window shows it).
-            Starting = (p, index, total) => log.LogInfo($"STARTING {index}/{total}: {p.Display} {p.Version} ({p.Folder.Label})"),
+            Starting = (p, index, total) =>
+            {
+                log.LogInfo($"STARTING {index}/{total}: {p.Display} {p.Version} ({p.Folder.Label})");
+                Window?.Starting(index, total, $"{p.Display} {p.Version}");
+            },
             Replan = () => Planner.Replan(Keel.Plugins, elsewhere),
             HandOver = when => LeaveToAnchorChain(runner, elsewhere, when),
             Prepared = p =>
             {
                 if (p.State == PluginState.Failed)
-                    log.LogError($"{Report.Tag(p.State)}: {p.Display} {p.Version} ({p.Folder.Label}) - {p.Reason}");
+                    LogResult(p);
             },
-            Started = p => log.Log(p.State == PluginState.Running ? LogLevel.Info : LogLevel.Error,
-                                   $"{Report.Tag(p.State)}: {p.Display} {p.Version} ({p.Folder.Label}){(p.Reason.Length > 0 ? " - " + p.Reason : "")}"),
+            Started = LogResult,
         };
         int started = 0;
         if (early)
@@ -372,13 +378,16 @@ internal sealed partial class KeelHost : MonoBehaviour
         foreach (string line in LoadScreenEnd.Replay(loadScreenHooks))
             log.LogInfo(line);
         foreach (PluginEntry p in Keel.Plugins.Where(p => p.State is PluginState.NotStarted))
-            log.LogWarning($"NOT STARTED: {p.Display} {p.Version} ({p.Folder.Label}) – {p.Reason}");
+            LogResult(p);
 
         crash?.Mark("done", "");
         done = true;
         UpdateLoadOrderWarnings();
         log.LogInfo($"Started {started} plugin(s) in {watch.ElapsedMilliseconds} ms, one per frame.");
-        log.LogInfo($"Done: {Report.Summary(Keel.Plugins)}. Report: {reportPath} or {hotkey.Value} in the game.");
+        Window?.StartedIn(watch.ElapsedMilliseconds);
+        string summary = $"Done: {Report.Summary(Keel.Plugins)}. Report: {reportPath} or {hotkey.Value} in the game.";
+        log.LogInfo(summary);
+        Window?.Done(summary);
         WriteReport();
         // Shown once the main menu is up (the start-up load screen can last minutes), see Update.
         // The summary card says it, and a click on it opens the report; the notice is for players who switched that window off.
@@ -493,8 +502,7 @@ internal sealed partial class KeelHost : MonoBehaviour
                 Replan = () => Planner.Replan(Keel.Plugins, elsewhere),
                 Started = p =>
                 {
-                    log.Log(p.State == PluginState.Running ? LogLevel.Info : LogLevel.Error,
-                            $"{Report.Tag(p.State)}: {p.Display} {p.Version} ({p.Folder.Label}){(p.Reason.Length > 0 ? " - " + p.Reason : "")}");
+                    LogResult(p);
                     // Written after every mod: a report sent (or a crash) in the middle of a reload shows how far it got
                     // (a player's report 2026-11-12 showed 3 mods while the log had started 27 of 30).
                     WriteReport();
@@ -531,7 +539,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         var wait = Stopwatch.StartNew();
         while (!GameState.StartupDone() && wait.Elapsed.TotalSeconds < 180)
             yield return new WaitForSecondsRealtime(0.25f);
-        log.LogInfo($"Start-up load screen done (waited {wait.Elapsed.TotalSeconds:0.0} s).");
+        Say($"Start-up load screen done (waited {wait.Elapsed.TotalSeconds:0.0} s).", (w, l) => w.LoadScreenDone(l));
     }
 
     // The window a player sees when the game dies has to come from outside the game.
@@ -770,6 +778,23 @@ internal sealed partial class KeelHost : MonoBehaviour
             if (preflight.IndexMs > 0)
                 log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");
         }
+    }
+
+    private static Loading.Progress Window => Loading.LoadingWindow.Progress;
+
+    // A step the loading window shows: logged, and handed to the window as the same line.
+    private void Say(string line, Action<Loading.Progress, string> tell)
+    {
+        log.LogInfo(line);
+        if (Window != null)
+            tell(Window, line);
+    }
+
+    // A mod's result: the log line, and the same result to the loading window as data.
+    private void LogResult(PluginEntry p)
+    {
+        log.Log(p.State == PluginState.Running ? LogLevel.Info : p.State == PluginState.NotStarted ? LogLevel.Warning : LogLevel.Error, Report.ResultLine(p));
+        Window?.Result($"{p.Display} {p.Version}", p.State);
     }
 
     private void Warn(string message)
@@ -1632,13 +1657,16 @@ internal sealed partial class KeelHost : MonoBehaviour
             statusStyles[state] = StatusText(color);
     }
 
-    private static string Coloured(string summary) => string.Join("   ·   ", summary.Split(new[] { ", " }, StringSplitOptions.None).Select(part =>
+    private static string Coloured(List<(string text, Tone tone)> parts) => string.Join("   ·   ", parts.Select(part =>
     {
-        uint color = part.Contains("failed") || part.Contains("not started") ? KeelPalette.Red
-                   : part.Contains("errors") || part.Contains("warning") ? KeelPalette.Amber
-                   : part.Contains("loader") ? KeelPalette.Blue
-                   : KeelPalette.Green;
-        return $"<color=#{color:X6}>{part}</color>";
+        uint color = part.tone switch
+        {
+            Tone.Problem => KeelPalette.Red,
+            Tone.Warning => KeelPalette.Amber,
+            Tone.OtherLoader => KeelPalette.Blue,
+            _ => KeelPalette.Green,
+        };
+        return $"<color=#{color:X6}>{part.text}</color>";
     }));
 
     private static int GroupOf(PluginEntry p) => Report.IsProblem(p) ? 0 : p.State == PluginState.Running ? 1 : 2;
@@ -1646,7 +1674,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private void Row(PluginEntry p)
     {
         GUILayout.BeginHorizontal(rowStyle);
-        GUILayout.Label(Report.Tag(p.State), statusStyles[p.State], GUILayout.Width(96), GUILayout.Height(18));
+        GUILayout.Label(ReportFormat.Tag(p.State), statusStyles[p.State], GUILayout.Width(96), GUILayout.Height(18));
         GUILayout.BeginVertical();
         GUILayout.Label($"{p.Display}  <color=#{KeelPalette.Muted:X6}>{p.Version}</color>", nameStyle);
         GUILayout.Label($"{p.Folder?.Label}  ·  {Path.GetFileName(p.Dll)}", sourceStyle);
@@ -1686,7 +1714,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         GUI.Label(new Rect(9, 0, window.width - 45, headerHeight), "R.A.T.S. KEEL  ·  MOD REPORT", headStyle);
         GUI.Label(new Rect(0, 0, window.width - 34, headerHeight), $"{Keel.Version}  ·  {GameState.BuildName}", metaStyle);
         if (GUI.Button(close, "×", buttonStyle)) showWindow = false;
-        GUILayout.Label(done ? Coloured(Report.Summary(Keel.Plugins)) : "Still starting mods …", statsStyle);
+        GUILayout.Label(done ? Coloured(Report.SummaryParts(Keel.Plugins)) : "Still starting mods …", statsStyle);
         GUILayout.Box(GUIContent.none, lineStyle, GUILayout.Height(1), GUILayout.ExpandWidth(true));
 
         foreach (string n in notes)

@@ -190,7 +190,6 @@ internal sealed class Overlay
         switch (stage)
         {
             case Stage.Full:
-                if (s.Dismissed) { Begin(Stage.Fading); break; }
                 if (s.Done && s.SinceDone > options.LingerSeconds) { Begin(Stage.Moving); break; }
                 if (s.Elapsed > options.MaxSeconds) { Begin(s.Done ? Stage.Moving : Stage.Fading); break; }
                 break;
@@ -455,10 +454,9 @@ internal sealed class Overlay
             if (idx >= 0)
             {
                 ModLine m = s.Recent[idx];
-                uint c = m.State == ModState.Running ? Green : m.State == ModState.RunningWithErrors ? Amber : m.State == ModState.Skipped ? Dim : Red;
-                string mark = m.State == ModState.Running ? "ok" : m.State == ModState.RunningWithErrors ? "!" : m.State == ModState.Skipped ? "-" : "x";
+                (uint c, string mark) = Mark(m.State);
                 Put(dc, fontSmall, c, mark, pad, y, S(22), rowH, 0);
-                Put(dc, fontText, m.State == ModState.Skipped ? Dim : Text, m.Name, pad + S(26), y, w - 2 * pad - S(26) - S(64), rowH, Native.DT_END_ELLIPSIS);
+                Put(dc, fontText, c == Dim ? Dim : Text, m.Name, pad + S(26), y, w - 2 * pad - S(26) - S(64), rowH, Native.DT_END_ELLIPSIS);
                 if (m.TookSeconds >= 0.5)
                     Put(dc, fontSmall, m.TookSeconds >= 5 ? Amber : Dim, m.TookSeconds.ToString("0.0") + " s", pad, y, w - 2 * pad, rowH, Native.DT_RIGHT);
             }
@@ -487,6 +485,14 @@ internal sealed class Overlay
         else { foot = "Click to hide."; footColor = Dim; }
         Put(dc, fontSmall, footColor, foot, pad, y, w - 2 * pad, S(20), Native.DT_END_ELLIPSIS);
     }
+
+    private static (uint color, string mark) Mark(PluginState state) => state switch
+    {
+        PluginState.Running => (Green, "ok"),
+        PluginState.RunningWithErrors => (Amber, "!"),
+        PluginState.Skipped or PluginState.LeftToAnchorChain => (Dim, "-"),
+        _ => (Red, "x"),
+    };
 
     /// <summary>The summary card: what Keel did, how long the game took, what to look at.</summary>
     internal static void DrawSummary(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontBold, IntPtr fontSmall)

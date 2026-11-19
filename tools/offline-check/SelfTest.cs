@@ -436,6 +436,18 @@ internal static class SelfTest
         Check(ReportFacts.Game("3D globe map", rep, "") == "0.9.1-261112", "game build from the report's first line, not the map name");
         Check(ReportFacts.Game("", "R.A.T.S. Keel 0.4.0 – Sea Power, 3D globe map – x\n17 running\n", "x Version 0.9.0-261111 y") == "0.9.0-261111", "an old report: the build from Keel's log");
         Check(ReportFacts.Summary(rep) == "41 running, 2 failed: Taigei, Automatic SAR", "summary: the counts line after a multi-line header, then the problem mods: " + ReportFacts.Summary(rep));
+        // What Keel writes is what KeelWatcher reads back: both go by ReportFormat, so a reworded tag or counts line fails here.
+        var folder = new ModFolder { Path = tmp, Name = "W" };
+        var bad = new PluginEntry { Guid = "x.bad", Name = "Bad", Version = new Version(1, 2), Folder = folder, Dll = "B.dll" };
+        bad.Stop(PluginState.RunningWithErrors, "threw");
+        var off = new PluginEntry { Guid = "x.off", Name = "Off", Folder = folder, Dll = "O.dll" };
+        off.Stop(PluginState.NotStarted, "needs y");
+        var fine = new PluginEntry { Guid = "x.ok", Name = "Fine", Folder = folder, Dll = "F.dll", State = PluginState.Running };
+        var all = new List<PluginEntry> { bad, off, fine };
+        string written = Report.Text(all, "R.A.T.S. Keel 0.6.1 (stub 1.0.0) – Sea Power 0.9.3-261116\nEuromod setup: Euromod.", new string[0]);
+        Check(ReportFacts.Summary(written) == "2 running, 1 with errors, 1 not started: Off 1.0, Bad 1.2", "a report Keel wrote reads back: counts line and problem mods: " + ReportFacts.Summary(written));
+        Check(Enum.GetValues(typeof(PluginState)).Cast<PluginState>().All(s => ReportFormat.TryParseTag(ReportFormat.Tag(s), out PluginState back) && back == s),
+              "every state's tag reads back as that state");
 
         // The report window's EG button writes the AC Pack's own switch, leaving every other line as it was.
         Check(ModSetups.SetSubmod(null, "euromod.extended-guidance", true) == "[Submods]\neuromod.extended-guidance=true\n", "EG on with no file: the section is made");

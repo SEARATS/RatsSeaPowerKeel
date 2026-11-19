@@ -9,7 +9,7 @@ namespace SeaPowerKeel.Loading;
 /// The loading window: a window of its own (Win32, own thread) that shows the start-up steps and the mods as Keel starts them, so the
 /// first minute of the game is not a frozen screen; when every mod has started it shrinks into a summary card in the bottom left corner.
 /// Keel opens it in <c>KeelHost.Awake</c>, which runs when the stub does, before Anchor Chain's preloader (BepInEx starts plugins in GUID
-/// order). It reads only log lines; see docs/loading-window.md.
+/// order). Keel tells it its steps; the game and Anchor Chain are heard through their log lines; see docs/loading-window.md.
 /// </summary>
 internal static class LoadingWindow
 {
@@ -45,8 +45,6 @@ internal static class LoadingWindow
     internal static volatile bool OverlayGone;
     /// <summary>Keel's GUI draws the summary card now: the overlay fades out.</summary>
     internal static volatile bool GameDrawsSummary;
-    /// <summary>The overlay's settings the game-drawn card follows.</summary>
-    internal static bool ClickHides = true;
     internal const string ProfileUrl = "https://steamcommunity.com/profiles/76561198169349193";
 
     public static void Start(ConfigFile config, ManualLogSource log)
@@ -78,8 +76,7 @@ internal static class LoadingWindow
             catch (Exception) { started = DateTime.Now; }
             var progress = new Progress(() => (DateTime.Now - started).TotalSeconds);
             Progress = progress;
-            ClickHides = click.Value;
-            BepInEx.Logging.Logger.Listeners.Add(new Feed(progress));
+            BepInEx.Logging.Logger.Listeners.Add(new Feed(progress, log.SourceName));
             if (!Enum.TryParse(spot.Value, out Spot s)) s = Spot.TopRight;
             new Overlay(progress, new OverlayOptions
             {
@@ -94,12 +91,21 @@ internal static class LoadingWindow
         }
     }
 
-    /// <summary>Every BepInEx log line (the game's and the mods' too) goes to the progress model.</summary>
+    /// <summary>Every BepInEx log line but Keel's own (Keel calls the progress model itself) goes to the progress model.</summary>
     private sealed class Feed : ILogListener
     {
         private readonly Progress progress;
-        public Feed(Progress progress) => this.progress = progress;
-        public void LogEvent(object sender, LogEventArgs e) => progress.Feed(e.Source?.SourceName, e.Data?.ToString());
+        private readonly string own;
+        public Feed(Progress progress, string own)
+        {
+            this.progress = progress;
+            this.own = own;
+        }
+        public void LogEvent(object sender, LogEventArgs e)
+        {
+            if (e.Source?.SourceName != own)
+                progress.Feed(e.Source?.SourceName, e.Data?.ToString());
+        }
         public void Dispose() { }
     }
 }

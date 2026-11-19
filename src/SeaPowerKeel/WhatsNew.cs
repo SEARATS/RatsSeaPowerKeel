@@ -328,7 +328,7 @@ internal static class WhatsNew
             if (p.Folder == null || !last.TryGetValue(KeyOf(p.Folder), out SeenMod was) || !was.Ok.Contains(p.Guid))
                 continue;
             var item = new NewsItem { Kind = NewsKind.Problem, Key = KeyOf(p.Folder), Name = p.Display, From = "", To = p.Version.ToString() };
-            item.Lines.Add($"{Report.Tag(p.State)}: {(p.Reason.Length > 0 ? p.Reason : p.FirstLaterError ?? "threw errors")}");
+            item.Lines.Add($"{ReportFormat.Tag(p.State)}: {(p.Reason.Length > 0 ? p.Reason : p.FirstLaterError ?? "threw errors")}");
             news.Add(item);
         }
         return news;

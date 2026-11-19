@@ -16,8 +16,6 @@ internal static class ReportFacts
     /// <summary>The game's version text, e.g. 0.9.1-261112, also a lettered one like 0.9.1-261112b (the "b" builds lost their build in the mails).</summary>
     public static readonly Regex Build = new(@"\b\d+\.\d+\.\d+-\d{6}[a-z]?\b");
 
-    private static readonly Regex Problem = new(@"^\[(FAILED|ERRORS|NOT STARTED|CRASHED)\] (.+?) \(", RegexOptions.Multiline);
-
     /// <summary>The game build: <paramref name="given"/> when it is one, else from the report's first line, else from Keel's log.</summary>
     public static string Game(string given, string reportText, string logText)
     {
@@ -34,9 +32,9 @@ internal static class ReportFacts
     public static string Summary(string reportText)
     {
         string[] lines = (reportText ?? "").Replace("\r\n", "\n").Split('\n');
-        // The counts line ("17 running, 1 failed") follows the header, which can have more lines (Euromod setup, reload progress).
-        string counts = lines.Skip(1).Take(5).Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0 && char.IsDigit(l[0])) ?? "";
-        List<string> problems = Problem.Matches(reportText ?? "").Cast<Match>().Select(m => m.Groups[2].Value).Distinct().Take(6).ToList();
+        // The header above the counts line can have more lines (Euromod setup, reload progress).
+        string counts = lines.Skip(1).Select(l => l.Trim()).FirstOrDefault(ReportFormat.IsCountsLine) ?? "";
+        List<string> problems = ReportFormat.ProblemLine.Matches(reportText ?? "").Cast<Match>().Select(m => m.Groups[2].Value).Distinct().Take(6).ToList();
         string s = counts + (problems.Count > 0 ? (counts.Length > 0 ? ": " : "") + string.Join(", ", problems) : "");
         return s.Length > 300 ? s.Substring(0, 297) + "..." : s;
     }
