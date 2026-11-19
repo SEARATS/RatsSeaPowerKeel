@@ -8,6 +8,7 @@
   - Now: when a DLL's partner build in the same folder lacks nothing, the report shows a short note instead of a warning, and the card stays green
   - Both builds lacking parts, or no partner in the folder: still a warning, as before
 - **The game-version check runs over all DLLs first, then decides** (needed for the partner check); 6 new self-test checks
+- **README: one Linux (Steam Proton) section** with every step in order (BepInEx, starter file, launch option, Anchor Chain); a player asked, the steps were spread over two places
 
 ## 0.6.1 - 2026-11-19 - Hotfix: Restore brings the other loader back; KeelSetup downloads BepInEx
 

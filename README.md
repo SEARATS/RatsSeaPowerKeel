@@ -83,7 +83,29 @@ The same result as the setup, without running any `.exe`:
 5. Ctrl+Shift+K shows the report.
 
 - **Undo:** delete `BepInEx\plugins\SeaPowerKeel.Stub.dll` and `BepInEx\patchers\SeaPowerKeel.Patcher.dll`.
-- **Linux (Proton):** BepInEx also needs the Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (BepInEx's own Proton step).
+- **Linux:** see [Linux (Steam Proton)](#linux-steam-proton) below.
+
+### Linux (Steam Proton)
+
+`KeelSetup.exe` is a Windows program: on Linux, install by hand. A player got Keel running this way (2026-11-10); we have not run it on Linux ourselves.
+
+1. **Subscribe** to R.A.T.S. Keel on the Workshop, start the game, switch Keel on in **Mods**, close the game.
+2. **BepInEx** (skip if the game folder already has a `BepInEx` folder):
+   - download `BepInEx_win_x64_5.4.23.2.zip` from [BepInEx's GitHub release](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) - the **Windows** build, the game runs through Proton
+   - unzip it into the game folder, so `winhttp.dll`, `doorstop_config.ini` and `BepInEx/` sit next to `Sea Power.exe`
+   - make the folder `BepInEx/plugins` if it is not there
+3. **Starter file:** copy `SeaPowerKeel.Stub.dll` from `copy-to-BepInEx-plugins` in Keel's Workshop folder
+   (`steamapps/workshop/content/1286220/3835527459`) into `BepInEx/plugins`.
+4. **Launch option:** Steam, right-click Sea Power, Properties, Launch Options: `WINEDLLOVERRIDES="winhttp=n,b" %command%`
+   - without it Proton never loads BepInEx (BepInEx's own Proton step)
+5. **Anchor Chain** (only if you had it): switch it off in the game's Mods menu **and** unsubscribe from it on the Workshop
+   - switched off in the Mods menu alone, Anchor Chain kept loading its mods for that player
+   - Keel's takeover should make this unneeded now; not checked on Linux
+6. **Start the game.** Anchor Chain or Alpine was installed: restart once.
+7. **Check:** Ctrl+Shift+K shows Keel's report.
+
+- **Updates:** come through the Workshop as on Windows; the hand-copied starter file never needs replacing.
+- **Undo:** delete `BepInEx/plugins/SeaPowerKeel.Stub.dll` and `BepInEx/patchers/SeaPowerKeel.Patcher.dll`; remove the launch option if no other BepInEx mod needs it.
 
 **Restart after every change to the mod list.** The stub runs once, while the game starts, and reads the mod list then. **Or let Keel follow:** after the game's *Reload* in the Mods menu (Mods, Apply), Keel starts the code mods you switched on and takes switched-off ones out as far as the running game allows (their patches come off, a BepInEx plugin is stopped; what a mod set up itself stays until a restart, as the game cannot unload code). The same dialog has a *Restart* button (saves the list, closes the game and starts it again), and the report window (Ctrl+Shift+K) has *Restart the game* (click twice). If Keel
 (or any mod) was switched off at that moment, nothing loads, and switching it on in the running game does not start it: restart the
@@ -93,12 +115,7 @@ log says "R.A.T.S. Keel is switched off in the game's mod list", switch Keel on 
 **Switching from Anchor Chain or Alpine:** nothing to delete. While Keel is on, its takeover keeps the other loader from
 starting (from the second start after installing Keel; see [Takeover](#takeover)). You no longer need the Anchor Chain item: Keel ships Anchor Chain's library (MIT) and uses it when no Anchor Chain folder
 is switched on (run in the game on the globe beta 261107; on 0.8.7 keep Anchor Chain subscribed, that is the tested way there). Keel now handles ACConfig files itself (checked offline; no mod in the game test used it).
-
-**Linux (Steam Proton):** follow the manual steps above, and switch Anchor Chain off in **both** places: in the game's Mods menu
-*and* by unsubscribing from it on the Steam Workshop. Anchor Chain loads the DLLs of every folder the game lists, switched on
-or not, so turning it off in the Mods menu alone left it running. A player got Keel working on Linux this way (reported
-2026-11-10). With the takeover, Anchor Chain's preloader does not start at all while Keel is on, so this should no longer be
-needed; we have not run either on Linux ourselves.
+On Linux, see [Linux (Steam Proton)](#linux-steam-proton) for the Anchor Chain step.
 
 ## Code signing policy
 
