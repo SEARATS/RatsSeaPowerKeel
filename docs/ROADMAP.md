@@ -14,6 +14,7 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 - [ ] Install without an exe, with the by-hand and Linux steps **[promised]**
 - [ ] An install video for the by-hand way
 - [ ] Every release links its VirusTotal results; the GitHub release carries the same files and the source
+- [ ] Every release lists a SHA-256 checksum per file, so anyone can check the download and compare it with their own build
 - [ ] Answer the open Keel questions on the feedback board
 
 ## Wave 1: small wins
@@ -49,6 +50,13 @@ The first official partner mods, and hopefully a lot more to come:
 
 - Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.
 
+### Wanted: the dynamic campaign modders
+
+- At least one dynamic campaign on board: Bungalow's DCM, Tofu's Pacific 2027, NineSix's Pacific 2026
+- Bungalow's DCM sticks to the base game with no dependency but Keel; Tofu's and NineSix's campaigns need other mods
+- Tofu builds performance baselines for units, sensors and weapons from public data, which override mods' own numbers:
+  worth looking at as a shared baseline
+
 ## Wave 2: Keel becomes the interface
 
 - [ ] Anchor Chain carried on inside Keel; Anchor Chain 1.3 offers the switch (draft PR #5) **[promised]**
@@ -66,13 +74,23 @@ The first official partner mods, and hopefully a lot more to come:
 
 - [ ] Game events from Keel: mission start/end, unit selected, contact detected, time compression **[promised]**
 - [ ] Version adapters per game build, so a mod built for an older build keeps running; frame time measured from the start **[promised]**
-- [ ] One shared settings page for all mods in the game's Options **[promised]**
+- [ ] One shared settings page for all mods in the game's Options **[promised]**; agm-114's settings and UI prototypes from his own mod are the starting point
 - [ ] Shared UI bar and hotkey manager **[promised]**
+  - one small toolbar with an icon per mod (set by the mod) that opens that mod's window
+  - a hotkey page where players set every mod's keys; mods join on their own, but it may have to cover every mod that reads keys, since clashing keys cause too much odd behaviour
 - [ ] API promise: a versioned API; a part marked old keeps working for at least two game updates, announced ahead **[promised]**
 - [ ] "Build on Keel" guide and one example mod; a porting checklist for moving a mod from game internals onto Keel's events **[promised]**
 - [ ] Shared timestamped logging, and crash reports routed to the author, for mods that build on the API (only those can be told apart) **[promised]**
 
-After Wave 3 a game update only needs a Keel update; the mods on its API keep running.
+- [ ] Crash hunting mode, off by default: a memory monitor and debug harness for access-violation crashes, because a mod
+  named in `Keel-crash.txt` is not always the one at fault
+
+After Wave 3 a game update only needs a Keel update; the mods on its API keep running. The model is
+[KSP Realism Overhaul](https://github.com/KSP-RO), which has given Kerbal Space Program a stable shared base for twelve years.
+
+## On the horizon
+
+- A code signing certificate for KeelSetup.exe
 
 ## How we work
 
