@@ -1,6 +1,6 @@
 # Mods we start with
 
-The partners' needs set the order of the [roadmap](../ROADMAP.md)'s Wave 2 and 3.
+The partners' needs set the order of the [roadmap](ROADMAP.md)'s Wave 2 and 3.
 
 ## I start with my own: Radio becomes the R.A.T.S. Sound Overhaul
 

@@ -1,0 +1,54 @@
+---
+title: A mod call through R.A.T.S. Keel, per case
+config:
+  theme: neutral
+  themeVariables:
+    noteBkgColor: "#ffffff"
+    noteTextColor: "#222222"
+    noteBorderColor: "#888888"
+  sequence:
+    mirrorActors: false
+    actorMargin: 140
+    noteMargin: 14
+    wrap: false
+---
+sequenceDiagram
+    participant M as Mod
+    participant K as R.A.T.S. Keel
+    participant G as Sea Power
+
+    alt 1. unchanged
+        M->>K: Foo()
+        K->>G: Foo()
+        G-->>K: result
+        K-->>M: result
+    else 2. small change: permanent adapter
+        M->>K: Foo()
+        rect rgb(225, 245, 238)
+            Note over K: Permanent adapter<br/>Foo() runs on Bar()<br/>no expiry
+        end
+        K->>G: Bar()
+        G-->>K: result
+        K-->>M: result as Foo()
+    else 3. crazy change: timed adapter
+        M->>K: Foo()
+        rect rgb(250, 236, 231)
+            Note over K: Timed adapter<br/>Foo() runs on Baz()<br/>expires after 1 year
+        end
+        K-->>M: warning: Foo() retired in 247 days
+        K->>G: Baz()
+        G-->>K: result
+        K-->>M: result as Foo()
+    else 3b. after expiry
+        M->>K: Foo()
+        K--xM: refused: use Baz()
+    else 4. Keel extra
+        M->>K: Keel.Convoy()
+        rect rgb(238, 237, 254)
+            Note over K: Keel extra<br/>not in the game
+        end
+        K->>G: part A
+        K->>G: part B
+        G-->>K: results
+        K-->>M: convoy result
+    end

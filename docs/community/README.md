@@ -1,10 +1,12 @@
 # R.A.T.S. Keel community
 
 Notes for players, mod authors and partners: how we work together, who is on board, what is open. The plan itself is the
-[roadmap](../ROADMAP.md).
+[roadmap](ROADMAP.md).
 
 | File | What |
 |---|---|
+| [ROADMAP.md](ROADMAP.md) | The plan: waves 0 to 3 |
+| [diagrams/](diagrams/README.md) | How Keel sits between mods and the game: component, sequence, state |
 | [how-we-work.md](how-we-work.md) | Where things live, how decisions are made, Anchor Chain |
 | [partner-mods.md](partner-mods.md) | The mods we start with, partners, wanted modders |
 | [november-2026.md](november-2026.md) | What went wrong in November 2026, and what changes |

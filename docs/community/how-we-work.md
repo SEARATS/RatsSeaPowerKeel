@@ -5,7 +5,7 @@
 - **Code, pull requests, issues**: GitHub (`struckl/SeaPowerKeel`)
 - **Ideas and plans**: Discord `#proposals`, one thread per idea
 - **Releases and news**: Discord `#announcements` + the Workshop change note, the same text
-- **The plan**: [the roadmap](../ROADMAP.md) on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave
+- **The plan**: [the roadmap](ROADMAP.md) on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave
 - **Community notes**: this folder, [docs/community](README.md)
 
 ## How decisions are made

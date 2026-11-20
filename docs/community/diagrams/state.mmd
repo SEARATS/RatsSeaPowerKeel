@@ -1,0 +1,36 @@
+---
+title: Life of a Keel API function
+config:
+  theme: neutral
+---
+stateDiagram-v2
+    direction LR
+
+    [*] --> PassThrough: Keel offers Foo()
+    PassThrough: Pass-through
+    PassThrough: Foo() calls the game's Foo()
+
+    PassThrough --> Decide: game update changes Foo()
+    state Decide <<choice>>
+
+    Decide --> Permanent: small change, cheap to keep
+    Permanent: Permanent adapter
+    Permanent: Foo() runs on Bar(), no expiry
+
+    Decide --> Timed: crazy change, too costly to fake
+    Timed: Timed adapter
+    Timed: Foo() runs on Baz(), Keel card warns the modder
+
+    Timed --> Retired: 1 year passed
+    Retired: Retired
+    Retired: Foo() refused, use Baz()
+    Retired --> [*]
+
+    Permanent --> Decide: next game update changes it again
+
+    classDef perm fill:#E1F5EE,stroke:#0F6E56,color:#085041
+    classDef timed fill:#FAECE7,stroke:#993C1D,color:#712B13
+    classDef gone fill:#F1EFE8,stroke:#5F5E5A,color:#444441,stroke-dasharray:4 3
+    class Permanent perm
+    class Timed timed
+    class Retired gone
