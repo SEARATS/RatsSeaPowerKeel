@@ -33,7 +33,7 @@ installed (Anchor Chain's preloader, Alpine's Mod Loader) are kept from starting
 - If the game folder cannot be written to, Keel says so; run `KeelSetup.exe` then.
 
 Run in the game on 0.9.1 (2026-11-12): Alpine kept from starting with its file back in `BepInEx\plugins`, Keel switched
-off lets Alpine start, the patcher updated itself while in use. Notes: [docs/test-2026-11-12-takeover.md](test-2026-11-12-takeover.md).
+off lets Alpine start, the patcher updated itself while in use.
 
 ## Differences from Anchor Chain's loader
 

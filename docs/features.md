@@ -102,5 +102,4 @@ it was started, "Waiting 19 s after Dynamic Campaign Mod").
 | Loaders | Keel runs Anchor Chain mods and BepInEx plugins; while it is on, Anchor Chain's and Alpine's preloaders do not start |
 | Linux | one player's report (2026-11-10); not run by us |
 
-- Test notes: [docs/test-2026-11-18-0.6.0.md](test-2026-11-18-0.6.0.md), [docs/test-2026-11-07.md](test-2026-11-07.md), [docs/test-2026-11-08-globe.md](test-2026-11-08-globe.md).
 - The Anchor Chain compatibility changes in the CHANGELOG's "Unreleased" are checked offline only; they have not been run in the game.

@@ -162,7 +162,7 @@ missions, a game ended from outside, the start after it, Restore; every row gree
 - Send report was run in the game on 0.9.0: the report window's button, the send window, report #2 arrived on the board with no user name in any file.
 - A mod switched off and then on again in the same game is not started a second time: its code from the first start is still loaded (Topo said "already loaded, skipping"), so the report says it starts again after a restart.
 - Fix: the Mods menu hook is installed once the main menu is up. In `Awake` it ran the menu's static constructor before the game's UI existed and crashed the game at start-up (found in the test).
-- Run in the game on build 26103404 on 2026-11-11 (docs/test-2026-11-11-reload.md): the dialog, Reload with a mod switched on and one off, and Restart. The off-and-on-again rule and Restart were run again on game 0.9.0 the same day.
+- Run in the game on build 26103404 on 2026-11-11: the dialog, Reload with a mod switched on and one off, and Restart. The off-and-on-again rule and Restart were run again on game 0.9.0 the same day.
 - **README: Linux (Steam Proton).** Switch Anchor Chain off in the game's Mods menu *and* unsubscribe from it on Steam, as a player reported; switched off in the Mods menu alone, Anchor Chain still loads its mods and Keel steps aside. Not run on Linux by us.
 
 ## 0.3.1 - 2026-11-09
