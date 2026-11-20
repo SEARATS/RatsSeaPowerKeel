@@ -4,7 +4,7 @@ Keel is the mod loader for Sea Power's code mods: it finds the mod DLLs, checks 
 
 | | |
 | --- | --- |
-| Version | `0.6.1` (2026-11-19) |
+| Version | `0.7.0` (2026-11-20) |
 | Game | Sea Power 0.9.3 (public and beta) tested in the game with 0.6.0 (2026-11-18); `_info.ini` declares 0.8.7 up to, not including, 0.10.0 |
 | Needs | [BepInEx 5](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) (KeelSetup adds it); Keel is the loader itself and needs no other one |
 | Get it | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459) |
