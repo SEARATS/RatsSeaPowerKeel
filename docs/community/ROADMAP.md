@@ -47,7 +47,7 @@ Who we start with (partners, wanted modders): [partner-mods.md](partner-mods.md)
 
 - [ ] Game events from Keel: mission start/end, unit selected, contact detected, time compression **[promised]**
 - [ ] Version adapters per game build, so a mod built for an older build keeps running; frame time measured from the start **[promised]**
-  - how adapters work (pass-through, permanent, timed with retirement, Keel extras): [diagrams](diagrams/README.md)
+  - how adapters work (pass-through, permanent, timed with retirement, Keel extras): [diagrams](diagrams.md)
 - [ ] One shared settings page for all mods in the game's Options **[promised]**; agm-114's settings and UI prototypes from his own mod are the starting point
 - [ ] Shared UI bar and hotkey manager **[promised]**
   - one small toolbar with an icon per mod (set by the mod) that opens that mod's window
