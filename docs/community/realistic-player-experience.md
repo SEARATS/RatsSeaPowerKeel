@@ -46,4 +46,4 @@ Currently, there are many excellent mods that would be excellent candidates for 
 
 The modding community is a voluntary scene. Mod authors are not compensated for their work. Their ability and availability to maintain their mods is never guaranteed nor required in any way. However, mod longevity is a crucial part of this project's long-term success.
 
-As such, a voluntary mod stewardship and maintenance foundation should be considered. The purpose would be to maintain key / critical mods whose original authors are no longer able to participate, and have voluntarily turned over their mods (for however long they choose) to this group. This topic is also discussed in the [Roadmap's](ROADMAP.md) Open for Discussion section.
+As such, a voluntary mod stewardship and maintenance foundation should be considered. The purpose would be to maintain key / critical mods whose original authors are no longer able to participate, and have voluntarily turned over their mods (for however long they choose) to this group. This topic is also discussed in the [Open for discussion](open-for-discussion.md) list.

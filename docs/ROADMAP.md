@@ -20,7 +20,7 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 ## Wave 1: small wins
 
 - [ ] Mod Manager Restart keeps the launch options (Linux loses `WINEDLLOVERRIDES`, Keel issue #4)
-- [ ] Start with the first partner mods (list below): each one runs under Keel, and its author says what it needs
+- [ ] Start with the first partner mods ([partner-mods](community/partner-mods.md)): each one runs under Keel, and its author says what it needs
 - [ ] A Tester role in Discord: players who try a Keel build before it ships, named in the release post if they want
 - [ ] Contributors listed in Keel's README credits and in its report window
 - [ ] Log lines name their mod: a warning or error in the game's log shows which mod wrote it (from the call's stack), and a
@@ -28,34 +28,7 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 
 ## Mods we start with
 
-### I start with my own: Radio becomes the R.A.T.S. Sound Overhaul
-
-My R.A.T.S. mods already run on Keel. The first real change is Radio:
-
-- R.A.T.S. Radio becomes the **R.A.T.S. Sound Overhaul**, an addon for Keel.
-- The Sound Overhaul only provides the endpoints: where sound goes in, when it plays, how it mixes with the game.
-- Addons add whatever they want on top, each one its own item:
-  - the R.A.T.S. Radio voices, with every language pack as its own addon
-  - VOIP
-  - other sound mods from other authors
-
-### Official partner mods
-
-The first official partner mods, and hopefully a lot more to come:
-
-- **VOIP**: go from the author, invited to the Discord
-- **Pilothouse**: go from the author, invited to the Discord
-- **Euromod**: interested, full answer still open
-- **One more mod team**: in talks, name follows
-
-- Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.
-
-### Wanted: the dynamic campaign modders
-
-- At least one dynamic campaign on board: Bungalow's DCM, Tofu's Pacific 2027, NineSix's Pacific 2026
-- Bungalow's DCM sticks to the base game with no dependency but Keel; Tofu's and NineSix's campaigns need other mods
-- Tofu builds performance baselines for units, sensors and weapons from public data, which override mods' own numbers:
-  worth looking at as a shared baseline
+Who we start with (partners, wanted modders): [community/partner-mods.md](community/partner-mods.md).
 
 ## Wave 2: Keel becomes the interface
 
@@ -92,47 +65,6 @@ After Wave 3 a game update only needs a Keel update; the mods on its API keep ru
 
 - A code signing certificate for KeelSetup.exe
 
-## How we work
+## Community
 
-### One home for each thing
-
-- **Code, pull requests, issues**: GitHub (`struckl/SeaPowerKeel`)
-- **Ideas and plans**: Discord `#proposals`, one thread per idea
-- **Releases and news**: Discord `#announcements` + the Workshop change note, the same text
-- **This plan**: this file on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave
-
-### How decisions are made
-
-- A change that touches other authors' mods (the loader, the API, load order) starts as a `#proposals` thread.
-- Nothing is removed or replaced for players without an opt-in and a way back (Keel's Restore).
-
-### Anchor Chain is still theirs
-
-- Anchor Chain is agm-114's and Ave's (JustOneOther) work, and it is still theirs: it moved into Keel, it did not change hands.
-- Keel builds on it because Anchor Chain did not run on the 3D-globe beta, and players needed something that did.
-- Keel is not a takeover: what happens with Anchor Chain is still agm-114's and Ave's call.
-
-### What went wrong in November, and that was on me (Kanalratte)
-
-- I have been modding for years, but I never published anything. This was the first time, and I moved as if it was still
-  only me.
-- I moved too fast. When I get overmotivated, I move faster than other people can follow, and I did not wait for them.
-- The move from Anchor Chain to Keel came before the talking. It looked like a takeover, and I understand why.
-- News came after changes instead of before.
-- Keel's setup exe got flagged by scanners and Steam pulled the item, and I had not shown well enough that it is safe.
-
-### What I do differently
-
-- **Announce before, not after.** Anything that changes what players or other authors have is posted in `#announcements` and on
-  the Workshop page ahead: what changes, who is affected, how to go back.
-- **Slow down and ask first.** Plans go to the people they touch before code is written.
-- **Never take over silently.** Keel only takes over another loader after the player says yes, and Restore always undoes it.
-- **Show that it is safe.** Every release links its VirusTotal results; the source is on GitHub; Keel installs without an exe.
-- **When something breaks, speak first.** A pinned post: what happened, who is affected, what to do now, when the fix comes.
-- **Answer every report** on the board, even if only "seen, looking into it".
-
-## Open for discussion
-
-- The license: whether the R.A.T.S. Source License (read and fork, no re-uploads) is the right fit for Keel, or something else.
-- A standardized, robust, [realistic player experience](realistic-player-experience.md), with a curated selection of mods, for players wishing to experience the best of what the modding community can offer in one stable, cohesive environment. This would be a separate meta-mod to ensure proper delivery, installation, and upkeep.
-- A voluntary mod stewardship and maintenance foundation to maintain key / critical mods whose original authors are no longer able to participate. A mod author could designate this group to receive stewardship of their mods in the event that their participation is no longer a viable option. The mod author could at any time return and restore their ownership of the mods.
+How we work, the partner mods, what went wrong in November and the topics still open: [docs/community](community/README.md).
