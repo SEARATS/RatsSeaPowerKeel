@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-11-20 - loading window counts errors again, no warning for flat-map builds, Anchor Chain 1.2.0 FindFile
 
 - **No more warning for our flat-map builds on the globe** (Keel reports #13, #16)
   - R.A.T.S. mods ship two builds side by side (`X.dll` for the globe, `XFlat.dll` for the flat map); the one for the other map lacks game parts by design and stands down by itself
