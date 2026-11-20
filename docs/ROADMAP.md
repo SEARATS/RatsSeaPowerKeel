@@ -8,9 +8,9 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 
 ## Wave 0: ship what is already done
 
-- [ ] Keel's loading window counts mods with errors again
-- [ ] No flat-map warning for mods' other-map builds on 0.9.x
-- [ ] Anchor Chain 1.2.0's FindFile works under Keel
+- [x] Keel's loading window counts mods with errors again (0.7.0)
+- [x] No flat-map warning for mods' other-map builds on 0.9.x (0.7.0)
+- [x] Anchor Chain 1.2.0's FindFile works under Keel (0.7.0)
 - [ ] Install without an exe, with the by-hand and Linux steps **[promised]**
 - [ ] An install video for the by-hand way
 - [ ] Every release links its VirusTotal results; the GitHub release carries the same files and the source
