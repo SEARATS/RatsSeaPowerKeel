@@ -64,4 +64,4 @@ For the build after 0.4.0 (takeover, self-installing patcher) together with the 
 - Red: fix it here, or hand a What's new fault to that session (it built the card) with the log and screenshots; test again,
   then archive (his word 2026-11-12).
 
-- After green and the release: the install video (`docs/install-video-plan.md`).
+- After green and the release: the install video (made: `workshop/video/youtube.md`).
