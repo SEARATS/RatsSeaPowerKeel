@@ -4,12 +4,13 @@ Keel is the mod loader for Sea Power's code mods: it finds the mod DLLs, checks 
 
 | | |
 | --- | --- |
+| Questions | [R.A.T.S. Discord](https://discord.gg/CzuHd4f8Yf): help, ideas, talk; the first place to ask |
 | Version | `0.7.0` (2026-11-20) |
 | Game | Sea Power 0.9.3 (public and beta) tested in the game with 0.6.0 (2026-11-18); `_info.ini` declares 0.8.7 up to, not including, 0.10.0 |
 | Needs | [BepInEx 5](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) (KeelSetup adds it); Keel is the loader itself and needs no other one |
 | Get it | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459) |
 | Settings | `BepInEx\config\dev.sewerlabs.seapowerkeel.cfg`, see [docs/settings.md](docs/settings.md) |
-| Feedback | [R.A.T.S. feedback board](https://hub.sewerlabs.dev/s/keel) |
+| Bug reports | [R.A.T.S. feedback board](https://hub.sewerlabs.dev/s/keel) |
 | Roadmap | [docs/community/ROADMAP.md](docs/community/ROADMAP.md): where Keel goes next, also in Discord #roadmap |
 | Community | [docs/community](docs/community/README.md): how we work, partner mods, open topics |
 | Video | [Install on a clean game](https://youtu.be/m66tiCyWSNw) (more: [when a mod breaks](https://youtu.be/JrRR7d8NbhU), [switching loaders](https://youtu.be/vc_UddZHn0g)) |
