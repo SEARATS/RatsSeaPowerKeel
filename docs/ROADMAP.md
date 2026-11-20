@@ -22,6 +22,8 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 - [ ] Start with the first partner mods (list below): each one runs under Keel, and its author says what it needs
 - [ ] A Tester role in Discord: players who try a Keel build before it ships, named in the release post if they want
 - [ ] Contributors listed in Keel's README credits and in its report window
+- [ ] Log lines name their mod: a warning or error in the game's log shows which mod wrote it (from the call's stack), and a
+  "Method not found" names the mod whose DLL uses that member (Keel already checks every DLL against the running build)
 
 ## Mods we start with
 
@@ -55,6 +57,9 @@ The first official partner mods, and hopefully a lot more to come:
 - [ ] Declared dependencies and a load order Keel sorts itself **[promised]**
 - [ ] Early start before the load screen (Keel PR #2 by agm-114, Anchor Chain issue #32)
 - [ ] Compatibility list: which known mods run on which game build under Keel, filled from Keel's reports (with consent)
+- [ ] Safety check at load: the report lists what each mod's code can reach (start programs, the network, files outside
+  the game and its save folder, the registry, code loaded from bytes), and Keel asks once before such a mod starts the
+  first time. A .NET mod cannot be fully fenced in inside the game: Keel makes this visible, it cannot make it impossible
 - [ ] After each game update a post in `#game-updates`: what changed and when Keel's update is out
 
 ## Wave 3: the stable mod API
