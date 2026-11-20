@@ -64,7 +64,7 @@ dotnet build src/SeaPowerKeel/SeaPowerKeel.csproj -c Release
 dotnet build src/SeaPowerKeel.Stub/SeaPowerKeel.Stub.csproj -c Release
 ```
 
-Offline check, self-tests, layout and the `shared/` folder the other mods compile in: [docs/building.md](docs/building.md).
+Offline check, self-tests and layout: [docs/building.md](docs/building.md).
 
 ## Credits and license
 
