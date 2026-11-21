@@ -1,4 +1,4 @@
-# R.A.T.S. Keel: building, layout and shared/
+# R.A.T.S. Keel: building and layout
 
 ```
 dotnet build src/SeaPowerKeel/SeaPowerKeel.csproj -c Release          # -p:Deploy=true copies it into StreamingAssets\SeaPowerKeel
@@ -29,18 +29,7 @@ dotnet run -c Release --project tools/offline-check -- --inicheck "<Managed>"
 | `src/SeaPowerKeel.Patcher/` | The takeover patcher |
 | `src/SeaPowerKeel.Setup/` | `KeelSetup.exe` |
 | `src/SeaPowerKeel.Watcher/` | `KeelWatcher.exe`, the crash window |
-| `shared/` | Source that the other R.A.T.S. mods compile in, see below |
 | `anchor-chain/`, `lib/` | Anchor Chain's source and library (MIT) |
 | `tools/` | Packaging, BepInEx download, offline check, loading-window preview |
 | `docs/` | Test plans and notes, loading window, code signing policy, [for mod authors](for-mod-authors.md) |
 | `workshop/` | Workshop page text and pictures |
-
-## shared/
-
-- `shared/` is the common skeleton of the R.A.T.S. Sea Power mods, kept once in this repository. Keel itself does not use it.
-- Each mod compiles these files into its own DLL as linked source, under its own `Rats.Shared` namespace. No mod references Keel's DLL.
-- Mods that compile it in: Borders, Command Tools, Pop-Out, Radio, Sensor Views, Topo.
-- A mod's csproj imports `shared/Rats.Mod.props`, which finds the folder through the workspace's `mods.json` (`-p:RatsShared=...` points at another copy).
-- What it holds: the mod start (`ModEntry`), logging, the per-frame host, the hook registry, mission start and end events, the config file, the Mod Manager tick check, game-build detection, a Layers-menu entry, an Options-menu tab, and the package-script steps (`tools/RatsPackage.psm1`).
-- A change there changes every mod at its next build: build and run `modtool compat` for every mod that links the file.
-- File by file, and how to link a mod: [shared/README.md](../shared/README.md).
