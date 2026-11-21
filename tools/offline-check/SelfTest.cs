@@ -99,6 +99,7 @@ internal static class SelfTest
             EuromodChecks(tmp);
             LoadScreenEndChecks();
             EarlyStartChecks();
+            RequiredItemChecks();
             ReportFactsChecks(tmp);
         }
         finally
@@ -460,6 +461,65 @@ internal static class SelfTest
         var earlySet = EarlyStart.Set(new List<PluginEntry> { eA, eB, eC, eD, eE }, (p, why) => whyLate.Add(p.Guid));
         Check(earlySet.SetEquals(new[] { eA }) && whyLate.Count == 2,
               "start early: A early; B waits (needs C, which waits); D waits (E must load before it)");
+    }
+
+    private static void RequiredItemChecks()
+    {
+        Console.WriteLine("Required items: a mod names the Workshop items it needs; the card offers one that is missing");
+        // _info.ini [Keel] Requires=<Workshop id>, <plugin id>, <name>: any mod, any item.
+        List<RequiredItem> named = RequiredItems.InInfoIni(
+            "[Language_en]\nRequires=9, not.here, Wrong section\n\n[Keel]\nStartEarly=true\nRequires=3840000000, dev.x.lib, The Lib ; comment\n" +
+            "requires2 = 3840000001,dev.y.lib\nRequires=0, zero.id, Zero\nRequires=abc, bad.id, Bad\nRequires=5\nRequiresMore=6, a.b, C\n");
+        Check(named.Count == 2 && named[0].WorkshopId == 3840000000 && named[0].PluginId == "dev.x.lib" && named[0].Name == "The Lib"
+              && named[1].WorkshopId == 3840000001 && named[1].Name == "dev.y.lib" && named[0].PageUrl == "steam://url/CommunityFilePage/3840000000",
+              "required items: the [Keel] Requires lines count (several, any case, comments allowed); other sections, a zero or bad id and a short line do not");
+        Check(RequiredItems.InInfoIni(null).Count == 0 && RequiredItems.OfFolder(@"Z:\\no\\such\\folder").Count == 0, "required items: no file, no items");
+
+        var lib = new RequiredItem { WorkshopId = 77, PluginId = "dev.x.lib", Name = "The Lib" };
+        PluginEntry needs = Ac("m.needs", "1.0");
+        needs.Dependencies.Add(new Dependency { Guid = "dev.x.lib", Min = Version.Parse("1.0") });
+        needs.RequiredItems.Add(lib);
+        PluginEntry plain = Ac("m.plain", "1.0");
+        plain.Dependencies.Add(new Dependency { Guid = "dev.y.lib" });
+        Plan(new List<PluginEntry> { needs, plain });
+        Check(needs.State == PluginState.NotStarted && needs.MissingItem == lib && needs.Reason.Contains("The Lib (dev.x.lib)") && needs.Reason.Contains("not installed or switched off"),
+              "required items: a mod whose library is missing is kept out, the reason names the item and the card can offer it");
+        Check(plain.State == PluginState.NotStarted && plain.MissingItem == null && plain.Reason.Contains("Needs dev.y.lib") && !plain.Reason.Contains("("),
+              "required items: a mod that names no item keeps the plain reason and offers nothing");
+
+        PluginEntry old = Ac("m.old", "1.0");
+        old.Dependencies.Add(new Dependency { Guid = "dev.x.lib", Min = Version.Parse("1.2") });
+        old.RequiredItems.Add(lib);
+        PluginEntry oldLib = Ac("dev.x.lib", "1.1");
+        Plan(new List<PluginEntry> { old, oldLib });
+        Check(old.State == PluginState.NotStarted && old.MissingItem == lib && old.Reason.Contains("installed is 1.1"),
+              "required items: a library that is too old is offered too (its item holds the newer one)");
+
+        PluginEntry fine = Ac("m.fine", "1.0");
+        fine.Dependencies.Add(new Dependency { Guid = "dev.x.lib", Min = Version.Parse("1.0") });
+        fine.RequiredItems.Add(lib);
+        PluginEntry there = Ac("dev.x.lib", "1.0");
+        Plan(new List<PluginEntry> { fine, there });
+        Check(fine.State == PluginState.Pending && fine.MissingItem == null && RequiredItems.Missing(new[] { fine, there }).Count == 0,
+              "required items: nothing is offered while the library is there");
+
+        PluginEntry second = Ac("m.second", "1.0");
+        second.Dependencies.Add(new Dependency { Guid = "dev.x.lib" });
+        second.RequiredItems.Add(lib);
+        Plan(new List<PluginEntry> { needs, second });
+        List<(RequiredItem item, int mods)> missing = RequiredItems.Missing(new[] { needs, second, plain });
+        Check(missing.Count == 1 && missing[0].item == lib && missing[0].mods == 2, "required items: two mods waiting for one item are one offer with a count");
+
+        // An item that is installed but switched off is switched on when a mod that is on needs it.
+        var modOn = new ModFolder { Path = "modOn", Name = "modOn", Enabled = true };
+        var modOff = new ModFolder { Path = "modOff", Name = "modOff", Enabled = false };
+        var itemOff = new ModFolder { Path = "item77", Name = "77", SteamId = 77, Enabled = false };
+        var otherOff = new ModFolder { Path = "item88", Name = "88", SteamId = 88, Enabled = false };
+        var itemOn = new ModFolder { Path = "item99", Name = "99", SteamId = 99, Enabled = true };
+        IEnumerable<RequiredItem> Wants(ModFolder f) => f == modOn || f == modOff ? new[] { lib, new RequiredItem { WorkshopId = 99, PluginId = "p", Name = "P" } } : new RequiredItem[0];
+        List<ModFolder> toSwitch = RequiredItems.ToSwitchOn(new[] { modOn, modOff, itemOff, otherOff, itemOn }, Wants);
+        Check(toSwitch.Count == 1 && toSwitch[0] == itemOff, "required items: the one off item a mod that is on needs is switched on; unneeded and already-on items are left");
+        Check(RequiredItems.ToSwitchOn(new[] { modOff, itemOff }, Wants).Count == 0, "required items: a mod that is off switches nothing on");
     }
 
     private static void ReportFactsChecks(string tmp)

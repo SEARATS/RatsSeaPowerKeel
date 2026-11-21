@@ -28,6 +28,8 @@ internal sealed partial class KeelHost
     private long cardSceneTicks;
     private Rect cardHome;                    // GUI units: where the overlay left the card (or where it would be)
     private Rect cardRect, creditRect, cardCloseRect;        // where it is drawn now
+    private Rect getItRect;                  // the card's "Get it" button, when a required item is missing
+    private RequiredItem getItItem;
     private float cardTop = float.NaN;        // its top, following the stack after the split
     private float splitStart = -1f;
     private int stackMods = NewsMods;
@@ -313,8 +315,7 @@ internal sealed partial class KeelHost
         cardSmall.normal.textColor = amber ? CardAmber : CardGreen;
         GUI.Label(new Rect(r.x + pad, y, tw, lineH), Fit(s.SummaryLine(alert), cardSmall, tw), cardSmall);
         y += lineH;
-        creditRect = new Rect(r.x + pad, y, Overlay.Layout.CreditWidth * u, lineH);
-        GUI.Label(creditRect, Overlay.Layout.Credit, cardCredit);      // quiet; a click opens his Steam profile
+        DrawLastRow(r, y, pad, u, lineH, tw);
         GUI.color = was;
     }
 
@@ -446,6 +447,33 @@ internal sealed partial class KeelHost
             e.Use();
     }
 
+    /// <summary>
+    /// The card's last line: the credit (a click opens his Steam profile), or, while a mod waits for a Workshop item it needs,
+    /// that item's name and a "Get it" button that opens its page.
+    /// </summary>
+    private void DrawLastRow(Rect r, float y, float pad, float u, float lineH, float tw)
+    {
+        getItRect = Rect.zero;
+        getItItem = null;
+        List<(RequiredItem item, int mods)> missing = RequiredItems.Missing(Keel.Plugins);
+        if (missing.Count == 0)
+        {
+            creditRect = new Rect(r.x + pad, y, Overlay.Layout.CreditWidth * u, lineH);
+            GUI.Label(creditRect, Overlay.Layout.Credit, cardCredit);      // quiet; a click opens his Steam profile
+            return;
+        }
+        EnsureStyles();
+        creditRect = Rect.zero;
+        (RequiredItem item, int mods) = missing[0];
+        float button = 64f * u;
+        getItRect = new Rect(r.x + r.width - pad - button, y, button, lineH);
+        getItItem = item;
+        cardSmall.normal.textColor = CardAmber;
+        string text = $"{item.Name} is missing: {mods} {(mods == 1 ? "mod waits" : "mods wait")} for it";
+        GUI.Label(new Rect(r.x + pad, y, tw - button - 6f, lineH), Fit(text, cardSmall, tw - button - 6f), cardSmall);
+        GUI.Label(getItRect, "Get it", buttonStyle);
+    }
+
     /// <summary>A click on the Keel card: its × closes it, the credit opens his Steam profile, anywhere else opens the report.
     /// Only the left button counts (no right click, his word 2026-11-12).</summary>
     private bool CardClick(Vector2 gui, int button)
@@ -459,6 +487,11 @@ internal sealed partial class KeelHost
         if (cardCloseRect.Contains(gui))
         {
             cardHidden = true;
+            return true;
+        }
+        if (getItItem != null && getItRect.Contains(gui))
+        {
+            OpenItem(getItItem);
             return true;
         }
         if (creditRect.Contains(gui))

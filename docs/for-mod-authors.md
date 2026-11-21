@@ -80,6 +80,26 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 - **Seen in the report and log:** "Started before the load screen ended (the mod asked for it): ...".
 - **Load-screen hooks:** an early mod sees the real end of the load screen (Keel does not call its postfix again).
 
+## Required Workshop items
+
+A mod that needs another Workshop item (a library mod it depends on) names it in its `_info.ini`, one line per item:
+
+```ini
+[Keel]
+Requires=3840000000, com.you.library, My Library
+```
+
+- The three values: the item's Workshop id, the plugin id your `[ACDependency]` / `[BepInDependency]` names, and a name for the card.
+- **Steam gives a new required item to new subscribers only**, and a newly subscribed item is not switched on in the game's mod list.
+  Keel closes that gap for any mod:
+  - **Switched on at a start:** an item that is installed but off in the mod list is switched on when a mod that is on names it (the
+    log says so). The item must be subscribed and downloaded; Keel does not subscribe for the player.
+  - **"Get it" on the card:** a mod kept out because that plugin is missing or too old shows the item's name on the card at the main
+    menu (`<name> is missing: 2 mods wait for it`) with a **Get it** button that opens the item's Workshop page; the report window has
+    the same button in the mod's row. The mod's reason names the item and the plugin id.
+- A mod that names no item gets the plain reason and no button.
+- The dependency itself is still what keeps the mod out or lets it start; `Requires` only adds the offer.
+
 ## The game-version check
 
 Before a DLL is loaded, Keel checks every type, method and field it uses from the game's assemblies against the running

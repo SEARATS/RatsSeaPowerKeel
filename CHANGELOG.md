@@ -5,6 +5,11 @@
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
 - **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0
   - a DLL listed under `flat =` in a mod's `keel.ini` is still left out; the partner-build note for older packages stays
+- **A mod can name the Workshop items it needs** (`_info.ini`, `[Keel]`, `Requires=<Workshop id>, <plugin id>, <name>`; for any mod and any item)
+  - the card at the main menu says which item is missing and how many mods wait for it, with a **Get it** button that opens the item's Workshop page; the report window has the button in the mod's row
+  - an item that is installed but switched off in the mod list is switched on at the start when a mod that is on needs it
+  - why: Steam gives a new required item to new subscribers only, so players who already had a mod found it stopped after an update
+  - 9 new self-test checks
 
 ## 0.7.0 - 2026-11-20 - loading window counts errors again, no warning for flat-map builds, Anchor Chain 1.2.0 FindFile
 

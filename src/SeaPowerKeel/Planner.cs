@@ -70,17 +70,21 @@ internal static class Planner
                 {
                     if (runningElsewhere.Contains(d.Guid))
                         continue;
+                    // A required item the mod's _info.ini names for this plugin: the card offers it.
+                    RequiredItem item = p.RequiredItems.FirstOrDefault(r => r.PluginId == d.Guid);
                     if (!starting.TryGetValue(d.Guid, out PluginEntry dep))
                     {
                         PluginEntry known = all.FirstOrDefault(x => x.Guid == d.Guid);
                         why = known == null
-                            ? $"Needs {d.Guid}{d.Range}, which is not installed or switched off in the mod list."
+                            ? $"Needs {(item == null ? d.Guid : $"{item.Name} ({d.Guid})")}{d.Range}, which is not installed or switched off in the mod list."
                             : $"Needs {known.Display}{d.Range}, which does not start: {known.Reason}";
+                        p.MissingItem = item;
                         break;
                     }
                     if (!d.Accepts(dep.Version))
                     {
                         why = $"Needs {dep.Display}{d.Range}; installed is {dep.Version}.";
+                        p.MissingItem = item;
                         break;
                     }
                 }

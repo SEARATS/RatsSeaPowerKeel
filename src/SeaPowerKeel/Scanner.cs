@@ -42,6 +42,7 @@ internal static class Scanner
         {
             Manifest manifest = Manifest.Read(folder.Path, warn);
             bool folderEarly = EarlyStart.FolderAsks(folder.Path);
+            List<RequiredItem> required = RequiredItems.OfFolder(folder.Path);
             List<string> dlls;
             try
             {
@@ -82,6 +83,7 @@ internal static class Scanner
                 {
                     p.Order = order++;
                     p.StartEarly |= folderEarly;
+                    p.RequiredItems.AddRange(required);
                     if (offBuild != null && p.State == PluginState.Pending)
                         p.Stop(PluginState.Skipped, $"{offBuild} build: this game has the {GameState.BuildName} (keel.ini)");
                     all.Add(p);

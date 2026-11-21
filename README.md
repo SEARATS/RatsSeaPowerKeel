@@ -24,6 +24,7 @@ Mods made for [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/
 
 - Loads the plugin DLLs of the mods switched on in Mods, in dependency order; a mod that throws is marked and the next one starts.
 - Runs plain BepInEx plugins and Anchor Chain mods as they are; one DLL for the game's current main version.
+- A mod can name the Workshop items it needs: a missing one shows on the card with a Get it button, an installed one that is off is switched on ([for mod authors](docs/for-mod-authors.md)).
 - Checks every DLL against the game's `Managed` assemblies and leaves out one that could stop missions from loading, saying why.
 - Report window (Ctrl+Shift+K): every mod running, with errors, or not started and why; the same in `BepInEx\Keel-report.txt`.
 - Journals every step, so after a crash the next start names the mod whose code was running and keeps it out until it is updated.

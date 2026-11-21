@@ -238,6 +238,9 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (listed == null)
             yield return WaitForModList(startUp: true);
         List<ModFolder> folders = listed;
+        // A required item that is installed but off is switched on before the plugins are looked for (Steam gives a new required
+        // item to new subscribers only); one that is not installed is offered on the card.
+        RequiredItems.SwitchOn(folders, log.LogInfo, log.LogWarning);
         List<ModFolder> enabled = folders.Where(f => f.Enabled).ToList();
 
         // 2. Find the plugins (metadata only, no mod code runs): before the wait, so mods that ask to start early are known.
@@ -1618,6 +1621,20 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private static int GroupOf(PluginEntry p) => Report.IsProblem(p) ? 0 : p.State == PluginState.Running ? 1 : 2;
 
+    /// <summary>Opens a required item's Workshop page in the Steam client (the card's and the report's "Get it").</summary>
+    private void OpenItem(RequiredItem item)
+    {
+        try
+        {
+            Application.OpenURL(item.PageUrl);
+            log.LogInfo($"Get it: opened the Workshop page of {item.Name} ({item.WorkshopId}).");
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"Could not open the Workshop page of {item.Name}: {ex.Message}");
+        }
+    }
+
     private void Row(PluginEntry p)
     {
         GUILayout.BeginHorizontal(rowStyle);
@@ -1631,6 +1648,8 @@ internal sealed partial class KeelHost : MonoBehaviour
             GUILayout.Label(w, warnStyle);
         if (p.LoadOrderWarning != null)
             GUILayout.Label(p.LoadOrderWarning, warnStyle);
+        if (p.MissingItem != null && Report.IsProblem(p))
+            Button("Get it", 90, () => OpenItem(p.MissingItem));
         if (p.LaterErrors > 0)
             GUILayout.Label($"{p.LaterErrors} error(s) since it started; first: {p.FirstLaterError}", warnStyle);
         GUILayout.EndVertical();
