@@ -301,7 +301,7 @@ internal static class SelfTest
         string managed = args[0];
         Program.ResolveFrom(managed);
         Assembly game = Assembly.LoadFrom(Path.Combine(managed, "Seapower-Scripts.dll"));
-        Console.WriteLine($"Game build: {(game.GetType("SeapowerUI.MapDisplayState") != null ? "3D globe map" : "flat map (0.8.7)")} ({managed})");
+        Console.WriteLine($"Game build: 3D globe map ({managed})");
         Type ini = game.GetType("SeaPower.IniHandler");
         if (ini == null)
         {

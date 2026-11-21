@@ -11,7 +11,7 @@ namespace SeaPowerKeel;
 /// The game's <c>SeaPower.IniHandler</c>, bound by name and signature so one Keel DLL serves every game build (Keel
 /// references no game assembly). What Anchor Chain's <c>[ACConfig]</c> handling needs from it is looked up once; whatever
 /// this build lacks is listed in <see cref="Missing"/> and the caller degrades with a log line instead of failing.
-/// Checked against 0.8.7, the globe build 26223125 and 261107 (<c>offline-check --inicheck</c>).
+/// Checked against the globe builds 26223125 and 261107 (<c>offline-check --inicheck</c>).
 /// </summary>
 internal sealed class IniApi
 {
@@ -27,7 +27,7 @@ internal sealed class IniApi
         const BindingFlags pub = BindingFlags.Public | BindingFlags.Instance;
         MethodInfo[] all = iniType.GetMethods(pub);
         ctor = iniType.GetConstructor(Type.EmptyTypes);
-        // open(path, ...): the game added optional parameters between builds (five on 0.8.7, six on the globe builds);
+        // open(path, ...): the game added optional parameters between builds (five, then six);
         // take the overload whose parameters after the path are all optional and call it with its own defaults.
         open = all.Where(m => m.Name == "open" && m.GetParameters().Length > 0 && m.GetParameters()[0].ParameterType == typeof(string)
                               && m.GetParameters().Skip(1).All(p => p.IsOptional))

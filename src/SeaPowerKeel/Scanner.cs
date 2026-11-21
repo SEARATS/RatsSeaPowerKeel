@@ -279,7 +279,7 @@ internal static class Scanner
 /// <code>
 /// [Keel]
 /// globe = MyMod.dll        ; only on the 3D globe build
-/// flat  = MyModFlat.dll    ; only on the flat map (0.8.7)
+/// flat  = MyModFlat.dll    ; an extra build for an older game: left out here
 /// </code>
 /// </summary>
 internal sealed class Manifest
@@ -324,16 +324,12 @@ internal sealed class Manifest
         return m;
     }
 
-    /// <summary>"Flat map" / "3D globe" when the DLL is listed only for the other map, else null.</summary>
+    /// <summary>"Flat map" when the DLL is listed only for the flat map (an extra build for an older game), else null.</summary>
     public string OtherBuildOnly(string dll)
     {
         string rel = dll.Substring(folder.Length).TrimStart('\\', '/').Replace('/', '\\');
         bool forGlobe = globe.Contains(rel) || globe.Contains(Path.GetFileName(dll));
         bool forFlat = flat.Contains(rel) || flat.Contains(Path.GetFileName(dll));
-        if (GameState.Globe && forFlat && !forGlobe)
-            return "Flat map";
-        if (!GameState.Globe && forGlobe && !forFlat)
-            return "3D globe";
-        return null;
+        return forFlat && !forGlobe ? "Flat map" : null;
     }
 }

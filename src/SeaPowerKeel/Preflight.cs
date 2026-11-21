@@ -28,8 +28,8 @@ internal sealed class Preflight : IDisposable
     }
 
     /// <summary>
-    /// Our mods ship two builds of one source for the two map kinds, side by side: <c>X.dll</c> (globe) and <c>XFlat.dll</c> (flat
-    /// map, 0.8.7). On one game build the other one lacks things by design and stands down at its entry gate. When this DLL has
+    /// Older packages ship two builds of one source for the two map kinds, side by side: <c>X.dll</c> (globe) and <c>XFlat.dll</c>
+    /// (the old flat map). The one for the other map lacks things by design and stands down at its entry gate. When this DLL has
     /// such a partner in the same folder and the partner lacks nothing here, the partner's name is returned (else null).
     /// </summary>
     internal static string MatchingMapBuild(string dll, Result r, IReadOnlyDictionary<string, Result> results)

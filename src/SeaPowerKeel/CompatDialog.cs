@@ -140,7 +140,7 @@ internal static class CompatDialog
     private static string Text(string section, string key)
     {
         object instance = Reflected.Singleton("SeaPower.LanguageResourceHandler");
-        // getText(section, key) on 0.8.7, getText(section, key, logError, verboseError) on 0.9.0: fill what follows with defaults.
+        // getText(section, key) in older builds, getText(section, key, logError, verboseError) since 0.9.0: fill what follows with defaults.
         MethodInfo get = instance?.GetType().GetMethods(Any).FirstOrDefault(m => m.Name == "getText" && m.GetParameters().Length >= 2
                                                                   && m.GetParameters()[0].ParameterType == typeof(string) && m.GetParameters()[1].ParameterType == typeof(string));
         if (instance == null || get == null)

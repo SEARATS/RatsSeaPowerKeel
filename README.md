@@ -5,8 +5,8 @@ Keel is the mod loader for Sea Power's code mods and carries on Anchor Chain: it
 | | |
 | --- | --- |
 | Questions | [R.A.T.S. Discord](https://discord.gg/CzuHd4f8Yf): help, ideas, talk; the first place to ask |
-| Version | `0.7.0` (2026-11-20) |
-| Game | Sea Power 0.9.3 (public and beta) tested in the game with 0.6.0 (2026-11-18); `_info.ini` declares 0.8.7 up to, not including, 0.10.0 |
+| Version | `0.8.0` (unreleased) |
+| Game | Sea Power 0.9.3 (public and beta) tested in the game with 0.6.0 (2026-11-18); `_info.ini` declares 0.9.0 up to, not including, 0.10.0 |
 | Needs | [BepInEx 5](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) (KeelSetup adds it); Keel is the loader itself and needs no other one |
 | Get it | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459) |
 | Settings | `BepInEx\config\dev.sewerlabs.seapowerkeel.cfg`, see [docs/settings.md](docs/settings.md) |
@@ -23,7 +23,7 @@ Mods made for [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/
 ## Features
 
 - Loads the plugin DLLs of the mods switched on in Mods, in dependency order; a mod that throws is marked and the next one starts.
-- Runs plain BepInEx plugins and Anchor Chain mods as they are; one DLL serves both game builds (flat map and 3D globe).
+- Runs plain BepInEx plugins and Anchor Chain mods as they are; one DLL for the game's current main version.
 - Checks every DLL against the game's `Managed` assemblies and leaves out one that could stop missions from loading, saying why.
 - Report window (Ctrl+Shift+K): every mod running, with errors, or not started and why; the same in `BepInEx\Keel-report.txt`.
 - Journals every step, so after a crash the next start names the mod whose code was running and keeps it out until it is updated.

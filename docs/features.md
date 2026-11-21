@@ -15,7 +15,7 @@ Everything Keel does, in full. The short list is in the [README](../README.md).
   - `[ACConfig]` config files are prepared
   - `AnchorChainLoader.FindFile` works for mods that call it
 - Gives mods that wait for the end of the start-up load screen (to add menu entries) that signal once after Keel started them.
-- Uses no game assembly, so one DLL serves both game builds (the flat map of 0.8.7 and the 3D globe build).
+- Uses no game assembly: one DLL for the game's current main version.
 - Works on the globe beta, where Anchor Chain's own preloader does not start.
 - The hand-installed part never changes: the starter file in `BepInEx\plugins` only finds and starts Keel, and updates come through the Workshop.
 
@@ -96,8 +96,8 @@ it was started, "Waiting 19 s after Dynamic Campaign Mod").
 
 | | Status |
 |---|---|
-| Game versions | `_info.ini`: 0.8.7 up to but not including 0.10.0 |
-| Run in the game | the flat map (0.8.7, up to Keel 0.1.0) and the 3D globe build (every release since, on the then current build); no more 0.8.7 tests since 2026-11-08 |
+| Game versions | `_info.ini`: 0.9.0 up to but not including 0.10.0 |
+| Run in the game | the 3D globe build, every release on the then current build |
 | Last full run | 0.6.0 in the test VM on game 0.9.3, public and beta (2026-11-18): setup and Restore, cards, report, What's new, two missions, a game ended from outside and the start after it; every row green |
 | Loaders | Keel runs Anchor Chain mods and BepInEx plugins; while it is on, Anchor Chain's and Alpine's preloaders do not start |
 | Linux | one player's report (2026-11-10); not run by us |

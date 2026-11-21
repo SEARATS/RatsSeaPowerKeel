@@ -48,6 +48,6 @@ Keel is meant to run the same mods. Where it deliberately does not behave like A
 - `before` / `after` only order the start; an absent plugin named there does not keep the mod from starting (Anchor Chain treats them as dependencies).
 - Switched-off mod folders are not loaded. Anchor Chain loads the DLLs of every folder the game lists, switched on or not; mods that check the Mod Manager themselves, like Euromod's, behave the same either way.
 - `[ACConfig]` works like Anchor Chain's: default `<id>.ini` in the mod folder, the player's `<id>_user.ini` in `StreamingAssets\ACConfigs`, missing keys merged in, `[AnchorChain.ResetValues]` applied once.
-  - The game's `IniHandler` is used by reflection; it has everything needed on 0.8.7, the globe build 26223125 and 261107 (`tools/offline-check --inicheck`).
+  - The game's `IniHandler` is used by reflection; it has everything needed on the globe builds 26223125 and 261107 (`tools/offline-check --inicheck`).
   - Should a build lack a member, Keel copies the default file, says what it could not do, and starts the mod.
 - `AnchorChainLoader.FindFile` (Euromod's Sonar Audio Loader uses it for audio in other mods' folders) works: Keel provides the one interface of Anchor Chain's preloader that Anchor Chain's DLL needs to load that class, and fills the class's folder list.

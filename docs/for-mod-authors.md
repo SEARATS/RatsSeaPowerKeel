@@ -11,7 +11,7 @@ You do not need to reference Keel.
 - **Anchor Chain mods and plain BepInEx plugins run as they are** (sections 1 and 2).
 - **Bug reports that say what broke.** When a game update breaks your mod, Keel's report (`BepInEx\Keel-report.txt`) names
   the missing method, field or type and the Harmony patch whose target is gone; *Save logs* gives players one zip to attach.
-- **One mod, both game builds:** a flat-map and a 3D-globe DLL plus a small `keel.ini` (below).
+- **An extra DLL for an older game build:** list it in a small `keel.ini` and Keel leaves it out (below).
 - **While Keel is on, it is the only loader:** an Anchor Chain or Alpine preloader that is still installed does not start, so
   your mod is never started twice.
 
@@ -47,10 +47,10 @@ lists every DLL it left out on purpose (Keel's own and Anchor Chain's `AnchorCha
 
 A DLL that has both an `[ACPlugin]` and a `[BepInPlugin]` entry runs through its Anchor Chain entry only.
 
-## Two game builds: `keel.ini`
+## An extra DLL for an older build: `keel.ini`
 
-Sea Power has two builds in players' hands (the flat map of 0.8.7 and the 3D globe build). If your mod ships one DLL per
-build, say which is which, and Keel starts only the right one:
+Keel supports the game's current main version only. A mod that still ships a second DLL for an older build (the flat map
+of 0.8.7) can say so, and Keel leaves that DLL out:
 
 ```ini
 [Keel]

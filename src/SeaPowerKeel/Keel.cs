@@ -233,8 +233,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         // One frame first: every plugin in BepInEx\plugins (Anchor Chain's preloader too) has had its Awake by then.
         yield return null;
 
-        // 1. The game's mod list. 0.8.7 has it straight away, the globe build after a while; failing that, the same list from disk.
-        listed = GameState.Globe ? EarlyModList() : null;
+        // 1. The game's mod list, which the game has only after a while; failing that, the same list from disk.
+        listed = EarlyModList();
         if (listed == null)
             yield return WaitForModList(startUp: true);
         List<ModFolder> folders = listed;
@@ -248,11 +248,11 @@ internal sealed partial class KeelHost : MonoBehaviour
         foreach (SkippedDll d in skippedDlls)
             log.LogInfo($"DLL left out: {d.Path} - {d.Reason}");
 
-        // 3. On the globe build, after the start-up load screen: mods started during it can keep the unit data from loading.
+        // 3. After the start-up load screen: mods started during it can keep the unit data from loading.
         // A mod that asked to start early (EarlyStart) changes that: Keel then prepares everything now, starts the early mods,
         // and waits for the load screen right before the others.
-        bool early = GameState.Globe && Keel.Plugins.Any(p => p.StartEarly && p.State == PluginState.Pending);
-        if (GameState.Globe && !early)
+        bool early = Keel.Plugins.Any(p => p.StartEarly && p.State == PluginState.Pending);
+        if (!early)
             yield return WaitForLoadScreen(say: true);
 
         Say($"{enabled.Count} of {folders.Count} mod folders are on.", (w, l) => w.FoldersOn(l));
@@ -531,8 +531,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         yield return null;
         yield return WaitForModList(startUp: false);
         List<ModFolder> folders = listed;
-        if (GameState.Globe)
-            yield return WaitForLoadScreen(say: false);
+        yield return WaitForLoadScreen(say: false);
         List<ModFolder> now = folders.Where(f => f.Enabled).ToList();
         List<ModFolder> added = now.Where(f => !liveFolders.Any(o => SameFolder(o, f))).ToList();
         List<ModFolder> removed = liveFolders.Where(o => !now.Any(f => SameFolder(o, f))).ToList();

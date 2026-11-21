@@ -9,7 +9,7 @@ namespace SeaPowerKeel;
 /// A Restart button in the game's own "reload" dialog (Mods menu, Apply). The game only reloads its data there: a code mod switched on
 /// or off does not start or stop until the game is started again. The dialog's message box has a middle button the game leaves unused;
 /// Keel fills it, and marks the game's own Reload so Keel follows the new mod list after it (KeelHost.HotLoad). Restart saves the mod list the way the game's own button does, then quits and starts the game again through
-/// KeelWatcher. The dialog is the same on both game builds (0.8.7 and the 3D globe build); everything is looked up by name, so a build
+/// KeelWatcher. Everything is looked up by name, so a build
 /// without it only loses the button.
 /// </summary>
 internal static class ModMenuRestart

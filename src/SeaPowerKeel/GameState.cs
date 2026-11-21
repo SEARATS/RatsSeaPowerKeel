@@ -16,10 +16,8 @@ internal static class GameState
 {
     private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
-    /// <summary>The 3D globe build (public beta from 26 Oct 2026, the default from 11 Nov) has the map display state; 0.8.7 does not.</summary>
-    public static readonly bool Globe = Type.GetType("SeapowerUI.MapDisplayState, Seapower-Scripts") != null;
-
-    public static string BuildName => Globe ? "3D globe map" : "flat map (0.8.7)";
+    /// <summary>The game build Keel runs on: the 3D globe map, the game's current main version. No other build is supported.</summary>
+    public static string BuildName => "3D globe map";
 
     private static Type T(string name) => Type.GetType(name + ", Seapower-Scripts");
 
@@ -92,8 +90,7 @@ internal static class GameState
         Type t = d.GetType();
         if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
             return null;
-        // The globe build lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
-        // 0.8.7 has no kinds.
+        // The game lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
         string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
         if ((kind != null && kind != "Mod") || IsGameOwn(info, streaming))
             return null;
