@@ -1,6 +1,6 @@
 # Sea Power: R.A.T.S. Keel
 
-Keel is the mod loader for Sea Power's code mods: it finds the mod DLLs, checks them against your game version, starts them and tells you what happened.
+Keel is the mod loader for Sea Power's code mods and carries on Anchor Chain: it finds the mod DLLs, checks them against your game version, starts them and tells you what happened.
 
 | | |
 | --- | --- |
@@ -18,7 +18,7 @@ Keel is the mod loader for Sea Power's code mods: it finds the mod DLLs, checks 
 
 ![Keel's cards in the main menu](workshop/screenshots/01-cards-whats-new.jpg)
 
-Other mods need *a mod loader*: Keel or [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757), either one.
+Mods made for [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757) run under Keel as they are: Keel is the one loader a player needs.
 
 ## Features
 

@@ -38,7 +38,7 @@ dotnet run -c Release --project tools/offline-check -- --inicheck "<Managed>"
 ## shared/
 
 - `shared/` is the common skeleton of the R.A.T.S. Sea Power mods, kept once in this repository. Keel itself does not use it.
-- Each mod compiles these files into its own DLL as linked source, under its own `Rats.Shared` namespace. No mod references Keel's DLL, so every mod still runs under Keel or Anchor Chain alike.
+- Each mod compiles these files into its own DLL as linked source, under its own `Rats.Shared` namespace. No mod references Keel's DLL.
 - Mods that compile it in: Borders, Command Tools, Pop-Out, Radio, Sensor Views, Topo.
 - A mod's csproj imports `shared/Rats.Mod.props`, which finds the folder through the workspace's `mods.json` (`-p:RatsShared=...` points at another copy).
 - What it holds: the mod start (`ModEntry`), logging, the per-frame host, the hook registry, mission start and end events, the config file, the Mod Manager tick check, game-build detection, a Layers-menu entry, an Options-menu tab, and the package-script steps (`tools/RatsPackage.psm1`).
