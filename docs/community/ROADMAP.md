@@ -41,6 +41,7 @@ Who we start with (partners, wanted modders): [partner-mods.md](partner-mods.md)
 - [ ] Safety check at load: the report lists what each mod's code can reach (start programs, the network, files outside
   the game and its save folder, the registry, code loaded from bytes), and Keel asks once before such a mod starts the
   first time. A .NET mod cannot be fully fenced in inside the game: Keel makes this visible, it cannot make it impossible
+  - pre-analysis, the options and what each one costs: [safety-check](safety-check.md)
 - [ ] After each game update a post in `#game-updates`: what changed and when Keel's update is out
 
 ## Wave 3: the stable mod API

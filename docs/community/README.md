@@ -12,6 +12,7 @@ Notes for players, mod authors and partners: how we work together, who is on boa
 | [november-2026.md](november-2026.md) | What went wrong in November 2026, and what changes |
 | [open-for-discussion.md](open-for-discussion.md) | Topics still open, one file each below |
 | [license.md](license.md) | Is the R.A.T.S. Source License right for Keel? |
+| [safety-check.md](safety-check.md) | Pre-analysis: a safety check for the mods Keel loads, the options and what each costs |
 | [realistic-player-experience.md](realistic-player-experience.md) | A curated, stable set of mods as one meta-mod (by lukexcom, PR #7) |
 | [mod-stewardship.md](mod-stewardship.md) | A foundation that looks after mods whose authors have left (by lukexcom, PR #7) |
 
