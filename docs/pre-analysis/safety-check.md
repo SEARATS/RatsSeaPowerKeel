@@ -1,8 +1,8 @@
 # Pre-analysis: a safety check for the mods Keel loads
 
 - **Status: pre-analysis.** Nothing here is decided or built. It lists what Keel could do, what each option catches and what it costs.
-- It belongs to the Wave 2 step "Safety check at load" of the [roadmap](ROADMAP.md).
-- Talk about it in Discord `#proposals`.
+- It belongs to the Wave 2 step "Safety check at load" of the [roadmap](../community/ROADMAP.md).
+- It is not a proposal yet: a proposal follows only if one of the options is picked.
 
 ## Bottom line
 
@@ -119,7 +119,7 @@ flowchart LR
 - **Asked too often, players click yes.** Ask only at a first start and when something changes.
 - **False safety.** Players may trust a mod because Keel showed nothing.
 - **The checks can be read.** Keel's source is public. B and E do not depend on secrecy; A partly does.
-- **Keel's own scanner results.** New hooks and a network read can raise false flags on Keel itself, as happened with its setup in [November](november-2026.md); every build is checked before release.
+- **Keel's own scanner results.** New hooks and a network read can raise false flags on Keel itself, as happened with its setup in [November](../community/november-2026.md); every build is checked before release.
 - **Keel is a mod too.** It updates through the Workshop, so its own releases need the same care: checksums per release (Wave 0), and maybe a starter file that only loads a signed Keel.
 
 ## Not verified
