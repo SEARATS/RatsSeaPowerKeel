@@ -37,4 +37,4 @@ dotnet run -c Release --project tools/offline-check -- --inicheck "<Managed>"
 ## The shared mod skeleton
 
 - Until 2026-11-20 the common skeleton of the R.A.T.S. mods lived here in `shared/`. Keel never used it.
-- It moved with its history into its own repo, [SeaPowerCore](https://github.com/struckl/SeaPowerCore), so no mod build needs Keel.
+- It moved with its history into its own repo, [SeaPowerShared](https://github.com/struckl/SeaPowerShared), so no mod build needs Keel.
