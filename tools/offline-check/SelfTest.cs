@@ -28,17 +28,17 @@ internal static class SelfTest
             return r;
         }
         string dir = Path.Combine(Path.GetTempPath(), "mod");
-        string globe = Path.Combine(dir, "SeaPowerTopo.dll"), flat = Path.Combine(dir, "SeaPowerTopoFlat.dll");
+        string globe = Path.Combine(dir, "MyMod.dll"), flat = Path.Combine(dir, "MyModFlat.dll");
         var both = new Dictionary<string, Preflight.Result> { [globe] = R(0), [flat] = R(11) };
-        Check(Preflight.MatchingMapBuild(flat, both[flat], both) == "SeaPowerTopo.dll", "globe game: the flat build lacking 11 parts beside a clean globe build is the other map's build");
+        Check(Preflight.MatchingMapBuild(flat, both[flat], both) == "MyMod.dll", "globe game: the flat build lacking 11 parts beside a clean globe build is the other map's build");
         Check(Preflight.MatchingMapBuild(globe, both[globe], both) == null, "the clean partner gets no note");
         var old = new Dictionary<string, Preflight.Result> { [globe] = R(7), [flat] = R(0) };
-        Check(Preflight.MatchingMapBuild(globe, old[globe], old) == "SeaPowerTopoFlat.dll", "0.8.7: the globe build lacking parts beside a clean flat build gets the note");
+        Check(Preflight.MatchingMapBuild(globe, old[globe], old) == "MyModFlat.dll", "0.8.7: the globe build lacking parts beside a clean flat build gets the note");
         var broken = new Dictionary<string, Preflight.Result> { [globe] = R(2), [flat] = R(11) };
         Check(Preflight.MatchingMapBuild(flat, broken[flat], broken) == null, "both builds lack parts: still a warning");
         var alone = new Dictionary<string, Preflight.Result> { [flat] = R(11) };
         Check(Preflight.MatchingMapBuild(flat, alone[flat], alone) == null, "no partner in the folder: still a warning");
-        var elsewhere = new Dictionary<string, Preflight.Result> { [Path.Combine(Path.GetTempPath(), "other", "SeaPowerTopo.dll")] = R(0), [flat] = R(11) };
+        var elsewhere = new Dictionary<string, Preflight.Result> { [Path.Combine(Path.GetTempPath(), "other", "MyMod.dll")] = R(0), [flat] = R(11) };
         Check(Preflight.MatchingMapBuild(flat, elsewhere[flat], elsewhere) == null, "a partner in another folder does not count");
     }
 
@@ -527,7 +527,7 @@ internal static class SelfTest
         Console.WriteLine("Sent reports: the game build and a one-line summary, read from the report Keel wrote");
         // What a sent report says in one line (player reports 2026-11-12: game "?", every mail titled "Crash report").
         string rep = "R.A.T.S. Keel 0.5.0 (stub 1.0.0) – Sea Power 0.9.1-261112, 3D globe map – 2026-11-12 15:00\nEuromod setup: Euromod + AC Pack.\n41 running, 2 failed\n\n" +
-                     "[FAILED] Taigei (x.taigei) – Workshop 1, T.dll\n[RUNNING] R.A.T.S. Radio 1.5.1 (dev.sewerlabs.seapowerradio) – SeaPowerRadio\n[ERRORS] Automatic SAR (x.sar) – Workshop 2\n";
+                     "[FAILED] Taigei (x.taigei) – Workshop 1, T.dll\n[RUNNING] Some Mod 1.5.1 (com.example.somemod) – SomeMod\n[ERRORS] Automatic SAR (x.sar) – Workshop 2\n";
         Check(ReportFacts.Game("3D globe map", rep, "") == "0.9.1-261112", "game build from the report's first line, not the map name");
         Check(ReportFacts.Game("", "R.A.T.S. Keel 0.4.0 – Sea Power, 3D globe map – x\n17 running\n", "x Version 0.9.0-261111 y") == "0.9.0-261111", "an old report: the build from Keel's log");
         Check(ReportFacts.Summary(rep) == "41 running, 2 failed: Taigei, Automatic SAR", "summary: the counts line after a multi-line header, then the problem mods: " + ReportFacts.Summary(rep));

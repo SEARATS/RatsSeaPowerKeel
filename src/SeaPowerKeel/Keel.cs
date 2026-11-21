@@ -600,7 +600,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             if (running.Contains(p.Guid))
                 p.Stop(PluginState.Skipped, "Already running from another folder.");
             // Its code from the first start is still loaded, with whatever it remembers: a second start in the same game
-            // is not a clean one (seen with Topo: "already loaded, skipping"). A restart is.
+            // is not a clean one (seen with a mod: "already loaded, skipping"). A restart is.
             else if (turnedOffDlls.Contains(Path.GetFullPath(p.Dll)))
                 p.Stop(PluginState.NotStarted, "Switched off and on again in this game: its code from the first start is still loaded, so it starts again only after a restart.");
         }
