@@ -94,9 +94,9 @@ Requires=3840000000, com.you.library, My Library
   Keel closes that gap for any mod:
   - **Switched on at a start:** an item that is installed but off in the mod list is switched on when a mod that is on names it (the
     log says so). The item must be subscribed and downloaded; Keel does not subscribe for the player.
-  - **"Get it" on the card:** a mod kept out because that plugin is missing or too old shows the item's name on the card at the main
-    menu (`<name> is missing: 2 mods wait for it`) with a **Get it** button that opens the item's Workshop page; the report window has
-    the same button in the mod's row. The mod's reason names the item and the plugin id.
+  - **"Get it" on the card:** a mod kept out because that plugin is missing or too old puts the item's name on the card's last line
+    at the main menu, with a **Get it** button that opens the item's Workshop page; the report window has the same button in the
+    mod's row. The mod's reason names the item and the plugin id.
 - A mod that names no item gets the plain reason and no button.
 - The dependency itself is still what keeps the mod out or lets it start; `Requires` only adds the offer.
 
