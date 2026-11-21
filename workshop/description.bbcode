@@ -13,13 +13,12 @@ The mod loader for Sea Power: starts your code mods, checks each one against you
 ▶ [b]Roadmap:[/b] [url=https://github.com/struckl/SeaPowerKeel/blob/main/docs/community/ROADMAP.md]where Keel goes next[/url]
 ⭐ A favourite helps other captains find it[/quote]
 
-[h2]✦ New in 0.5[/h2]
+[h2]✦ New in 0.8[/h2]
 [list]
-[*][b]Keel takes over.[/b] Anchor Chain's and Alpine's loaders no longer start while Keel is on: every mod starts once
-[*][b]What's new since your last game.[/b] A card on the main menu shows updated, new and broken mods, with their authors' notes
-[*][b]Euromod stages.[/b] The report names your stage, a button switches Extended Guidance
-[*][b]Cards that get out of your way.[/b] Each has an × and stays until you close it
-[*][b]Start early[/b] for mods that need it (mod makers opt in, see below)
+[*][b]Mods can name what they need.[/b] A mod that needs another Workshop item says so: the card names the missing one with a [b]Get it[/b] button that opens its page
+[*][b]Switched on for you.[/b] An item a mod needs, installed but off in your Mods list, is switched on at the start
+[*][b]One game version.[/b] Keel runs on the game's current main version (0.9.x); the 0.8.7 code is gone
+[*][b]Keel takes over[/b] from Anchor Chain and Alpine, and [b]What's new since your last game[/b] shows what changed (0.5)
 [/list]
 
 [h2]✦ Highlights[/h2]
@@ -58,7 +57,8 @@ The mod loader for Sea Power: starts your code mods, checks each one against you
 
 [h2]⚙ Install and game versions[/h2]
 [list]
-[*][b]Run in the game on 0.9.1[/b] (build 261112): 43 mods, Euromod with AC Pack and Extended Guidance in a mission, Alpine kept out
+[*][b]Game:[/b] 0.9.3 (build 261116), the current main version; 0.8.7 is not supported any more
+[*][b]Run in the game on 0.9.3[/b] (build 261116): RUN_LINE
 [*][b]By hand, settings, how it works:[/b] [url=https://github.com/struckl/SeaPowerKeel]README on GitHub[/url]
 [/list]
 
@@ -67,6 +67,7 @@ The mod loader for Sea Power: starts your code mods, checks each one against you
 [*][b]List R.A.T.S. Keel as your required item.[/b] Your players need no Anchor Chain item and no manual install
 [*][b]Loads as built:[/b] [ACPlugin] and [BepInPlugin] mods, their dependencies and ACConfig
 [*][b]Start early:[/b] [Keel] StartEarly=true in your _info.ini starts your mod before the load screen ends
+[*][b]Needs another item:[/b] [Keel] Requires=<Workshop id>, <plugin id>, <name> in your _info.ini: Keel shows a Get it button when it is missing and switches it on when it is installed but off
 [*][b]Reports that say what broke:[/b] the missing method, field or type after a game update
 [*][b]Details:[/b] [url=https://github.com/struckl/SeaPowerKeel/blob/main/docs/for-mod-authors.md]for mod authors[/url]
 [/list]
