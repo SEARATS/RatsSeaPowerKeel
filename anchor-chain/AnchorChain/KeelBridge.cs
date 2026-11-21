@@ -1,4 +1,5 @@
 using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using SeaPower;
 using SeapowerUI;
@@ -19,6 +20,8 @@ namespace AnchorChain;
 /// BepInEx\plugins and its takeover patcher into BepInEx\patchers (recorded in keel-setup.txt, so Keel's setup can undo it),
 /// switches Keel on in the game's mod list and offers a restart.</item>
 /// <item>Not now: nothing changes; the box comes again at the next start.</item>
+/// <item>Don't show this again: the box's middle button, used as a tick. Ticked, the box stays away until ShowSwitchOffer is
+/// set back in Anchor Chain's config file.</item>
 /// </list>
 /// Anchor Chain itself loads every mod as before at this start. Nothing here can stop that: every step is caught, and a game
 /// build whose UI differs only loses the box. Players who have Keel already (its stub is in BepInEx\plugins) never see it.
@@ -33,16 +36,22 @@ internal sealed class KeelBridge : MonoBehaviour
 	private const string ManifestName = "keel-setup.txt";
 	private const string Header = "MESSAGE  ·  Anchor Chain";
 	private const float DownloadSeconds = 300f;
+	private const string ConfigName = "io.github.seapower_modders.anchorchain.cfg";
+	private const string TickOff = "[ ] Don't show this again";
+	private const string TickOn = "[x] Don't show this again";
 
 	private const string OfferText =
 		"Anchor Chain continues as R.A.T.S. Keel, made together with Anchor Chain's authors.\n\n" +
 		"• Your mods keep working: Keel runs every Anchor Chain mod as it is\n" +
 		"• Keel checks each mod against your game version and names the one that breaks\n" +
 		"• Switch to Keel: subscribes to it, installs it and restarts the game. Keel's setup (KeelSetup.exe) can undo it\n" +
-		"• Not now: Anchor Chain keeps working, and this asks again at the next start";
+		"• Not now: Anchor Chain keeps working, and this asks again at the next start\n" +
+		"• Don't show this again: click it to tick it, and this offer stays away";
 
 	private static readonly ManualLogSource Log = BepInEx.Logging.Logger.CreateLogSource("Anchor Chain → Keel");
 	private static bool begun;
+	// Whether the offer is shown at all. The box's tick writes it; a player sets it back in the config file.
+	private static ConfigEntry<bool>? showOffer;
 
 	private object? box;
 	private object? context;
@@ -56,6 +65,12 @@ internal sealed class KeelBridge : MonoBehaviour
 		try {
 			if (File.Exists(Path.Combine(Paths.PluginPath, StubName))) {
 				Log.LogInfo("R.A.T.S. Keel is installed already: no switch offer.");
+				return;
+			}
+			showOffer = new ConfigFile(Path.Combine(Paths.ConfigPath, ConfigName), true).Bind("Keel", "ShowSwitchOffer", true,
+				"Offer the switch to R.A.T.S. Keel on the main menu at every game start. \"Don't show this again\" in that box sets it to false.");
+			if (!showOffer.Value) {
+				Log.LogInfo($@"The switch offer is switched off (ShowSwitchOffer in BepInEx\config\{ConfigName}).");
 				return;
 			}
 			var host = new GameObject("AnchorChain.KeelBridge");
@@ -86,7 +101,7 @@ internal sealed class KeelBridge : MonoBehaviour
 		}
 		Log.LogInfo("Main menu is up.");
 		try {
-			Show(OfferText, "Switch to Keel", Switch, "Not now", () => Log.LogInfo("Not now: Anchor Chain stays this time."));
+			Show(OfferText, "Switch to Keel", Switch, "Not now", () => Log.LogInfo("Not now: Anchor Chain stays this time."), withTick: true);
 			Log.LogInfo("Switch offer shown.");
 		}
 		catch (Exception e) {
@@ -118,7 +133,7 @@ internal sealed class KeelBridge : MonoBehaviour
 
 	// The game's message box class is internal: built and filled by name (the same names on every 0.9 build).
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	private void Show(string message, string okLabel, Action ok, string? cancelLabel = null, Action? cancel = null)
+	private void Show(string message, string okLabel, Action ok, string? cancelLabel = null, Action? cancel = null, bool withTick = false)
 	{
 		CloseBox();
 		Type type = typeof(MessageBoxType).Assembly.GetType("SeapowerUI.ViewModels.MessageBoxViewModel", true)!;
@@ -133,9 +148,30 @@ internal sealed class KeelBridge : MonoBehaviour
 			Set("CancelCommandLabel", cancelLabel);
 			Set("CancelCommand", new DelegateCommand(_ => { CloseBox(); if (cancel != null) { Run(cancel); } }));
 		}
+		if (withTick) {
+			// The game's message box has three buttons and no check box: the middle one is the tick, its label says whether it is set.
+			Set("MiddleCommandLabel", TickLabel());
+			Set("MiddleCommand", new DelegateCommand(_ => Run(ToggleTick)));
+		}
 		context = MainMenuView.Instance;
 		box = b;
 		WindowHostCommands.OpenWindowCommand.Execute(b, (Noesis.UIElement)context);
+	}
+
+	private static string TickLabel() => showOffer is { Value: false } ? TickOn : TickOff;
+
+	// Saved at once (BepInEx writes the file when the value is set), so closing the box with its X counts too. The box stays open.
+	private void ToggleTick()
+	{
+		if (showOffer == null) { return; }
+		showOffer.Value = !showOffer.Value;
+		Log.LogInfo(showOffer.Value ? "Tick taken off: the offer comes again at the next start." : "Ticked: the offer will not be shown again.");
+		try {
+			box?.GetType().GetProperty("MiddleCommandLabel", Any)?.SetValue(box, TickLabel());
+		}
+		catch (Exception) {
+			// the box is gone; the setting is saved all the same
+		}
 	}
 
 	private const System.Reflection.BindingFlags Any =
