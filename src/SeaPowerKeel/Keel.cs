@@ -1649,7 +1649,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (p.LoadOrderWarning != null)
             GUILayout.Label(p.LoadOrderWarning, warnStyle);
         if (p.MissingItem != null && Report.IsProblem(p))
-            Button("Get it", 90, () => OpenItem(p.MissingItem));
+            RowButton("Get it", 90, () => OpenItem(p.MissingItem));
         if (p.LaterErrors > 0)
             GUILayout.Label($"{p.LaterErrors} error(s) since it started; first: {p.FirstLaterError}", warnStyle);
         GUILayout.EndVertical();
@@ -1666,6 +1666,28 @@ internal sealed partial class KeelHost : MonoBehaviour
         {
             Rect r = GUILayoutUtility.GetLastRect();
             buttonSpots.Add((new Rect(window.x + r.x, window.y + r.y, r.width, r.height), act));
+        }
+        if (clicked)
+            act();
+    }
+
+    /// <summary>
+    /// A button inside the report list. The list is a scroll view, so its layout rect is in the scroll view's content: the spot the
+    /// device click reads adds the scroll view's place in the window and takes the scroll off (the click on "Get it" did nothing before,
+    /// 2026-11-21: the spot sat at the content position). A button scrolled out of the view gets no spot.
+    /// </summary>
+    private void RowButton(string text, float width, Action act)
+    {
+        bool clicked = GUILayout.Button(text, buttonStyle, GUILayout.Width(width), GUILayout.Height(27));
+        if (Event.current.type == EventType.Repaint)
+        {
+            Rect r = GUILayoutUtility.GetLastRect();
+            var inWindow = new Rect(window.x + newsScrollRect.x + r.x - scroll.x, window.y + newsScrollRect.y + r.y - scroll.y, r.width, r.height);
+            var view = new Rect(window.x + newsScrollRect.x, window.y + newsScrollRect.y, newsScrollRect.width, newsScrollRect.height);
+            float left = Mathf.Max(inWindow.xMin, view.xMin), right = Mathf.Min(inWindow.xMax, view.xMax);
+            float top = Mathf.Max(inWindow.yMin, view.yMin), bottom = Mathf.Min(inWindow.yMax, view.yMax);
+            if (right > left && bottom > top)
+                buttonSpots.Add((Rect.MinMaxRect(left, top, right, bottom), act));
         }
         if (clicked)
             act();

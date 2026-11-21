@@ -464,13 +464,14 @@ internal sealed partial class KeelHost
         }
         EnsureStyles();
         creditRect = Rect.zero;
-        (RequiredItem item, int mods) = missing[0];
+        RequiredItem item = missing[0].item;
         float button = 64f * u;
         getItRect = new Rect(r.x + r.width - pad - button, y, button, lineH);
         getItItem = item;
         cardSmall.normal.textColor = CardAmber;
-        string text = $"{item.Name} is missing: {mods} {(mods == 1 ? "mod waits" : "mods wait")} for it";
-        GUI.Label(new Rect(r.x + pad, y, tw - button - 6f, lineH), Fit(text, cardSmall, tw - button - 6f), cardSmall);
+        // The card is narrow: only the item's name stands here (a longer sentence was cut off in the VM, 2026-11-21). The report's rows
+        // say which mods wait for it, and how many is in the card's problem count above.
+        GUI.Label(new Rect(r.x + pad, y, tw - button - 6f, lineH), Fit(item.Name, cardSmall, tw - button - 6f), cardSmall);
         GUI.Label(getItRect, "Get it", buttonStyle);
     }
 
