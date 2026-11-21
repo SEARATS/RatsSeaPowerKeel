@@ -18,7 +18,7 @@ Not released; a pull request. Run 2 in the test VM (2026-11-18): offer, Not now,
 - **Anchor Chain offers the switch**: on the main menu a game message box says Anchor Chain continues as Keel; Switch or Not now
 - **Switch does it all from the game**: subscribes to Keel, switches it on in the mod list, installs its stub and takeover the way KeelSetup does (Restore undoes it), restarts the game
 - **Not now changes nothing**: Anchor Chain keeps loading the mods; the box asks again at the next start
-- **Don't show this again**: the box's middle button is a tick; ticked, the offer stays away, and `ShowSwitchOffer` in `BepInEx\config\io.github.seapower_modders.anchorchain.cfg` brings it back (built, not yet run in the game)
+- **Don't show this again**: the box's middle button is a tick; ticked, the offer stays away, and `ShowSwitchOffer` in `BepInEx\config\io.github.seapower_modders.anchorchain.cfg` brings it back. Run in the test VM on 2026-11-21 (0.9.3 public, 3 starts): tick, untick, closing with the ×, no offer at the next start, offer back after setting it to `true`, all green
 - **Builds from the installed game**: `anchor-chain/` no longer needs a `Dll` folder of game files
 
 ## 0.6.0 - 2026-11-18 - Keel carries on Anchor Chain, fixes from 183 player reports
