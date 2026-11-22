@@ -83,9 +83,9 @@ replays a `Keel-log.txt` through the window's model (it reads Keel's lines back 
 0.1.5 have no `STARTING` lines and are no longer filled in) and draws the window into BMP files at chosen seconds;
 `... -- live` opens the real window thread far off every monitor, feeds a few lines and checks it closes itself after "Done".
 
-## Not done
+## Remaining visual checks
 
-- Run in the game. Only the game can show: the window over the game's borderless window at 4K, that it really opens before the preloader,
+- Check the window over the game's borderless window at 4K, its visibility before the preloader,
   and the early phase (0 to 16 s).
 - The preloader's 12.7 s are outside Keel (`tools/anchorchain-fix`); worth a look on its own.
 - Exclusive full screen hides the window; the game's "fullscreen window" mode shows it.
@@ -96,11 +96,20 @@ replays a `Keel-log.txt` through the window's model (it reads Keel's lines back 
 The offline self-test checks the two-argument boot method, both generations of
 the preparation handoff, and callback cleanup after success or failure.
 
+The live matrix also uses standalone fixtures on the installed game. With
+both stub generations it checks early dependency order, normal plugins that
+depend on early plugins, and an early request deferred behind a normal-timing
+dependency. With the new stub it checks worker-thread preparation, continuation
+after a throwing callback, nested discovery, and exclusion of a disabled folder.
+Both fixture runs draw replacement progress and wait for the in-game Keel summary.
+
 Run the live matrix locally with a current Steam install of Sea Power and
 BepInEx, the [Sea Power CLI](https://github.com/agm-114/crimean-tom/tree/main/docs/seapower-cli),
 and the stub and loader DLLs from a Keel release such as 0.5.4. Close the game
-first. The script builds the current pair, tests all four pairings, and
-restores the original mod list and starter files.
+first. The script builds the current pair and fixtures, tests all four pairings
+and the two startup fixture cases, and restores the original mod list, starter
+files, configuration, plugin cache, and Keel state by SHA-256. It closes only
+test processes from this install, including when launch verification fails.
 
 ```powershell
 $test = @{
@@ -117,3 +126,10 @@ To include the current Anchor Chain loader in the same local run, add
 `AnchorChainLoader` from its installed Workshop package to `$test`.
 This case starts Anchor Chain with its own preloader and needs the current
 game version. The script reports the directory containing the logs.
+Use `-StartupOnly` to rerun just the two integration fixture cases.
+
+`tools/test-loader-cleanup.ps1` accepts the same four required arguments. It
+starts the real game through the CLI, then injects a failed exit status and
+malformed launch JSON in separate runs. Each must close the test process,
+restore original file hashes, and leave no fixture folders or startup recovery
+marker. The scripts refuse to start with a game or recovery marker already present.

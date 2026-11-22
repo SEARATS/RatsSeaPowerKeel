@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <FixtureName Condition="'$(FixtureName)' == ''">Success</FixtureName>
+    <AssemblyName>KeelFixture.$(FixtureName).Preloader</AssemblyName>
+    <IntermediateOutputPath>obj/$(FixtureName)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>bin/$(Configuration)/$(FixtureName)/</OutputPath>
+  </PropertyGroup>
+</Project>

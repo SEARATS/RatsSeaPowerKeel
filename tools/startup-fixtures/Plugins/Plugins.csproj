@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <FixturePhase Condition="'$(FixturePhase)' == ''">Early</FixturePhase>
+    <AssemblyName>KeelFixture.$(FixturePhase)</AssemblyName>
+    <IntermediateOutputPath>obj/$(FixturePhase)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>bin/$(Configuration)/$(FixturePhase)/</OutputPath>
+    <DefineConstants Condition="'$(FixturePhase)' == 'Early'">$(DefineConstants);EARLY</DefineConstants>
+    <GameDir Condition="'$(GameDir)' == ''">E:\Games\steamapps\common\Sea Power</GameDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/SeaPowerKeel/SeaPowerKeel.csproj" />
+    <Reference Include="AnchorChain"><HintPath>../../../lib/AnchorChain.keel.bin</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>$(GameDir)/BepInEx/core/BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameDir)/Sea Power_Data/Managed/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameDir)/Sea Power_Data/Managed/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
