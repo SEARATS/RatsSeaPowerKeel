@@ -13,6 +13,7 @@ using SeaPowerKeel.Stub;
 // Mono.Cecil without running them, so a copy of this DLL in a temp folder is a mod folder. Nothing of the game is started.
 internal static class SelfTest
 {
+    private enum ActivityOperation { RebuildPage }
     private static int failures, checks;
 
     // Shapes of a load-screen postfix (the Alternative mods use the first).
@@ -435,10 +436,25 @@ internal static class SelfTest
         string activityDir = Path.Combine(tmp, "activitycontext");
         Directory.CreateDirectory(activityDir);
         var activityWriter = new CrashGuard(activityDir, null);
-        using (activityWriter.BeginActivity("my.settings", "settings rebuild", "Dynamic\tpage\nquit\t")) { }
+        using (activityWriter.BeginActivity(new ActivityContext(new PluginId("my.settings"), ActivityKind.SettingsRebuild, "Dynamic\tpage\r\nquit\t"))) { }
         var writtenActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)));
         Check(writtenActivity.Unclean && writtenActivity.Activities.Single().Ended > 0
-            && writtenActivity.Activities[0].Detail == "Dynamic page quit ", "activity details cannot inject journal records and completion is flushed");
+            && writtenActivity.Activities[0].Detail == "Dynamic\\tpage\\r\\nquit\\t", "activity details preserve visible control-character escapes without injecting records");
+        var activityContext = new ActivityContext(new PluginId("my.settings"), ActivityKind.SettingsEdit, "Advanced", "RefreshSeconds");
+        Check(activityContext.Owner.Value == "my.settings" && activityContext.Kind == ActivityKind.SettingsEdit
+            && activityContext.Detail == "Advanced RefreshSeconds", "typed activity contexts join params details without losing their owner or operation");
+        var previousJournal = Keel.ActivityJournal;
+        try
+        {
+            Keel.ActivityJournal = activityWriter;
+            var plugin = Keel.ForPlugin(new PluginId("bound.plugin"));
+            using (plugin.BeginActivity(ActivityOperation.RebuildPage, "Advanced", "RefreshSeconds")) { }
+        }
+        finally { Keel.ActivityJournal = previousJournal; }
+        var boundActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile))).Activities.Last();
+        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.GameAction)
+            && boundActivity.Detail == "ActivityOperation.RebuildPage Advanced RefreshSeconds" && boundActivity.Ended > 0,
+            "plugin-bound activities accept a mod-specific enum and params details without repeating the owner");
         activityWriter.Mark("done", "");
         var contextRun = new CrashGuard(activityDir, null);
         var contextMod = new PluginEntry { Guid = "my.settings", Name = "Settings", TypeName = "MySettings.Plugin", Dll = "missing.dll" };
@@ -447,6 +463,18 @@ internal static class SelfTest
         Check(contextMod.State == PluginState.Pending && !contextRun.HeldActive
             && contextNotes.Single().Contains("Last recorded activity"), "runtime breadcrumbs alone never hold or blame a mod");
         contextRun.Mark("quit", "");
+
+        string concurrentDir = Path.Combine(tmp, "concurrentactivity");
+        Directory.CreateDirectory(concurrentDir);
+        var concurrent = new CrashGuard(concurrentDir, null);
+        System.Threading.Tasks.Parallel.For(0, 64, index =>
+        {
+            using (concurrent.BeginActivity(new ActivityContext(new PluginId("parallel"), ActivityKind.GameAction, index.ToString()))) { }
+        });
+        var concurrentJournal = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile)));
+        Check(concurrentJournal.Activities.Count == 32 && concurrentJournal.Activities.All(item => item.Ended > 0),
+            "concurrent callbacks leave complete journal records through the semaphore");
+        concurrent.Mark("quit", "");
 
         Check(CrashText.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
         var a = new PluginEntry { Guid = "a", TypeName = "AlphaMod.Plugin", Order = 0 };
