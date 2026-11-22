@@ -145,8 +145,8 @@ it never holds a mod out by itself. Do not put player-entered values, credential
 or other private data in the detail string. Mods can discover this method by
 reflection and use a no-op scope when Keel is absent or older.
 
-For tooling, `Keel.GetUiState()` returns a BCL dictionary with `version`,
-`startupComplete`, `reportOpen`, and `waitingFor`. `SetReportOpen(bool)` controls
+For tooling, `Keel.GetUiState()` returns a concrete `KeelUiState` with `Version`,
+`StartupComplete`, `ReportOpen`, and `WaitingFor` properties. `SetReportOpen(bool)` controls
 the report, and `GetReport()` returns its current text. Call these on the game's
 main thread. A tool should keep inspection available and block UI-changing
 actions while startup is incomplete or the report is open.
