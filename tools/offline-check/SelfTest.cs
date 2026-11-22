@@ -324,6 +324,10 @@ internal static class SelfTest
 
     private static void CrashGuardChecks(string tmp)
     {
+        var ui = new KeelUiState("test", true, false, null);
+        Check(ui.StartupComplete && !ui.ReportOpen && ui.Version == "test"
+            && typeof(Keel).GetMethod("GetUiState").ReturnType == typeof(KeelUiState),
+            "tooling UI state has a concrete typed contract");
         CrashText.Journal V(params string[] lines) => CrashText.ReadJournal(lines);
         Check(!V().Unclean, "no journal: nothing to say");
         Check(!V("session\tx", "start\ta", "done\t", "quit\t").Unclean, "a normal quit is clean");

@@ -39,13 +39,8 @@ public static class Keel
     }
 
     /// <summary>BCL-only interoperability for tooling, without a reference to Keel's internal UI types.</summary>
-    public static IDictionary<string, object> GetUiState() => new Dictionary<string, object>
-    {
-        ["version"] = Version,
-        ["startupComplete"] = KeelHost.Current?.StartupComplete ?? false,
-        ["reportOpen"] = KeelHost.Current?.ReportOpen ?? false,
-        ["waitingFor"] = Loading.LoadingWindow.WaitingFor,
-    };
+    public static KeelUiState GetUiState() => new(Version, KeelHost.Current?.StartupComplete ?? false,
+        KeelHost.Current?.ReportOpen ?? false, Loading.LoadingWindow.WaitingFor);
 
     public static void SetReportOpen(bool open) => KeelHost.Current?.SetReportOpen(open);
     public static string GetReport() => KeelHost.Current?.ReadReport() ?? "";
