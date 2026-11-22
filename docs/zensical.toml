@@ -1,0 +1,4 @@
+﻿[project]
+site_name = "R.A.T.S. Keel Community"
+site_url = "https://struckl.github.io/SeaPowerKeel/"
+docs_dir = "community"
