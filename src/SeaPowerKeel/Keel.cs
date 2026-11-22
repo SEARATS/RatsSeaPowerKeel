@@ -115,7 +115,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         string hello = $"{Keel.Name} {Keel.Version} (stub {StubVersion}) on the {GameState.BuildName}, from {OwnPath}";
         log.LogInfo(hello);
         Window?.KeelStarted(Keel.Version, hello);
-        StartCoroutine(Run());
+        StartCoroutine(Pump());
     }
 
     private void BindSettings(ConfigFile config)
@@ -228,13 +228,92 @@ internal sealed partial class KeelHost : MonoBehaviour
     // How long Keel waits for the game, and how often it looks.
     private const float ModListSeconds = 60, LoadScreenSeconds = 180, PollSeconds = 0.25f;
 
+    // While an early start is under way the coroutine does not give frames away: Unity would not run its next step until the
+    // game's first frame, and by then the load screen is showing. Waits (WaitForSecondsRealtime) still wait.
+    // Keel's start-up is one coroutine, stepped from two places: by Unity, a step per frame, and by LoadScreenGate, which runs it on
+    // right before the game shows its first load screen until the blocking mods have started. Nested coroutines are run here, not by
+    // Unity, so both places move the same state.
+    private readonly Stack<IEnumerator> runStack = new();
+    private bool advancing, blockingDone = true;
+
+    private bool Advance(out object current)
+    {
+        current = null;
+        advancing = true;
+        try
+        {
+            while (runStack.Count > 0)
+            {
+                IEnumerator it = runStack.Peek();
+                if (!it.MoveNext())
+                {
+                    runStack.Pop();
+                    continue;
+                }
+                if (it.Current is IEnumerator nested)
+                {
+                    runStack.Push(nested);
+                    continue;
+                }
+                current = it.Current;
+                return true;
+            }
+            return false;
+        }
+        finally
+        {
+            advancing = false;
+        }
+    }
+
+    private IEnumerator Pump()
+    {
+        runStack.Push(Run());
+        while (Advance(out object current))
+            yield return current;
+    }
+
+    // The game is about to show its first load screen (LoadScreenGate): what is left before the blocking mods have started is done
+    // now, without waiting for the game's frames, and the game waits for it.
+    private void RunBlockingNow()
+    {
+        if (blockingDone || advancing)
+            return;
+        log.LogInfo("The game starts its load screen: Keel starts the mods that asked for a blocking start now.");
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            while (!blockingDone && Advance(out object _))
+            {
+            }
+        }
+        catch (Exception ex)
+        {
+            blockingDone = true;
+            log.LogError($"The blocking start failed: {ex}");
+        }
+        log.LogInfo($"The game waited {watch.ElapsedMilliseconds} ms for the blocking start.");
+    }
+
     private IEnumerator Run()
     {
+        listed = EarlyModList(out bool blockingAsked);
+        if (blockingAsked)
+        {
+            // A mod asked for a blocking start (BlockingStart): it starts right before the game's first load screen (see
+            // LoadScreenGate), or earlier when Keel's own steps get there first.
+            blockingDone = false;
+            string why = LoadScreenGate.Install(RunBlockingNow, Warn);
+            if (why != null)
+            {
+                blockingDone = true;
+                Warn($"A mod asked for a blocking start, but Keel cannot hook the load screen ({why}): it starts early, without holding the game.");
+            }
+        }
         // One frame first: every plugin in BepInEx\plugins (Anchor Chain's preloader too) has had its Awake by then.
         yield return null;
 
         // 1. The game's mod list, which the game has only after a while; failing that, the same list from disk.
-        listed = EarlyModList();
         if (listed == null)
             yield return WaitForModList(startUp: true);
         List<ModFolder> folders = listed;
@@ -256,10 +335,13 @@ internal sealed partial class KeelHost : MonoBehaviour
         // and waits for the load screen right before the others.
         bool early = Keel.Plugins.Any(p => p.StartEarly && p.State == PluginState.Pending);
         if (!early)
+        {
+            blockingDone = true;
             yield return WaitForLoadScreen(say: true);
+        }
 
         Say($"{enabled.Count} of {folders.Count} mod folders are on.", (w, l) => w.FoldersOn(l));
-        LookBeforeStart(enabled);
+        LookBeforeStart(enabled, early);
         yield return null;
 
         liveRunner = NewRunner(enabled);
@@ -279,8 +361,9 @@ internal sealed partial class KeelHost : MonoBehaviour
     // A mod that asked to start early (rgreat 2026-11-12: "could be a bit earlier", he replaces the load-screen pictures) does not
     // wait for the game's own list, which comes about 8 s after Keel: Keel reads the same list from usersettings.ini at once, so
     // early mods start before the first load-screen picture. Everything else still waits for the load screen. Null: no mod asked.
-    private List<ModFolder> EarlyModList()
+    private List<ModFolder> EarlyModList(out bool blocking)
     {
+        blocking = false;
         List<ModFolder> disk;
         try
         {
@@ -293,6 +376,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         if (!disk.Any(f => f.Enabled && EarlyStart.FolderAsks(f.Path)))
             return null;
+        blocking = disk.Any(f => f.Enabled && EarlyStart.FolderBlocks(f.Path));
         log.LogInfo("A mod asked to start early: Keel takes the mod list from usersettings.ini now instead of waiting for the game's.");
         return disk;
     }
@@ -328,11 +412,10 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     // Before any mod is touched: the mod setups, What's new, what the last session left (so a mod that took the game down cannot
     // do it again), and the pack check on its own thread (on a first start it reads the head of every picture and sound).
-    private void LookBeforeStart(List<ModFolder> enabled)
+    private void LookBeforeStart(List<ModFolder> enabled, bool early)
     {
-        DetectSetups(enabled);
-        if (whatsNewOn.Value)
-            StartWhatsNew(enabled);
+        if (!early)
+            LookBeforeStartLate(enabled);
         crash?.Apply(Keel.Plugins, holdCrashers.Value, n =>
         {
             crashNotice = crashNotice == null ? n : crashNotice + "\n" + n;
@@ -347,6 +430,15 @@ internal sealed partial class KeelHost : MonoBehaviour
                 Loading.LoadingWindow.Alert = crash.Short;
             crash.WriteModsFile(Keel.Plugins);
         }
+    }
+
+    // Nothing here changes which mods start or in which order, so with early mods it waits until they run (their start is the one
+    // thing that must not wait: they replace the load screen).
+    private void LookBeforeStartLate(List<ModFolder> enabled)
+    {
+        DetectSetups(enabled);
+        if (whatsNewOn.Value)
+            StartWhatsNew(enabled);
         string packCache = Path.Combine(Paths.BepInExRootPath, "Keel-packcheck.txt");
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
@@ -393,7 +485,19 @@ internal sealed partial class KeelHost : MonoBehaviour
     private IEnumerator StartPlugins(Pass pass)
     {
         var watch = Stopwatch.StartNew();
-        yield return Check();
+        // Early mods: only the blocking ones are checked now (the others are checked in the first frames, the rest during the load
+        // screen).
+        void note(PluginEntry p, string why)
+        {
+            p.Warnings.Add(why);
+            log.LogInfo($"{p.Display}: {why}");
+        }
+        HashSet<PluginEntry> blockSet = pass.Early ? EarlyStart.Set(Keel.Plugins, note, blocking: true) : null;
+        HashSet<PluginEntry> earlySet = pass.Early ? EarlyStart.Set(Keel.Plugins, note) : null;
+        if (pass.Early && blockSet.Count == 0)
+            blockingDone = true;
+        if (!pass.Early || blockSet.Count > 0)
+            yield return Check(blockSet == null ? null : p => blockSet.Contains(p));
         if (!pass.Reload)
             log.LogInfo($"Game-version check done ({watch.ElapsedMilliseconds} ms, frames included).");
         watch.Restart();
@@ -417,7 +521,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         Sequencer sequence = NewSequence(pass, elsewhere);
         if (pass.Early)
         {
-            yield return StartEarlyMods(sequence, order);
+            yield return StartEarlyMods(sequence, order, blockSet, earlySet, pass);
             order = sequence.Replan();
         }
         // Taken after the early mods: their load-screen hooks see the real end and are not called again.
@@ -474,22 +578,36 @@ internal sealed partial class KeelHost : MonoBehaviour
         Window?.Starting(index, total, $"{p.Display} {p.Version}");
     }
 
-    // The mods that asked to start early, now; then the load screen's end; then the sequence goes on with the rest.
-    private IEnumerator StartEarlyMods(Sequencer sequence, List<PluginEntry> order)
+    // The mods that asked to start early, now: the blocking ones first (see RunBlockingNow); the others in the first
+    // frames, one per frame next to the game; then the rest of the look-around; then the load screen's end; then the sequence goes
+    // on with the other mods.
+    private IEnumerator StartEarlyMods(Sequencer sequence, List<PluginEntry> order, HashSet<PluginEntry> blockSet, HashSet<PluginEntry> earlySet, Pass pass)
     {
-        HashSet<PluginEntry> earlySet = EarlyStart.Set(Keel.Plugins, (p, why) =>
-        {
-            p.Warnings.Add(why);
-            log.LogInfo($"{p.Display}: {why}");
-        });
         string names = string.Join(", ", earlySet.Select(p => p.Display).Distinct());
         log.LogInfo($"Starting {earlySet.Count} plugin(s) that asked to start before the load screen ends: {names}.");
         if (earlySet.Count > 0)
             notes.Add($"Started before the load screen ended (the mod asked for it): {names}.");
         Func<List<PluginEntry>> replanAll = sequence.Replan;
-        sequence.Replan = () => replanAll().Where(earlySet.Contains).ToList();
-        foreach (PluginEntry _ in sequence.Run(order.Where(earlySet.Contains).ToList()))
-            yield return null;
+        if (blockSet.Count > 0)
+        {
+            log.LogInfo($"Blocking start (before the game's first load screen, the game waits): {string.Join(", ", blockSet.Select(p => p.Display).Distinct())}.");
+            sequence.Replan = () => replanAll().Where(blockSet.Contains).ToList();
+            foreach (PluginEntry _ in sequence.Run(order.Where(blockSet.Contains).ToList()))
+                yield return null;
+        }
+        blockingDone = true;
+        yield return null;
+        var parallel = new HashSet<PluginEntry>(earlySet.Except(blockSet));
+        if (parallel.Count > 0)
+        {
+            yield return Check(p => parallel.Contains(p));
+            sequence.Replan = () => replanAll().Where(parallel.Contains).ToList();
+            foreach (PluginEntry _ in sequence.Run(replanAll().Where(parallel.Contains).ToList()))
+                yield return null;
+        }
+        // Now what the early start left for later: the setup look, What's new, the pack check, the version check of the others.
+        LookBeforeStartLate(pass.Enabled);
+        yield return Check(p => !earlySet.Contains(p));
         yield return WaitForLoadScreen(say: true);
         sequence.Replan = () => replanAll().Where(p => !earlySet.Contains(p)).ToList();
     }
@@ -784,7 +902,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         return System.IO.File.Exists(path) ? path : null;
     }
 
-    private IEnumerator Check()
+    private IEnumerator Check(Func<PluginEntry, bool> only = null)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
@@ -801,7 +919,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         using (preflight)
         {
-            List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Dll).ToList();
+            List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending && (only == null || only(p))).GroupBy(p => p.Dll).ToList();
             var results = new Dictionary<string, Preflight.Result>(StringComparer.OrdinalIgnoreCase);
             foreach (IGrouping<string, PluginEntry> dll in dlls)
             {

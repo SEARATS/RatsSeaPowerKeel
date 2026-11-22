@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0 - unreleased - start early: the game waits only for blocking mods
+
+- **`BlockingStart=true`** (`_info.ini`, `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")`, rgreat): only such a mod is started right before the game shows its first load screen (the game's call of `LoadScreen.ExecuteLoadScreen`), and the game waits for it; it implies `StartEarly`
+- **`StartEarly`** mods start in the game's first frames, one per frame, next to the game as before (they no longer hold the game up)
+- **Early start no longer waits for what it does not need**: only the early mods' DLLs are checked before they start; the setup look, What's new, the pack check and the check of the other mods follow
+- **The main-menu card no longer hitches the game once a second**: the menu is measured when the screen size changes (and a second time shortly after the first hit), not every second; the type lookups it needs are made once; where the game's UI root has no size, the menu view is the frame
+
 ## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own

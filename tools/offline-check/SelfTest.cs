@@ -461,6 +461,17 @@ internal static class SelfTest
         var earlySet = EarlyStart.Set(new List<PluginEntry> { eA, eB, eC, eD, eE }, (p, why) => whyLate.Add(p.Guid));
         Check(earlySet.SetEquals(new[] { eA }) && whyLate.Count == 2,
               "start early: A early; B waits (needs C, which waits); D waits (E must load before it)");
+        Check(EarlyStart.InInfoIni("[Keel]\nBlockingStart=true\n", EarlyStart.BlockingInfoKey) && !EarlyStart.InInfoIni("[Keel]\nStartEarly=true\n", EarlyStart.BlockingInfoKey)
+              && !EarlyStart.InInfoIni("[Keel]\nBlockingStart=true\n"),
+              "blocking start: only [Keel] BlockingStart=true counts for it, and it is not a plain StartEarly");
+        var bA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true, BlockingStart = true };
+        var bB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true, BlockingStart = true };
+        bB.Dependencies.Add(new Dependency { Guid = "c" });
+        var bC = new PluginEntry { Guid = "c", Name = "C", StartEarly = true };
+        var blockSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null, blocking: true);
+        var plainSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null);
+        Check(blockSet.SetEquals(new[] { bA }) && plainSet.SetEquals(new[] { bA, bB, bC }),
+              "blocking start: A blocks; B needs C, which does not block, so B starts early without holding the game; all three start early");
     }
 
     private static void RequiredItemChecks()

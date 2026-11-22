@@ -75,7 +75,14 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
   [assembly: System.Reflection.AssemblyMetadata("Keel.StartEarly", "true")]
   ```
 
-- **What happens:** your mod starts as soon as Keel has checked it; every other mod still waits for the load screen.
+- **What happens:** your mod starts as soon as Keel has checked it, in the game's first frames, one mod per frame next to the game
+  (the game does not wait for it); every other mod still waits for the load screen.
+- **Right before the first load screen (blocking start):** the game's own start-up holds the main thread for seconds before its
+  first frame, so a frame-based start cannot be earlier than the load screen itself. A mod that must run before it shows its first
+  picture (it replaces the pictures) adds one more key, in `_info.ini` (`BlockingStart=true`, same `[Keel]` section) or in the DLL
+  (`[assembly: System.Reflection.AssemblyMetadata("Keel.BlockingStart", "true")]`); it implies `StartEarly`. Keel starts such a mod at
+  the moment the game calls `LoadScreen.ExecuteLoadScreen` for the first time, and **the game waits until it is done**: ask for it
+  only when you need it, and keep its start short. (Unity's API belongs to the main thread, so the wait cannot be moved elsewhere.)
 - **Dependencies:** a mod that needs (or must load after) a mod that waits starts with the others; the report says why.
 - **Seen in the report and log:** "Started before the load screen ended (the mod asked for it): ...".
 - **Load-screen hooks:** an early mod sees the real end of the load screen (Keel does not call its postfix again).
