@@ -411,6 +411,39 @@ internal static class SelfTest
         CrashText.Journal after = V("session\tx", "start\tb", "done\t", "scene\tmission");
         Check(after.Unclean && after.Guid == null && after.Scene == "mission", "ended after start-up: no mod from the journal, the scene is known");
 
+        long ticks = DateTime.UtcNow.Ticks;
+        var activeUi = V("session\tx", "done\t", $"activity\touter\t{ticks}\tbridge\tclick\tcontrol=7",
+            $"activity\tinner\t{ticks}\tmy.settings\tsettings rebuild\tDynamic page");
+        Check(activeUi.Guid == null && activeUi.Activities.Count == 2 && activeUi.Activities.All(item => item.Ended == 0),
+            "nested UI activities retain both owners without turning context into startup blame");
+        var completeUi = V("session\tx", "done\t", $"activity\ta\t{ticks}\tmy.settings\tsettings rebuild\tDynamic page",
+            $"activity-end\ta\t{ticks + 1}");
+        Check(completeUi.Activities.Single().Ended == ticks + 1 && CrashText.ActivityHint(completeUi).Contains("completed"),
+            "completed UI work is distinguished from an interrupted callback");
+        Check(CrashText.CrashFileText("x", null, null, "main-menu", null, activeUi.Activities)
+            .Contains("not proof of cause") && CrashText.ActivityHint(activeUi).Contains("my.settings"),
+            "an empty native crash record still includes the last settings owner as diagnostic context");
+        Check(V("session\tx", "activity\tbroken", "activity-end\tbroken", "activity\ta\t-1\tx\ty\tz").Activities.Count == 0,
+            "incomplete or malformed activity lines do not break crash reports");
+        var bounded = CrashText.ReadJournal(new[] { "session\tx" }.Concat(Enumerable.Range(0, 40)
+            .Select(index => $"activity\t{index}\t{ticks}\tx\tclick\t{index}")));
+        Check(bounded.Activities.Count == 32 && bounded.Activities[0].Detail == "8", "reports retain a bounded tail of runtime activity");
+        string activityDir = Path.Combine(tmp, "activitycontext");
+        Directory.CreateDirectory(activityDir);
+        var activityWriter = new CrashGuard(activityDir, null);
+        using (activityWriter.BeginActivity("my.settings", "settings rebuild", "Dynamic\tpage\nquit\t")) { }
+        var writtenActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)));
+        Check(writtenActivity.Unclean && writtenActivity.Activities.Single().Ended > 0
+            && writtenActivity.Activities[0].Detail == "Dynamic page quit ", "activity details cannot inject journal records and completion is flushed");
+        activityWriter.Mark("done", "");
+        var contextRun = new CrashGuard(activityDir, null);
+        var contextMod = new PluginEntry { Guid = "my.settings", Name = "Settings", TypeName = "MySettings.Plugin", Dll = "missing.dll" };
+        var contextNotes = new List<string>();
+        contextRun.Apply(new[] { contextMod }, true, contextNotes.Add);
+        Check(contextMod.State == PluginState.Pending && !contextRun.HeldActive
+            && contextNotes.Single().Contains("Last recorded activity"), "runtime breadcrumbs alone never hold or blame a mod");
+        contextRun.Mark("quit", "");
+
         Check(CrashText.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
         var a = new PluginEntry { Guid = "a", TypeName = "AlphaMod.Plugin", Order = 0 };
         var b = new PluginEntry { Guid = "b", TypeName = "BetaMod.Plugin", Order = 1 };

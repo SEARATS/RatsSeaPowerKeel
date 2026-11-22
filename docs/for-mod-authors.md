@@ -128,6 +128,29 @@ Players can switch to `Strict` (any missing use or patch target keeps the DLL ou
 
 ## Errors
 
+Keel 0.8.1 adds optional runtime diagnostic scopes:
+
+```csharp
+using (Keel.TrackActivity("your.plugin.guid", "settings rebuild", "Advanced page"))
+{
+    RebuildPage();
+}
+```
+
+The journal is flushed before the operation begins and after the scope finishes.
+Nested scopes retain both the tool and the mod that owns the callback. If native
+code ends the game without a usable stack, the watcher and next-start report can
+show the last recorded activity. This is diagnostic context, not proof of cause;
+it never holds a mod out by itself. Do not put player-entered values, credentials
+or other private data in the detail string. Mods can discover this method by
+reflection and use a no-op scope when Keel is absent or older.
+
+For tooling, `Keel.GetUiState()` returns a BCL dictionary with `version`,
+`startupComplete`, `reportOpen`, and `waitingFor`. `SetReportOpen(bool)` controls
+the report, and `GetReport()` returns its current text. Call these on the game's
+main thread. A tool should keep inspection available and block UI-changing
+actions while startup is incomplete or the report is open.
+
 Keel starts plugins one at a time. One that throws while starting is marked `FAILED` and the next one starts. Exceptions
 your mod throws later (from `Update`, Harmony patches ...) are counted against it by its namespaces in the stack trace and
 shown in the report (Ctrl+Shift+K, `BepInEx\Keel-report.txt`), and the log gets a line naming your mod with the stack

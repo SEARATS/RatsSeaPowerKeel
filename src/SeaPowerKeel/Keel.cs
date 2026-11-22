@@ -26,6 +26,29 @@ public static class Keel
     public static readonly string Version = typeof(Keel).Assembly.GetName().Version.ToString(3);
 
     internal static readonly List<PluginEntry> Plugins = new();
+    internal static CrashGuard ActivityJournal;
+
+    /// <summary>Optional mod diagnostics: records an operation before native code can crash. Dispose after it finishes.</summary>
+    public static IDisposable TrackActivity(string pluginId, string operation, string detail = "") =>
+        ActivityJournal?.BeginActivity(pluginId, operation, detail) ?? EmptyActivity.Instance;
+
+    private class EmptyActivity : IDisposable
+    {
+        internal static readonly EmptyActivity Instance = new();
+        public void Dispose() { }
+    }
+
+    /// <summary>BCL-only interoperability for tooling, without a reference to Keel's internal UI types.</summary>
+    public static IDictionary<string, object> GetUiState() => new Dictionary<string, object>
+    {
+        ["version"] = Version,
+        ["startupComplete"] = KeelHost.Current?.StartupComplete ?? false,
+        ["reportOpen"] = KeelHost.Current?.ReportOpen ?? false,
+        ["waitingFor"] = Loading.LoadingWindow.WaitingFor,
+    };
+
+    public static void SetReportOpen(bool open) => KeelHost.Current?.SetReportOpen(open);
+    public static string GetReport() => KeelHost.Current?.ReadReport() ?? "";
     private static readonly DateTime processStart = Process.GetCurrentProcess().StartTime.ToUniversalTime();
     internal static double StartupWindowOpened { get; set; }
     internal static double StartupDispatchBeginning { get; set; }
@@ -69,6 +92,20 @@ public static class Keel
 
 internal sealed partial class KeelHost : MonoBehaviour
 {
+    internal static KeelHost Current;
+    internal bool StartupComplete => done;
+    internal bool ReportOpen => showWindow;
+
+    internal void SetReportOpen(bool open)
+    {
+        if (showWindow != open) ToggleWindow();
+    }
+
+    internal string ReadReport()
+    {
+        WriteReport();
+        return File.Exists(reportPath) ? File.ReadAllText(reportPath) : "";
+    }
     internal static string PendingStubVersion, PendingPath;
     public string StubVersion = PendingStubVersion;
     public string OwnPath = PendingPath;
@@ -111,6 +148,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private void Awake()
     {
+        Current = this;
         log = Keel.Log;
         var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
         BindSettings(config);
@@ -212,6 +250,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             crash = new CrashGuard(Paths.BepInExRootPath, Path.Combine(Path.GetDirectoryName(Application.consoleLogPath) ?? "", "Player-prev.log"));
+            Keel.ActivityJournal = crash;
         }
         catch (Exception ex)
         {

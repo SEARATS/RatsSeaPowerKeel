@@ -21,6 +21,7 @@ internal sealed class CrashGuard
     private readonly string heldPath;
     private readonly string playerPrev;
     private FileStream journal;
+    private readonly object journalGate = new();
 
     public CrashText.Journal Previous { get; }
 
@@ -88,12 +89,35 @@ internal sealed class CrashGuard
         try
         {
             byte[] line = Encoding.UTF8.GetBytes(kind + "\t" + detail + Environment.NewLine);
-            journal.Write(line, 0, line.Length);
-            journal.Flush();
+            lock (journalGate)
+            {
+                journal?.Write(line, 0, line.Length);
+                journal?.Flush();
+            }
         }
         catch (Exception)
         {
             journal = null;
+        }
+    }
+
+    public IDisposable BeginActivity(string pluginId, string operation, string detail)
+    {
+        string token = System.Guid.NewGuid().ToString("N");
+        Mark("activity", $"{token}\t{DateTime.UtcNow.Ticks}\t{Clean(pluginId)}\t{Clean(operation)}\t{Clean(detail)}");
+        return new ActivityScope(this, token);
+    }
+
+    private static string Clean(string value) => (value ?? "").Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+
+    private class ActivityScope(CrashGuard owner, string token) : IDisposable
+    {
+        private bool ended;
+        public void Dispose()
+        {
+            if (ended) return;
+            ended = true;
+            owner.Mark("activity-end", $"{token}\t{DateTime.UtcNow.Ticks}");
         }
     }
 
@@ -215,7 +239,7 @@ internal sealed class CrashGuard
             loading = $" It was loading {Path.GetFileName(packFile)} from mod folder {packFolder} just before.";
         }
         string detail = CrashText.CrashLine(block);
-        note($"The last game did not end normally{where}, and Keel cannot tell for certain which mod did it{(detail != null ? $" ({detail})" : "")}.{loading} Details: {KeelNames.CrashFile}.");
+        note($"The last game did not end normally{where}, and Keel cannot tell for certain which mod did it{(detail != null ? $" ({detail})" : "")}.{loading}{CrashText.ActivityHint(Previous)} Details: {KeelNames.CrashFile}.");
         return null;
     }
 
@@ -269,7 +293,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block));
+            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block, Previous.Activities));
         }
         catch (Exception)
         {
