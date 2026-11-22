@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
+
+- Mods and tools can wrap operations in `Keel.TrackActivity(pluginId, operation, detail)`.
+  The journal records the operation before it starts and its completion afterward,
+  including nested activity. A native crash can therefore leave useful context
+  even when its stack file is empty.
+- The crash report and watcher show that context separately from attribution.
+  A recent or unfinished operation alone never causes a mod to be held out.
+- Adds BCL-only `GetUiState`, `SetReportOpen` and `GetReport` methods so tools can
+  detect the report overlay and avoid sending input through it.
+
 ## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
