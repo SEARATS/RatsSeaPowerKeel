@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace SeaPowerKeel;
 
@@ -21,7 +22,7 @@ internal sealed class CrashGuard
     private readonly string heldPath;
     private readonly string playerPrev;
     private FileStream journal;
-    private readonly object journalGate = new();
+    private readonly SemaphoreSlim journalGate = new(1, 1);
 
     public CrashText.Journal Previous { get; }
 
@@ -88,11 +89,13 @@ internal sealed class CrashGuard
         try
         {
             byte[] line = Encoding.UTF8.GetBytes(kind + "\t" + detail + Environment.NewLine);
-            lock (journalGate)
+            journalGate.Wait();
+            try
             {
                 journal?.Write(line, 0, line.Length);
                 journal?.Flush();
             }
+            finally { journalGate.Release(); }
         }
         catch (Exception)
         {
