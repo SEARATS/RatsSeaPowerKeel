@@ -9,17 +9,6 @@ internal enum PluginKind
     AnchorChain,    // an Anchor Chain mod ([ACPlugin] on an IAnchorChainMod)
 }
 
-internal enum PluginState
-{
-    Pending,
-    Running,            // started, no error so far
-    RunningWithErrors,  // started, but threw while starting or later
-    Failed,             // threw while starting
-    NotStarted,         // a rule kept it from starting: missing dependency, conflict, wrong game version ...
-    Skipped,            // on purpose and harmless: duplicate copy, other game version's build, switched off
-    LeftToAnchorChain,  // an Anchor Chain mod while Anchor Chain itself is running
-}
-
 internal sealed class Dependency
 {
     public string Guid;
@@ -51,10 +40,14 @@ internal sealed class PluginEntry
     public bool UsesAcConfig;
     public bool AcConfigRequired = true;               // [ACConfig(required)]: a config file that cannot be made keeps the mod from starting
     public bool Exported = true;                        // Anchor Chain only sees public (exported) plugin classes
-    public bool StartEarly;
+    public bool StartEarly;                             // asked to start before the load screen ends (EarlyStart)
+    /// <summary>The Workshop items the mod's folder names as required in its _info.ini (RequiredItems).</summary>
+    public readonly List<RequiredItem> RequiredItems = new();
+    /// <summary>Set when the mod is kept out because a plugin it needs is missing or too old and that plugin comes from a required item: the card offers it.</summary>
+    public RequiredItem MissingItem;
     /// <summary>GUIDs of the same DLL's backup entries (a BepInEx entry next to the Anchor Chain one): a dependency on one of them
     /// counts as met by this entry. The backup entry itself is not listed (rgreat 2026-11-12: a second entry is by design).</summary>
-    public readonly List<string> AlsoKnownAs = new();                             // asked to start before the load screen ends (EarlyStart)
+    public readonly List<string> AlsoKnownAs = new();
 
     public PluginState State = PluginState.Pending;
     public string Reason = "";
@@ -62,6 +55,8 @@ internal sealed class PluginEntry
     public string LoadOrderWarning;
     /// <summary>Every game method/field/type the DLL uses that this build lacks, as <c>Namespace.Type::Member(args)</c> (the preflight check).</summary>
     public readonly List<string> MissingUses = new();
+    /// <summary>Set when this DLL is the other map kind's build of a mod whose matching build sits in the same folder (XFlat.dll beside X.dll): its missing parts are expected.</summary>
+    public string OtherMapBuildOf;
     public int LaterErrors;
     public string FirstLaterError;
     public float StartMs;

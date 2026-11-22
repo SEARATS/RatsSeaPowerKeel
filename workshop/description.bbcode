@@ -4,18 +4,21 @@
 [b]Keel keeps your modded game afloat.[/b]
 The mod loader for Sea Power: starts your code mods, checks each one against your game version first, and tells you what happened.
 
-[quote]▶ [b]Replaces[/b] Anchor Chain and Alpine's Mod Loader: Keel is all you need
-▶ [b]Watch:[/b] [url=https://youtu.be/m66tiCyWSNw]Install[/url] · [url=https://youtu.be/JrRR7d8NbhU]When a mod breaks[/url] · [url=https://youtu.be/vc_UddZHn0g]Switch from Anchor Chain or Alpine[/url]
-✉ Bugs, ideas, questions: [url=https://hub.sewerlabs.dev/s/keel]R.A.T.S. feedback board[/url]
+⚓ [b]Carries on Anchor Chain[/b], the community chainloader by JustOneOther and agm-114 (SeaPower-Modders): [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3380210757]the original item[/url] · [url=https://github.com/SeaPower-Modders/AnchorChain]its code and history[/url]
+
+[quote]💬 [b]Questions, help, ideas[/b]: [url=https://discord.gg/CzuHd4f8Yf]R.A.T.S. Discord[/url], the first place to ask
+▶ [b]Replaces[/b] Anchor Chain and Alpine's Mod Loader: Keel is all you need
+▶ [b]Watch[/b]: [url=https://youtu.be/m66tiCyWSNw]Install[/url] · [url=https://youtu.be/JrRR7d8NbhU]When a mod breaks[/url] · [url=https://youtu.be/vc_UddZHn0g]Switch from Anchor Chain or Alpine[/url]
+✉ Bug reports: [url=https://hub.sewerlabs.dev/s/keel]R.A.T.S. feedback board[/url]
+▶ [b]Roadmap[/b]: [url=https://github.com/struckl/SeaPowerKeel/blob/main/docs/community/ROADMAP.md]where Keel goes next[/url]
 ⭐ A favourite helps other captains find it[/quote]
 
-[h2]✦ New in 0.5[/h2]
+[h2]✦ New in 0.8[/h2]
 [list]
-[*][b]Keel takes over.[/b] Anchor Chain's and Alpine's loaders no longer start while Keel is on: every mod starts once
-[*][b]What's new since your last game.[/b] A card on the main menu shows updated, new and broken mods, with their authors' notes
-[*][b]Euromod stages.[/b] The report names your stage, a button switches Extended Guidance
-[*][b]Cards that get out of your way.[/b] Each has an × and stays until you close it
-[*][b]Start early[/b] for mods that need it (mod makers opt in, see below)
+[*][b]Mods can name what they need.[/b] A mod that needs another Workshop item says so: the card names the missing one with a [b]Get it[/b] button that opens its page
+[*][b]Switched on for you.[/b] An item a mod needs, installed but off in your Mods list, is switched on at the start
+[*][b]One game version.[/b] Keel runs on the game's current main version (0.9.x); the 0.8.7 code is gone
+[*][b]Keel takes over[/b] from Anchor Chain and Alpine, and [b]What's new since your last game[/b] shows what changed (0.5)
 [/list]
 
 [h2]✦ Highlights[/h2]
@@ -36,10 +39,11 @@ The mod loader for Sea Power: starts your code mods, checks each one against you
 [*]Start the game, switch R.A.T.S. Keel on in Mods, restart once
 [/olist]
 [list]
-[*][b]Watch it:[/b] [url=https://youtu.be/m66tiCyWSNw]install on a clean game[/url]
+[*][b]Watch it[/b]: [url=https://youtu.be/m66tiCyWSNw]install on a clean game[/url]
+[*][b]Rather no .exe?[/b] Install by hand: BepInEx zip plus one file to copy, [url=https://github.com/struckl/SeaPowerKeel#by-hand-no-setup-program]steps in the README[/url]
 [*][b]Loaded?[/b] The Keel card sits at the bottom left of the main menu; a click opens the report
 [*][b]While mods start[/b] the loading window counts them: best not to click around in the game meanwhile
-[*][b]Windows says "unknown publisher"?[/b] The file is not signed yet: More info, Run anyway
+[*][b]What the setup does:[/b] it copies Keel's starter files into the game folder; if the game has no BepInEx, it downloads the official release from BepInEx's GitHub page and checks it first. No administrator rights; the source is on GitHub
 [/list]
 
 [h2]⚠ Good to know[/h2]
@@ -48,40 +52,41 @@ The mod loader for Sea Power: starts your code mods, checks each one against you
 [*][b]Other loaders' files stay as they are.[/b] Switch Keel off and they start again
 [*][b]Euromod, the AC Pack and its add-ons[/b] run under Keel as they are
 [*][b]Can't stop[/b] a crash inside the game engine or a graphics driver; it names what it knows
-[*][b]Watch it:[/b] [url=https://youtu.be/JrRR7d8NbhU]when a mod breaks[/url] · [url=https://youtu.be/vc_UddZHn0g]switch from Anchor Chain or Alpine[/url]
+[*][b]Watch it[/b]: [url=https://youtu.be/JrRR7d8NbhU]when a mod breaks[/url] · [url=https://youtu.be/vc_UddZHn0g]switch from Anchor Chain or Alpine[/url]
 [/list]
 
 [h2]⚙ Install and game versions[/h2]
 [list]
-[*][b]Run in the game on 0.9.1[/b] (build 261112): 43 mods, Euromod with AC Pack and Extended Guidance in a mission, Alpine kept out
-[*][b]0.8.7 (flat map):[/b] run with an earlier version; keep Anchor Chain subscribed there
-[*][b]By hand, settings, how it works:[/b] [url=https://github.com/struckl/SeaPowerKeel]README on GitHub[/url]
+[*][b]Game:[/b] 0.9.3 (build 261116), the current main version; 0.8.7 is not supported any more
+[*][b]By hand, settings, how it works[/b]: [url=https://github.com/struckl/SeaPowerKeel]README on GitHub[/url]
 [/list]
 
 [h2]⚙ For mod makers[/h2]
 [list]
 [*][b]List R.A.T.S. Keel as your required item.[/b] Your players need no Anchor Chain item and no manual install
-[*][b]Loads as built:[/b] [ACPlugin] and [BepInPlugin] mods, their dependencies and ACConfig
-[*][b]Start early:[/b] [Keel] StartEarly=true in your _info.ini starts your mod before the load screen ends
+[*][b]Loads as built[/b]: [ACPlugin] and [BepInPlugin] mods, their dependencies and ACConfig
+[*][b]Start early[/b]: [Keel] StartEarly=true in your _info.ini starts your mod before the load screen ends
+[*][b]Needs another item[/b]: [Keel] Requires=<Workshop id>, <plugin id>, <name> in your _info.ini: Keel shows a Get it button when it is missing and switches it on when it is installed but off
 [*][b]Reports that say what broke:[/b] the missing method, field or type after a game update
-[*][b]Details:[/b] [url=https://github.com/struckl/SeaPowerKeel/blob/main/docs/for-mod-authors.md]for mod authors[/url]
+[*][b]Details[/b]: [url=https://github.com/struckl/SeaPowerKeel/blob/main/docs/for-mod-authors.md]for mod authors[/url]
 [/list]
 
 [h2]✉ Problems, feedback, ideas[/h2]
 [list]
+[*][url=https://discord.gg/CzuHd4f8Yf]R.A.T.S. Discord[/url]: questions, help and ideas, the first place to ask
 [*][url=https://hub.sewerlabs.dev/s/keel]R.A.T.S. feedback board[/url], or Send report in Keel's report window
-[*][b]Videos:[/b] [url=https://www.youtube.com/@SewerRatte]R.A.T.S. on YouTube[/url]
+[*][b]Videos[/b]: [url=https://www.youtube.com/@SewerRatte]R.A.T.S. on YouTube[/url]
 [/list]
 
 [h2]Support[/h2]
 [list]
-[*]Keel is free and stays free. If you want to keep the rats fed: [url=https://ko-fi.com/kanalratte_sewerlabs]a cheese on Ko-fi[/url] or [url=https://www.patreon.com/cw/Kanalratte]Patreon[/url]
+[*]All R.A.T.S. mods are free and stay free. If you want to keep the rats fed: [url=https://ko-fi.com/kanalratte_sewerlabs]a cheese on Ko-fi[/url] or [url=https://www.patreon.com/cw/Kanalratte]Patreon[/url]
 [/list]
 
 [h2]Credits[/h2]
 [list]
 [*]Written from scratch; Anchor Chain by the SeaPower-Modders is the loader Sea Power code mods grew up on. Keel ships its library (1.1.0, MIT) unchanged
-[*]Source (MIT): https://github.com/struckl/SeaPowerKeel. Name, logo, pictures and texts are not part of the license: please do not re-upload Keel
+[*]Source: https://github.com/struckl/SeaPowerKeel (R.A.T.S. Source License: read and fork, no re-uploads)
 [/list]
 
 [i]R.A.T.S. – Ratte's Assorted Tactical Systems[/i]

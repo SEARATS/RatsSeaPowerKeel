@@ -68,11 +68,7 @@ internal static class Planner
         for (bool changed = true; changed;)
         {
             changed = false;
-            Dictionary<string, PluginEntry> starting = live().ToDictionary(p => p.Guid);
-            foreach (PluginEntry s in starting.Values.ToList())
-                foreach (string alias in s.AlsoKnownAs)
-                    if (!starting.ContainsKey(alias))
-                        starting[alias] = s;
+            Dictionary<string, PluginEntry> starting = ByGuid(live());
             foreach (PluginEntry p in starting.Values.Distinct())
             {
                 string why = null;
@@ -80,17 +76,21 @@ internal static class Planner
                 {
                     if (runningElsewhere.Contains(d.Guid))
                         continue;
+                    // A required item the mod's _info.ini names for this plugin: the card offers it.
+                    RequiredItem item = p.RequiredItems.FirstOrDefault(r => r.PluginId == d.Guid);
                     if (!starting.TryGetValue(d.Guid, out PluginEntry dep))
                     {
                         PluginEntry known = all.FirstOrDefault(x => x.Guid == d.Guid);
                         why = known == null
-                            ? $"Needs {d.Guid}{d.Range}, which is not installed or switched off in the mod list."
+                            ? $"Needs {(item == null ? d.Guid : $"{item.Name} ({d.Guid})")}{d.Range}, which is not installed or switched off in the mod list."
                             : $"Needs {known.Display}{d.Range}, which does not start: {known.Reason}";
+                        p.MissingItem = item;
                         break;
                     }
                     if (!d.Accepts(dep.Version))
                     {
                         why = $"Needs {dep.Display}{d.Range}; installed is {dep.Version}.";
+                        p.MissingItem = item;
                         break;
                     }
                 }
@@ -123,13 +123,20 @@ internal static class Planner
                            "Anchor Chain's loader would not: it drops every mod with an [ACIncompatibility], named mod present or not (an upstream bug).");
     }
 
-    internal static Dictionary<PluginEntry, HashSet<PluginEntry>> Prerequisites(List<PluginEntry> plugins)
+    // Every plugin by its id and by the ids of its backup entries (AlsoKnownAs), unless a plugin of that id is there itself.
+    private static Dictionary<string, PluginEntry> ByGuid(List<PluginEntry> plugins)
     {
         Dictionary<string, PluginEntry> byGuid = plugins.ToDictionary(p => p.Guid);
         foreach (PluginEntry p in plugins)
             foreach (string alias in p.AlsoKnownAs)
                 if (!byGuid.ContainsKey(alias))
                     byGuid[alias] = p;
+        return byGuid;
+    }
+
+    internal static Dictionary<PluginEntry, HashSet<PluginEntry>> Prerequisites(List<PluginEntry> plugins)
+    {
+        Dictionary<string, PluginEntry> byGuid = ByGuid(plugins);
         var after = plugins.ToDictionary(p => p, _ => new HashSet<PluginEntry>());   // p -> must start before p
         foreach (PluginEntry p in plugins)
         {

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- KeelSetup.exe: one file with the starter DLL, the takeover patcher and BepInEx inside. tools/package.ps1 passes PayloadDir. .NET Framework 4.8 is on every Windows 10 and 11. -->
+  <!-- KeelSetup.exe: carries no other program inside (virus scanners guessed the packed version to be a trojan, 2026-11). It copies the files next to it in
+       Keel's folder; BepInEx is not shipped, the setup downloads its official release. tools/package.ps1 passes BepInExVersion and BepInExSha256. .NET Framework 4.8 is on every Windows 10 and 11. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
@@ -15,12 +16,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\SeaPowerKeel\KeelNames.cs" Link="KeelNames.cs" />
+    <Compile Include="..\SeaPowerKeel.Watcher\DialogKit.cs" Link="DialogKit.cs" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />
-    <EmbeddedResource Include="$(PayloadDir)\stub.bin" LogicalName="stub" Condition="'$(PayloadDir)' != ''" />
-    <EmbeddedResource Include="$(PayloadDir)\patcher.bin" LogicalName="patcher" Condition="'$(PayloadDir)' != ''" />
-    <EmbeddedResource Include="$(PayloadDir)\bepinex.bin" LogicalName="bepinex" Condition="'$(PayloadDir)' != ''" />
+    <Reference Include="System.Net.Http" />
+    <!-- the official BepInEx release the setup downloads when the game has none; it refuses any file with another hash -->
+    <AssemblyMetadata Include="BepInExVersion" Value="$(BepInExVersion)" />
+    <AssemblyMetadata Include="BepInExSha256" Value="$(BepInExSha256)" />
   </ItemGroup>
 
 </Project>

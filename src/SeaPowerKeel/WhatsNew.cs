@@ -32,17 +32,11 @@ internal sealed class NewsItem
         _ => "PROBLEM",
     };
 
-    public string Headline
-    {
-        get
-        {
-            if (Kind == NewsKind.Updated && From != To && From.Length > 0 && To.Length > 0)
-                return $"{Name}  {From} → {To}";
-            if (Kind != NewsKind.Gone && To.Length > 0)
-                return $"{Name}  {To}";
-            return Name;
-        }
-    }
+    /// <summary>For an update both versions joined by the arrow the card shows, else the version it has (may be empty).</summary>
+    public string VersionText => Kind == NewsKind.Updated && From != To && From.Length > 0 && To.Length > 0 ? $"{From} → {To}" : To;
+
+    /// <summary>The name with <see cref="VersionText"/>; a gone mod by its name only.</summary>
+    public string Headline => Kind == NewsKind.Gone || VersionText.Length == 0 ? Name : $"{Name}  {VersionText}";
 }
 
 /// <summary>What Keel saw of one mod folder at a start.</summary>
@@ -183,33 +177,39 @@ internal static class WhatsNew
     /// <summary>Steam's <c>timeupdated</c> per installed Workshop item, from steamapps\workshop\appworkshop_&lt;app&gt;.acf.</summary>
     public static Dictionary<ulong, long> SteamTimes(string workshopRoot)
     {
-        var times = new Dictionary<ulong, long>();
         try
         {
             string acf = Path.GetFullPath(Path.Combine(workshopRoot, "..", "..", $"appworkshop_{ModFolders.SteamAppId}.acf"));
-            if (!File.Exists(acf))
-                return times;
-            ulong current = 0;
-            bool installed = false;
-            int depth = 0;
-            foreach (string raw in File.ReadAllLines(acf))
-            {
-                string line = raw.Trim();
-                if (line == "{") { depth++; continue; }
-                if (line == "}") { depth--; if (depth <= 1) installed = false; continue; }
-                MatchCollection q = Regex.Matches(line, "\"([^\"]*)\"");
-                if (q.Count == 1 && depth == 1)
-                    installed = q[0].Groups[1].Value == "WorkshopItemsInstalled";
-                else if (q.Count == 1 && depth == 2 && installed)
-                    ulong.TryParse(q[0].Groups[1].Value, out current);
-                else if (q.Count == 2 && depth == 3 && installed && current != 0 && q[0].Groups[1].Value == "timeupdated"
-                         && long.TryParse(q[1].Groups[1].Value, out long t))
-                    times[current] = t;
-            }
+            if (File.Exists(acf))
+                return InstalledTimes(File.ReadAllLines(acf));
         }
         catch (Exception)
         {
             // no manifest: Workshop items are compared by their files alone
+        }
+        return new Dictionary<ulong, long>();
+    }
+
+    // The manifest's "WorkshopItemsInstalled" block: { "<id>" { "timeupdated" "<unix seconds>" ... } ... }.
+    private static Dictionary<ulong, long> InstalledTimes(IEnumerable<string> acf)
+    {
+        var times = new Dictionary<ulong, long>();
+        ulong current = 0;
+        bool installed = false;
+        int depth = 0;
+        foreach (string raw in acf)
+        {
+            string line = raw.Trim();
+            if (line == "{") { depth++; continue; }
+            if (line == "}") { depth--; if (depth <= 1) installed = false; continue; }
+            MatchCollection q = Regex.Matches(line, "\"([^\"]*)\"");
+            if (q.Count == 1 && depth == 1)
+                installed = q[0].Groups[1].Value == "WorkshopItemsInstalled";
+            else if (q.Count == 1 && depth == 2 && installed)
+                ulong.TryParse(q[0].Groups[1].Value, out current);
+            else if (q.Count == 2 && depth == 3 && installed && current != 0 && q[0].Groups[1].Value == "timeupdated"
+                     && long.TryParse(q[1].Groups[1].Value, out long t))
+                times[current] = t;
         }
         return times;
     }
@@ -328,7 +328,7 @@ internal static class WhatsNew
             if (p.Folder == null || !last.TryGetValue(KeyOf(p.Folder), out SeenMod was) || !was.Ok.Contains(p.Guid))
                 continue;
             var item = new NewsItem { Kind = NewsKind.Problem, Key = KeyOf(p.Folder), Name = p.Display, From = "", To = p.Version.ToString() };
-            item.Lines.Add($"{Report.Tag(p.State)}: {(p.Reason.Length > 0 ? p.Reason : p.FirstLaterError ?? "threw errors")}");
+            item.Lines.Add($"{ReportFormat.Tag(p.State)}: {(p.Reason.Length > 0 ? p.Reason : p.FirstLaterError ?? "threw errors")}");
             news.Add(item);
         }
         return news;
@@ -339,26 +339,15 @@ internal static class WhatsNew
     /// <summary>Fills each updated or new mod's lines: Workshop notes (when <paramref name="fetch"/> gives the page), else CHANGELOG.md.</summary>
     public static void AddNotes(IEnumerable<NewsItem> news, Func<ulong, string> fetch)
     {
+        bool first = true;
         foreach (NewsItem n in news.Where(n => n.Kind is NewsKind.Updated or NewsKind.New))
         {
-            if (n.SteamId != 0 && fetch != null)
+            List<string> lines = n.SteamId != 0 && fetch != null && !SteamRefused ? WorkshopLines(n, fetch, ref first) : new List<string>();
+            if (lines.Count > 0)
             {
-                string page = null;
-                try
-                {
-                    page = fetch(n.SteamId);
-                }
-                catch (Exception)
-                {
-                    // offline or Steam unreachable: the CHANGELOG below
-                }
-                List<string> lines = page == null ? new List<string>() : WorkshopNotes(page, n.Kind == NewsKind.New ? 0 : n.PrevUpdated, n.Updated);
-                if (lines.Count > 0)
-                {
-                    n.Lines.AddRange(lines);
-                    n.Source = "Workshop";
-                    continue;
-                }
+                n.Lines.AddRange(lines);
+                n.Source = "Workshop";
+                continue;
             }
             List<string> log = ChangelogNotes(n.Folder, n.Kind == NewsKind.New ? "" : n.From);
             if (log.Count > 0)
@@ -372,6 +361,25 @@ internal static class WhatsNew
                 n.Lines.Add(n.From.Length > 0 && n.From == n.To ? "Same version number, new files (a new build)."
                             : n.From.Length == 0 && n.To.Length == 0 ? "Its files changed." : "No change notes from the author.");
         }
+    }
+
+    // Steam answers 429 (too many requests) after many pages in a row (issue keel-workshop-429): a short pause between pages, and
+    // after the first refusal no more pages this start; the CHANGELOG fills in.
+    private static List<string> WorkshopLines(NewsItem n, Func<ulong, string> fetch, ref bool first)
+    {
+        string page = null;
+        try
+        {
+            if (!first)
+                System.Threading.Thread.Sleep(PagePauseMs);
+            first = false;
+            page = fetch(n.SteamId);
+        }
+        catch (Exception)
+        {
+            // offline or Steam unreachable: the CHANGELOG
+        }
+        return page == null ? new List<string>() : WorkshopNotes(page, n.Kind == NewsKind.New ? 0 : n.PrevUpdated, n.Updated);
     }
 
     /// <summary>
@@ -496,6 +504,11 @@ internal static class WhatsNew
     /// <summary>Why pages could not be read (for the log): in the game the request runs on Unity's Mono, not .NET.</summary>
     public static readonly System.Collections.Concurrent.ConcurrentBag<string> FetchErrors = new();
 
+    /// <summary>Steam refused a page with 429 this start: no more pages are asked for.</summary>
+    public static volatile bool SteamRefused;
+    /// <summary>The pause between two changelog pages (a worker thread, the game does not wait for it).</summary>
+    public const int PagePauseMs = 400;
+
     /// <summary>The Workshop changelog page of an item, or null (any failure). Runs on a worker thread.</summary>
     public static string FetchWorkshopPage(ulong id, int timeoutMs)
     {
@@ -509,6 +522,12 @@ internal static class WhatsNew
             using var resp = (HttpWebResponse)req.GetResponse();
             using var reader = new StreamReader(resp.GetResponseStream() ?? Stream.Null, Encoding.UTF8);
             return reader.ReadToEnd();
+        }
+        catch (WebException ex) when ((ex.Response as HttpWebResponse) is { } r && (int)r.StatusCode == 429)
+        {
+            SteamRefused = true;
+            FetchErrors.Add($"Workshop {id}: Steam answered 429 (too many requests); no more pages this start");
+            return null;
         }
         catch (Exception ex)
         {

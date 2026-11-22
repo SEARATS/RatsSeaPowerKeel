@@ -23,16 +23,12 @@ internal static class Scanner
             return "Keel itself.";
         if (name.Equals("AnchorChain.dll", StringComparison.OrdinalIgnoreCase))
             return "Anchor Chain's own library: Keel uses it as a library for Anchor Chain mods and never as a plugin.";
-        if (name.Equals("AnchorChain.Preloader.dll", StringComparison.OrdinalIgnoreCase))
+        if (name.Equals(KeelNames.AnchorChainPreloaderFile, StringComparison.OrdinalIgnoreCase))
             return "Anchor Chain's preloader (the BepInEx stub that starts Anchor Chain): not a mod.";
         if (PreparationDll.Matches(name))
             return "Startup preparation DLL, handled by the Keel stub.";
         return null;
     }
-
-    /// <summary>Scans without a list of skipped DLLs (the offline tools).</summary>
-    public static List<PluginEntry> Scan(IList<ModFolder> folders, Action<string> warn, params string[] searchDirs) =>
-        Scan(folders, warn, null, searchDirs);
 
     /// <param name="searchDirs">Where Cecil looks for assemblies a DLL's attributes refer to (an enum argument such as
     /// BepInDependency's flags needs BepInEx.dll): the game's Managed folder and BepInEx\core. The mod folders are added.</param>
@@ -48,6 +44,7 @@ internal static class Scanner
         {
             Manifest manifest = Manifest.Read(folder.Path, warn);
             bool folderEarly = EarlyStart.FolderTiming(folder.Path) == true;
+            List<RequiredItem> required = RequiredItems.OfFolder(folder.Path);
             List<string> dlls;
             try
             {
@@ -87,6 +84,7 @@ internal static class Scanner
                 foreach (PluginEntry p in found)
                 {
                     p.Order = order++;
+                    p.RequiredItems.AddRange(required);
                     if (offBuild != null && p.State == PluginState.Pending)
                         p.Stop(PluginState.Skipped, $"{offBuild} build: this game has the {GameState.BuildName} (keel.ini)");
                     all.Add(p);
@@ -284,7 +282,7 @@ internal static class Scanner
 /// <code>
 /// [Keel]
 /// globe = MyMod.dll        ; only on the 3D globe build
-/// flat  = MyModFlat.dll    ; only on the flat map (0.8.7)
+/// flat  = MyModFlat.dll    ; an extra build for an older game: left out here
 /// </code>
 /// </summary>
 internal sealed class Manifest
@@ -329,16 +327,12 @@ internal sealed class Manifest
         return m;
     }
 
-    /// <summary>"Flat map" / "3D globe" when the DLL is listed only for the other map, else null.</summary>
+    /// <summary>"Flat map" when the DLL is listed only for the flat map (an extra build for an older game), else null.</summary>
     public string OtherBuildOnly(string dll)
     {
         string rel = dll.Substring(folder.Length).TrimStart('\\', '/').Replace('/', '\\');
         bool forGlobe = globe.Contains(rel) || globe.Contains(Path.GetFileName(dll));
         bool forFlat = flat.Contains(rel) || flat.Contains(Path.GetFileName(dll));
-        if (GameState.Globe && forFlat && !forGlobe)
-            return "Flat map";
-        if (!GameState.Globe && forGlobe && !forFlat)
-            return "3D globe";
-        return null;
+        return forFlat && !forGlobe ? "Flat map" : null;
     }
 }

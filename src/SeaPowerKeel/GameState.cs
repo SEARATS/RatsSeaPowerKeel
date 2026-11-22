@@ -16,22 +16,43 @@ internal static class GameState
 {
     private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
-    /// <summary>The 3D globe build (public beta from 26 Oct 2026, the default from 11 Nov) has the map display state; 0.8.7 does not.</summary>
-    public static readonly bool Globe = Type.GetType("SeapowerUI.MapDisplayState, Seapower-Scripts") != null;
-
-    public static string BuildName => Globe ? "3D globe map" : "flat map (0.8.7)";
+    /// <summary>The game build Keel runs on: the 3D globe map, the game's current main version. No other build is supported.</summary>
+    public static string BuildName => "3D globe map";
 
     private static Type T(string name) => Type.GetType(name + ", Seapower-Scripts");
 
-    private static UnityEngine.Object Find(Type type)
+    // The game's singletons (FileManager, LoadScreen, the menu view model ...) are looked up by type. A search walks every
+    // Unity object, costs a frame hitch, and is the call on top of the stack when a crash in the game's object list hits
+    // (reports 21-150, issues keel-findobject-blame and keel-menu-stutter). So: a found object is kept until Unity destroys
+    // it, and a type that is not there is searched again at most once per second.
+    private static readonly Dictionary<Type, UnityEngine.Object> found = new();
+    private static readonly Dictionary<Type, float> missedAt = new();
+
+    internal static UnityEngine.Object Find(Type type)
     {
         if (type == null)
+            return null;
+        if (found.TryGetValue(type, out UnityEngine.Object kept) && kept != null)   // Unity's != : false once destroyed
+            return kept;
+        float now = Time.unscaledTime;
+        if (missedAt.TryGetValue(type, out float at) && now - at < 1f && now >= at)
             return null;
         try
         {
 #pragma warning disable CS0618 // FindObjectOfType: the one both game builds' Unity versions have
-            return UnityEngine.Object.FindObjectOfType(type);
+            UnityEngine.Object hit = UnityEngine.Object.FindObjectOfType(type);
 #pragma warning restore CS0618
+            if (hit != null)
+            {
+                found[type] = hit;
+                missedAt.Remove(type);
+            }
+            else
+            {
+                found.Remove(type);
+                missedAt[type] = now;
+            }
+            return hit;
         }
         catch (Exception)
         {
@@ -54,28 +75,33 @@ internal static class GameState
         string streaming = Path.GetFullPath(Application.streamingAssetsPath).TrimEnd('\\', '/');
         foreach (object d in dirs)
         {
-            if (d == null)
+            ModFolder folder = d == null ? null : ModOf(d, streaming);
+            if (folder == null)
                 continue;
-            Type t = d.GetType();
-            if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
-                continue;
-            // The globe build lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
-            // 0.8.7 has no kinds.
-            string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
-            if (kind != null && kind != "Mod")
-                continue;
-            string full = info.FullName.TrimEnd('\\', '/');
-            if (string.Equals(full, streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user")
-                continue;
-            ulong steamId = 0;
-            object id = t.GetField("steamId", Any)?.GetValue(d);
-            if (id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u)
-                steamId = u;
-            bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
-            list.Add(new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on, Order = list.Count });
+            folder.Order = list.Count;
+            list.Add(folder);
         }
         return list.Count > 0 ? list : null;
     }
+
+    // One entry of the game's list as a mod folder; null for the game's own folders.
+    private static ModFolder ModOf(object d, string streaming)
+    {
+        Type t = d.GetType();
+        if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
+            return null;
+        // The game lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
+        string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
+        if ((kind != null && kind != "Mod") || IsGameOwn(info, streaming))
+            return null;
+        object id = t.GetField("steamId", Any)?.GetValue(d);
+        ulong steamId = id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u ? u : 0;
+        bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
+        return new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on };
+    }
+
+    private static bool IsGameOwn(DirectoryInfo info, string streaming) =>
+        string.Equals(info.FullName.TrimEnd('\\', '/'), streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user";
 
     /// <summary>
     /// Start-up done: the unit data is loaded and the start-up load screen says "Done". Mods started in the middle of it
@@ -131,6 +157,21 @@ internal static class GameState
         catch (Exception) { return false; }
     }
 
+    /// <summary>
+    /// A campaign screen (intro, newspaper, campaign map: scene "linear-campaign") or a mission scene is loaded: the main menu's cards
+    /// do not belong there (test 2026-11-18: the Keel card covered the campaign map's mission strip). The game's menu view model can
+    /// outlive the main menu, so it cannot tell this on its own.
+    /// </summary>
+    public static bool InCampaignOrMission()
+    {
+        try
+        {
+            return UnityEngine.SceneManagement.SceneManager.GetSceneByName("linear-campaign").isLoaded
+                || UnityEngine.SceneManagement.SceneManager.GetSceneByName("mission").isLoaded;
+        }
+        catch (Exception) { return false; }
+    }
+
     /// <summary>True once the game's menu system exists, so its UI (Noesis) is up.</summary>
     public static bool MenuUp()
     {
@@ -170,13 +211,11 @@ internal static class GameState
     /// </summary>
     public static bool AnchorChainRunning(Func<Assembly, bool> ours) => OtherLoader(ours) != null;
 
-    private const string AlpineGuid = "alpine.seapower.modloader";
-
     private static bool AlpineActive()
     {
         try
         {
-            return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(AlpineGuid);
+            return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(KeelNames.AlpineGuid);
         }
         catch (TypeInitializationException)
         {

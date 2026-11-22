@@ -20,20 +20,39 @@ internal static class LogBundle
     {
         folder ??= Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         string zip = Path.Combine(folder, $"Sea Power logs {DateTime.Now:yyyy-MM-dd HH-mm-ss}.zip");
-        string gameData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow", "Triassic Games", "Sea Power");
+        string gameData = KeelNames.PlayerDataDir;
         string gameLogs = Path.Combine(Path.GetDirectoryName(bepInEx.TrimEnd('\\', '/')) ?? "", "Sea Power_Data", "Logs");
 
         Regex user = scrub ? UserName() : null;
         using (FileStream stream = new FileStream(zip, FileMode.CreateNew))
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
         {
-            foreach (string pattern in new[] { "Keel-log*.txt", "Keel-report.txt", "Keel-crash*.txt", "Keel-session.txt", "Keel-mods.txt", "Keel-held.txt", "LogOutput.log" })
-                AddAll(archive, Find(bepInEx, pattern), "BepInEx", user);
+            DateTime? began = SessionBegan(bepInEx);
+            foreach (string pattern in KeelNames.BundleFiles)
+            {
+                // A report or crash text written before this session began belongs to an older one: in the bundle it would read
+                // as this session's (issue keel-bundle-stale-files). The stack files stay, they carry their own times.
+                IEnumerable<string> files = Find(bepInEx, pattern);
+                if (began != null && (pattern == KeelNames.ReportFile || pattern == "Keel-crash*.txt"))
+                    files = files.Where(f => !f.EndsWith(KeelNames.CrashFile, StringComparison.OrdinalIgnoreCase) && !f.EndsWith(KeelNames.ReportFile, StringComparison.OrdinalIgnoreCase)
+                                             || File.GetLastWriteTime(f) >= began.Value.AddSeconds(-KeelNames.TimeSlackSeconds));
+                AddAll(archive, files, "BepInEx", user);
+            }
             AddAll(archive, Find(gameData, "Player*.log"), "Game", user);
             AddAll(archive, Newest(Path.Combine(gameData, "CrashDiagnostics"), "*.jsonl", 3), "Game/CrashDiagnostics", user);
             AddAll(archive, Newest(gameLogs, "*session*.html", 2), "Game/Logs", user);
         }
         return zip;
+    }
+
+    /// <summary>When the session in Keel-session.txt began (its "session" line), or null.</summary>
+    private static DateTime? SessionBegan(string bepInEx)
+    {
+        string began = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(bepInEx, KeelNames.JournalFile))).Began;
+        if (began != null && DateTime.TryParseExact(began.Trim(), "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture,
+                                                    System.Globalization.DateTimeStyles.AssumeLocal, out DateTime t))
+            return t;
+        return null;
     }
 
     /// <summary>The Windows user name right after "Users\", "Users/" or "Users\\" (as JSON writes it), in any case.</summary>

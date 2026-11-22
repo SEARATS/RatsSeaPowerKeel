@@ -11,7 +11,7 @@ You do not need to reference Keel.
 - **Anchor Chain mods and plain BepInEx plugins run as they are** (sections 1 and 2).
 - **Bug reports that say what broke.** When a game update breaks your mod, Keel's report (`BepInEx\Keel-report.txt`) names
   the missing method, field or type and the Harmony patch whose target is gone; *Save logs* gives players one zip to attach.
-- **One mod, both game builds:** a flat-map and a 3D-globe DLL plus a small `keel.ini` (below).
+- **An extra DLL for an older game build:** list it in a small `keel.ini` and Keel leaves it out (below).
 - **While Keel is on, it is the only loader:** an Anchor Chain or Alpine preloader that is still installed does not start, so
   your mod is never started twice.
 
@@ -47,10 +47,10 @@ lists every DLL it left out on purpose (Keel's own and Anchor Chain's `AnchorCha
 
 A DLL that has both an `[ACPlugin]` and a `[BepInPlugin]` entry runs through its Anchor Chain entry only.
 
-## Two game builds: `keel.ini`
+## An extra DLL for an older build: `keel.ini`
 
-Sea Power has two builds in players' hands (the flat map of 0.8.7 and the 3D globe build). If your mod ships one DLL per
-build, say which is which, and Keel starts only the right one:
+Keel supports the game's current main version only. A mod that still ships a second DLL for an older build (the flat map
+of 0.8.7) can say so, and Keel leaves that DLL out:
 
 ```ini
 [Keel]
@@ -87,6 +87,26 @@ Early plugins can use `Keel.GetEnabledModFolders()` to read the selected mod
 directories in load order without initializing the game's file manager.
 Their load-screen hooks see the real end of the load screen.
 
+## Required Workshop items
+
+A mod that needs another Workshop item (a library mod it depends on) names it in its `_info.ini`, one line per item:
+
+```ini
+[Keel]
+Requires=3840000000, com.you.library, My Library
+```
+
+- The three values: the item's Workshop id, the plugin id your `[ACDependency]` / `[BepInDependency]` names, and a name for the card.
+- **Steam gives a new required item to new subscribers only**, and a newly subscribed item is not switched on in the game's mod list.
+  Keel closes that gap for any mod:
+  - **Switched on at a start:** an item that is installed but off in the mod list is switched on when a mod that is on names it (the
+    log says so). The item must be subscribed and downloaded; Keel does not subscribe for the player.
+  - **"Get it" on the card:** a mod kept out because that plugin is missing or too old puts the item's name on the card's last line
+    at the main menu, with a **Get it** button that opens the item's Workshop page; the report window has the same button in the
+    mod's row. The mod's reason names the item and the plugin id.
+- A mod that names no item gets the plain reason and no button.
+- The dependency itself is still what keeps the mod out or lets it start; `Requires` only adds the offer.
+
 ## The game-version check
 
 Before a DLL is loaded, Keel checks every type, method and field it uses from the game's assemblies against the running
@@ -109,7 +129,7 @@ Players can switch to `Strict` (any missing use or patch target keeps the DLL ou
 ## Errors
 
 Keel starts plugins one at a time. One that throws while starting is marked `FAILED` and the next one starts. Exceptions
-your mod throws later (from `Update`, Harmony patches …) are counted against it by its namespaces in the stack trace and
+your mod throws later (from `Update`, Harmony patches ...) are counted against it by its namespaces in the stack trace and
 shown in the report (Ctrl+Shift+K, `BepInEx\Keel-report.txt`), and the log gets a line naming your mod with the stack
 trace. Ask players for `BepInEx\Keel-log.txt` (or `Keel-log.1.txt` for the session before): every line there has the time
 of day and the seconds since the game started.

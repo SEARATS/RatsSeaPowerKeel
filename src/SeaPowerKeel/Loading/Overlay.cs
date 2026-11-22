@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using System.Threading;
@@ -31,7 +30,7 @@ internal sealed class OverlayOptions
 internal sealed class Overlay
 {
     private const string ClassName = "RatsLoadingOverlay";
-    private const int Rows = 8, Tick = 16;
+    private const int Tick = 16;
     private const double MoveSeconds = 0.8, FadeSeconds = 0.8;
     private static Native.WndProc proc;                     // kept alive: Win32 holds only the pointer
     private static Native.EnumWindowsProc enumProc;
@@ -45,7 +44,7 @@ internal sealed class Overlay
     private readonly Stopwatch clock = Stopwatch.StartNew();
     private IntPtr hwnd, owner;
     private float scale = 1f;
-    private IntPtr fontText, fontBold, fontSmall;
+    private IntPtr fontText, fontSmall;
     private Native.RECT game;                                 // the game's window (or the main monitor until it exists)
     private Stage stage = Stage.Full;
     private double stageStart;
@@ -112,7 +111,7 @@ internal sealed class Overlay
             Native.DispatchMessageW(ref msg);
         }
         FreeSnapshot();
-        foreach (IntPtr f in new[] { fontText, fontBold, fontSmall })
+        foreach (IntPtr f in new[] { fontText, fontSmall })
             if (f != IntPtr.Zero) Native.DeleteObject(f);
         Closed = true;
         LoadingWindow.OverlayGone = true;
@@ -136,30 +135,34 @@ internal sealed class Overlay
                 Native.ValidateRect(h, IntPtr.Zero);
                 return IntPtr.Zero;
             case Native.WM_LBUTTONDOWN:
-                if (stage == Stage.Summary)
-                {
-                    int cx = (short)((long)lParam & 0xFFFF), cy = (short)(((long)lParam >> 16) & 0xFFFF);
-                    int pad = (int)Math.Round(10 * scale), top = (int)Math.Round(67 * scale), lineH = (int)Math.Round(20 * scale);
-                    if (cx >= pad && cx <= pad + (int)Math.Round(CreditWidth * scale) && cy >= top && cy <= top + lineH)
-                    {
-                        try { Process.Start(new ProcessStartInfo(ProfileUrl) { UseShellExecute = true }); } catch (Exception) { /* no browser: nothing to do */ }
-                    }
-                    else options.OnSummaryClick?.Invoke();
-                }
-                else if (options.ClickToHide && stage == Stage.Full) Begin(Stage.Fading);
+                OnClick((short)((long)lParam & 0xFFFF), (short)(((long)lParam >> 16) & 0xFFFF));
                 return IntPtr.Zero;
             case Native.WM_RBUTTONDOWN:
                 if (options.ClickToHide) Begin(Stage.Fading);
                 return IntPtr.Zero;
             case Native.WM_TIMER:
                 try { OnTick(); }
-                catch (Exception) { Native.KillTimer(h, new UIntPtr(1)); Native.DestroyWindow(h); }
+                catch (Exception) { Close(); }
                 return IntPtr.Zero;
             case Native.WM_DESTROY:
                 Native.PostQuitMessage(0);
                 return IntPtr.Zero;
         }
         return Native.DefWindowProcW(h, msg, wParam, lParam);
+    }
+
+    // A click on the summary opens Keel's report, on its credit the author's profile; on the full window it hides it.
+    private void OnClick(int x, int y)
+    {
+        if (stage == Stage.Summary)
+        {
+            if (Layout.CreditSpot(scale).Contains(x, y))
+            {
+                try { Process.Start(new ProcessStartInfo(Layout.ProfileUrl) { UseShellExecute = true }); } catch (Exception) { /* no browser: nothing to do */ }
+            }
+            else options.OnSummaryClick?.Invoke();
+        }
+        else if (options.ClickToHide && stage == Stage.Full) Begin(Stage.Fading);
     }
 
     private void Begin(Stage next)
@@ -186,85 +189,105 @@ internal sealed class Overlay
         if ((stage == Stage.Moving || stage == Stage.Summary || stage == Stage.Away) && (LoadingWindow.MissionRunning || LoadingWindow.SceneLoadedTicks > summaryStartTicks))
             Begin(Stage.Fading);
         if (owner == IntPtr.Zero && ++ticks % 6 == 1) FindOwner();
-        Progress.Snapshot s = progress.Take(0);
         double t = Now - stageStart;
-        switch (stage)
+        bool paint = stage switch
         {
-            case Stage.Full:
-                if (s.Dismissed) { Begin(Stage.Fading); break; }
-                if (LoadingWindow.ExternalProgress && !handedOffFull)
-                {
-                    handedOffFull = true;
-                    Native.ShowWindow(hwnd, Native.SW_HIDE);
-                }
-                if (handedOffFull && s.Done)
-                {
-                    stage = Stage.Summary;
-                    summaryStartTicks = DateTime.UtcNow.Ticks;
-                    summary = s;
-                    now = SummaryRect();
-                    Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top,
-                        Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
-                    PublishSummary();
-                    // The in-game summary will take over before this is shown again.
-                    return;
-                }
-                if (s.Done && s.SinceDone > options.LingerSeconds) { Begin(Stage.Moving); break; }
-                if (s.Elapsed > options.MaxSeconds) { Begin(s.Done ? Stage.Moving : Stage.Fading); break; }
-                break;
-            case Stage.Moving:
-            {
-                double k = Math.Min(1.0, t / MoveSeconds), e = 1 - Math.Pow(1 - k, 3);         // ease out
-                now = Lerp(from, to, e);
-                Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top, Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
-                if (k >= 1.0)
-                {
-                    stage = Stage.Summary; stageStart = Now;
-                    PublishSummary();
-                }
-                break;
-            }
-            case Stage.HandOff:
-            {
-                double k = Math.Min(1.0, t / HandOffSeconds);
-                SetAlpha(options.Opacity * (float)(1 - k));
-                if (k >= 1.0) { Native.KillTimer(hwnd, new UIntPtr(1)); Native.DestroyWindow(hwnd); return; }
-                break;
-            }
-            case Stage.Summary:
-                if (LoadingWindow.GameDrawsSummary) { Begin(Stage.HandOff); break; }      // the game draws the card now
-                if (LoadingWindow.OnMenuSubPage) { Native.ShowWindow(hwnd, Native.SW_HIDE); Begin(Stage.Away); return; }      // Scenarios, Options ...: gone at once
-                if (options.SummarySeconds > 0 && t > options.SummarySeconds) Begin(Stage.Fading);
-                break;
-            case Stage.Away:
-                if (LoadingWindow.GameDrawsSummary) { Native.KillTimer(hwnd, new UIntPtr(1)); Native.DestroyWindow(hwnd); return; }
-                if (!LoadingWindow.OnMenuSubPage)      // back on the menu's top page: there again at once, with a fresh timer
-                {
-                    stage = Stage.Summary; stageStart = Now;
-                    SetAlpha(options.Opacity);
-                    Native.ShowWindow(hwnd, Native.SW_SHOWNOACTIVATE);
-                    Paint();
-                }
-                return;
-            case Stage.Fading:
-            {
-                double k = Math.Min(1.0, t / FadeSeconds);
-                SetAlpha(options.Opacity * (float)(1 - k));
-                if (k >= 1.0) { Native.KillTimer(hwnd, new UIntPtr(1)); Native.DestroyWindow(hwnd); return; }
-                break;
-            }
+            Stage.Full => TickFull(),
+            Stage.Moving => TickMoving(t),
+            Stage.Summary => TickSummary(t),
+            Stage.Away => TickAway(),
+            Stage.HandOff => TickFade(t, HandOffSeconds),
+            _ => TickFade(t, FadeSeconds),
+        };
+        if (paint) Paint();
+    }
+
+    // Each stage's step; false when the window is gone or hidden (nothing to paint).
+
+    private bool TickFull()
+    {
+        Progress.Snapshot s = progress.Take(0);
+        if (LoadingWindow.ExternalProgress && !handedOffFull)
+        {
+            handedOffFull = true;
+            Native.ShowWindow(hwnd, Native.SW_HIDE);
         }
-        Paint();
+        if (handedOffFull && s.Done)
+        {
+            Begin(Stage.Summary);
+            summaryStartTicks = DateTime.UtcNow.Ticks;
+            summary = s;
+            now = SummaryRect();
+            Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top,
+                Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
+            PublishSummary();
+            return false;
+        }
+        if (s.Done && s.SinceDone > options.LingerSeconds) Begin(Stage.Moving);
+        else if (s.Elapsed > options.MaxSeconds) Begin(s.Done ? Stage.Moving : Stage.Fading);
+        return !handedOffFull;
+    }
+
+    private bool TickMoving(double t)
+    {
+        double k = Math.Min(1.0, t / MoveSeconds), e = 1 - Math.Pow(1 - k, 3);
+        now = Lerp(from, to, e);
+        Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top, Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
+        if (k < 1.0)
+            return true;
+        stage = Stage.Summary; stageStart = Now;
+        PublishSummary();
+        return true;
     }
 
     private void PublishSummary()
     {
-        LoadingWindow.SummaryX = now.Left - game.Left;
-        LoadingWindow.SummaryY = now.Top - game.Top;
-        LoadingWindow.SummaryW = now.Right - now.Left;
-        LoadingWindow.SummaryH = now.Bottom - now.Top;
+        // Where the card is, in pixels of the game window: the game-drawn card takes over right there.
+        LoadingWindow.SummaryX = now.Left - game.Left; LoadingWindow.SummaryY = now.Top - game.Top;
+        LoadingWindow.SummaryW = now.Right - now.Left; LoadingWindow.SummaryH = now.Bottom - now.Top;
         LoadingWindow.SummaryScale = scale;
         LoadingWindow.SummaryReady = true;
+    }
+
+    private bool TickSummary(double t)
+    {
+        if (LoadingWindow.GameDrawsSummary) Begin(Stage.HandOff);           // the game draws the card now
+        else if (LoadingWindow.OnMenuSubPage)                               // Scenarios, Options ...: gone at once
+        {
+            Native.ShowWindow(hwnd, Native.SW_HIDE);
+            Begin(Stage.Away);
+            return false;
+        }
+        else if (options.SummarySeconds > 0 && t > options.SummarySeconds) Begin(Stage.Fading);
+        return true;
+    }
+
+    private bool TickAway()
+    {
+        if (LoadingWindow.GameDrawsSummary) { Close(); return false; }
+        if (LoadingWindow.OnMenuSubPage)
+            return false;
+        // back on the menu's top page: there again at once, with a fresh timer
+        stage = Stage.Summary; stageStart = Now;
+        SetAlpha(options.Opacity);
+        Native.ShowWindow(hwnd, Native.SW_SHOWNOACTIVATE);
+        return true;
+    }
+
+    private bool TickFade(double t, double seconds)
+    {
+        double k = Math.Min(1.0, t / seconds);
+        SetAlpha(options.Opacity * (float)(1 - k));
+        if (k < 1.0)
+            return true;
+        Close();
+        return false;
+    }
+
+    private void Close()
+    {
+        Native.KillTimer(hwnd, new UIntPtr(1));
+        Native.DestroyWindow(hwnd);
     }
 
     // ---- where it goes ---------------------------------------------------------------------------------------------------
@@ -314,22 +337,19 @@ internal sealed class Overlay
         IntPtr screen = Native.GetDC(IntPtr.Zero);
         int dpi = Math.Max(96, Native.GetDeviceCaps(screen, Native.LOGPIXELSX));
         Native.ReleaseDC(IntPtr.Zero, screen);
-        int gh = game.Bottom - game.Top;
-        // by the game's height (1.5 on a 4K screen: the window then fits the marker's band), never below the system's DPI scale
-        float s = options.Scale > 0 ? options.Scale : Math.Max(Math.Max(1f, dpi / 96f), gh / 1080f * 0.75f);
+        float s = options.Scale > 0 ? options.Scale : Layout.Scale(game.Bottom - game.Top, dpi / 96f);
         if (Math.Abs(s - scale) < 0.01f && fontText != IntPtr.Zero) return;
         scale = s;
-        foreach (IntPtr f in new[] { fontText, fontBold, fontSmall })
+        foreach (IntPtr f in new[] { fontText, fontSmall })
             if (f != IntPtr.Zero) Native.DeleteObject(f);
-        fontText = Font(12, 400, scale);
-        fontBold = Font(14, 700, scale);
-        fontSmall = Font(10, 400, scale);
+        fontText = Font(Layout.TextPoints, 400, scale);
+        fontSmall = Font(Layout.SmallPoints, 400, scale);
     }
 
     private Native.RECT FullRect()
     {
         int gw = game.Right - game.Left, gh = game.Bottom - game.Top;
-        int w = (int)(Layout.Width * scale), h = (int)(Layout.Height(Rows) * scale), margin = (int)(24 * scale);
+        int w = (int)(Layout.Width * scale), h = (int)(Layout.Height(Layout.Rows) * scale), margin = (int)(24 * scale);
         int x, y;
         switch (options.Spot)
         {
@@ -352,7 +372,7 @@ internal sealed class Overlay
     {
         int gh = game.Bottom - game.Top;
         int w = (int)(Layout.SummaryWidth * scale), h = (int)(Layout.SummaryHeight * scale);
-        int x = game.Left + (int)(8 * scale), y = game.Bottom - (int)(gh * 0.05) - h;
+        int x = game.Left + (int)(Layout.SummaryMargin * scale), y = game.Bottom - (int)(gh * Layout.SummaryBottomShare) - h;
         return new Native.RECT { Left = x, Top = y, Right = x + w, Bottom = y + h };
     }
 
@@ -374,26 +394,16 @@ internal sealed class Overlay
         IntPtr mem = Native.CreateCompatibleDC(dc);
         IntPtr bmp = Native.CreateCompatibleBitmap(dc, w, h);
         IntPtr old = Native.SelectObject(mem, bmp);
-        switch (stage)
+        bool squeezed = stage == Stage.Moving && (Now - stageStart) / MoveSeconds < 0.55 && snapDc != IntPtr.Zero;
+        if (stage == Stage.Full)
+            Draw(mem, w, h, progress.Take(Layout.Rows), scale, fontText, fontSmall, LoadingWindow.WaitingFor, LoadingWindow.PreparationStatus);
+        else if (squeezed)          // the full window, squeezed along while it shrinks
         {
-            case Stage.Full:
-                Draw(mem, w, h, progress.Take(Rows), scale, fontText, fontBold, fontSmall);
-                break;
-            case Stage.Moving:
-            {
-                double k = Math.Min(1.0, (Now - stageStart) / MoveSeconds);
-                if (k < 0.55 && snapDc != IntPtr.Zero)      // the full window, squeezed along while it shrinks
-                {
-                    Native.SetStretchBltMode(mem, Native.HALFTONE);
-                    Native.StretchBlt(mem, 0, 0, w, h, snapDc, 0, 0, snapW, snapH, Native.SRCCOPY);
-                }
-                else DrawSummary(mem, w, h, summary ?? progress.Take(0), scale, fontText, fontBold, fontSmall);
-                break;
-            }
-            default:
-                DrawSummary(mem, w, h, summary ?? progress.Take(0), scale, fontText, fontBold, fontSmall);
-                break;
+            Native.SetStretchBltMode(mem, Native.HALFTONE);
+            Native.StretchBlt(mem, 0, 0, w, h, snapDc, 0, 0, snapW, snapH, Native.SRCCOPY);
         }
+        else
+            DrawSummary(mem, w, h, summary ?? progress.Take(0), scale, fontSmall, LoadingWindow.Alert);
         Native.BitBlt(dc, 0, 0, w, h, mem, 0, 0, Native.SRCCOPY);
         Native.SelectObject(mem, old);
         Native.DeleteObject(bmp);
@@ -412,7 +422,7 @@ internal sealed class Overlay
         snapBmp = Native.CreateCompatibleBitmap(dc, snapW, snapH);
         snapOld = Native.SelectObject(snapDc, snapBmp);
         Native.ReleaseDC(hwnd, dc);
-        Draw(snapDc, snapW, snapH, progress.Take(Rows), scale, fontText, fontBold, fontSmall);
+        Draw(snapDc, snapW, snapH, progress.Take(Layout.Rows), scale, fontText, fontSmall, LoadingWindow.WaitingFor, LoadingWindow.PreparationStatus);
     }
 
     private void FreeSnapshot()
@@ -429,10 +439,37 @@ internal sealed class Overlay
 
     // ---- drawing (shared with the preview tool) ---------------------------------------------------------------------------
 
+    /// <summary>
+    /// The sizes of both windows, in pixels at scale 1. The summary card is drawn here and again by the game once it takes over
+    /// (KeelHost.DrawSummaryCard): both go by these numbers.
+    /// </summary>
     internal static class Layout
     {
-        public const int Width = 460, SummaryWidth = 400, SummaryHeight = 94;
+        public const int Width = 460, Rows = 8, TextPoints = 12, SmallPoints = 10;
         public static int Height(int rows) => 14 + 24 + 22 + 22 + rows * 19 + 8 + 20 + 14;
+
+        public const int SummaryWidth = 400, SummaryHeight = 94, SummaryMargin = 8;
+        public const double SummaryBottomShare = 0.05;          // the game's version text below the card
+        public const int Pad = 10, HeaderHeight = 24, FirstLine = 27, LineHeight = 20, CreditWidth = 130;
+        public const string Credit = "Made by Kanalratte";
+        public const string ProfileUrl = "https://steamcommunity.com/profiles/76561198169349193";
+
+        /// <summary>By the game's height (1.5 on a 4K screen: the window then fits the marker's band), never below the DPI scale.</summary>
+        public static float Scale(int gameHeight, float dpiScale) => Math.Max(Math.Max(1f, dpiScale), gameHeight / 1080f * 0.75f);
+
+        /// <summary>The credit line on the summary card, in its pixels: a click there opens the author's profile.</summary>
+        public static Box CreditSpot(float scale)
+        {
+            int S(int v) => (int)Math.Round(v * scale);
+            return new Box(S(Pad), S(FirstLine + 2 * LineHeight), S(CreditWidth), S(LineHeight));
+        }
+    }
+
+    internal readonly struct Box
+    {
+        public readonly int X, Y, W, H;
+        public Box(int x, int y, int w, int h) { X = x; Y = y; W = w; H = h; }
+        public bool Contains(int x, int y) => x >= X && x <= X + W && y >= Y && y <= Y + H;
     }
 
     private static readonly uint Back = Native.Rgb(KeelPalette.Panel), Header = Native.Rgb(KeelPalette.Header),
@@ -440,8 +477,12 @@ internal sealed class Overlay
         Text = Native.Rgb(KeelPalette.Text), Dim = Native.Rgb(KeelPalette.Muted),
         Green = Native.Rgb(KeelPalette.Green), Red = Native.Rgb(KeelPalette.Red);
 
-    /// <summary>Draws the full window's content into <paramref name="dc"/> (size w x h pixels, at <paramref name="scale"/> x 96 dpi).</summary>
-    internal static void Draw(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontBold, IntPtr fontSmall)
+    /// <summary>
+    /// Draws the full window's content into <paramref name="dc"/> (size w x h pixels, at <paramref name="scale"/> x 96 dpi).
+    /// <paramref name="waitingFor"/>: what the game waits for the player to do, or null.
+    /// </summary>
+    internal static void Draw(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontSmall,
+        string waitingFor, string preparationStatus = null)
     {
         int S(int v) => (int)Math.Round(v * scale);
         Fill(dc, 0, 0, w, h, Back);
@@ -450,102 +491,101 @@ internal sealed class Overlay
 
         Fill(dc, 0, 0, w, S(28), Header);
         Put(dc, fontSmall, Dim, "R.A.T.S. KEEL  ·  STARTUP", pad, y, w - 2 * pad - S(70), S(28), 0);
-        Put(dc, fontSmall, Dim, Clock(s.Elapsed), pad, y, w - 2 * pad, S(28), Native.DT_RIGHT);
+        Put(dc, fontSmall, Dim, Progress.Clock(s.Elapsed), pad, y, w - 2 * pad, S(28), Native.DT_RIGHT);
         y += S(36);
 
         Put(dc, fontText, Text, s.Phase, pad, y, w - 2 * pad, S(22), Native.DT_END_ELLIPSIS);
         y += S(22);
 
-        // progress bar: a fill when the number of mods is known, else a block that travels
-        int barW = w - 2 * pad - S(60), barH = S(4), barY = y + (S(18) - barH) / 2;
+        DrawBar(dc, w, s, scale, fontSmall, y);
+        y += S(22);
+
+        int rowH = S(19);
+        if (!string.IsNullOrEmpty(preparationStatus) && s.Recent.Count < Layout.Rows)
+            Put(dc, fontText, Dim, preparationStatus, pad, y, w - 2 * pad, rowH, Native.DT_END_ELLIPSIS);
+        for (int i = 0; i < Layout.Rows; i++)
+        {
+            int idx = i - (Layout.Rows - s.Recent.Count);
+            if (idx >= 0)
+                DrawRow(dc, w, s.Recent[idx], scale, fontText, fontSmall, y);
+            y += rowH;
+        }
+        y += S(8);
+
+        (string foot, uint footColor) = Foot(s, waitingFor);
+        Put(dc, fontSmall, footColor, foot, pad, y, w - 2 * pad, S(20), Native.DT_END_ELLIPSIS);
+    }
+
+    // A fill when the number of mods is known, else a block that travels.
+    private static void DrawBar(IntPtr dc, int w, Progress.Snapshot s, float scale, IntPtr fontSmall, int y)
+    {
+        int S(int v) => (int)Math.Round(v * scale);
+        int pad = S(10), barW = w - 2 * pad - S(60), barH = S(4), barY = y + (S(18) - barH) / 2;
         Fill(dc, pad, barY, barW, barH, Track);
         if (s.Total > 0)
         {
             int fill = (int)(barW * Math.Min(1.0, s.Handled / (double)s.Total));
             Fill(dc, pad, barY, fill, barH, Accent);
             Put(dc, fontSmall, Dim, s.Handled + " / " + s.Total, pad + barW + S(8), y, S(52), S(18), Native.DT_RIGHT);
+            return;
         }
-        else
-        {
-            int block = barW / 5, x = (int)(((s.Elapsed * 0.6) % 1.0) * (barW - block));
-            Fill(dc, pad + x, barY, block, barH, Accent);
-        }
-        y += S(22);
-
-        int rowH = S(19);
-        if (!string.IsNullOrEmpty(LoadingWindow.PreparationStatus) && s.Recent.Count < Rows)
-            Put(dc, fontText, Dim, LoadingWindow.PreparationStatus, pad, y, w - 2 * pad, rowH, Native.DT_END_ELLIPSIS);
-        for (int i = 0; i < Rows; i++)
-        {
-            int idx = i - (Rows - s.Recent.Count);
-            if (idx >= 0)
-            {
-                ModLine m = s.Recent[idx];
-                uint c = m.State == ModState.Running ? Green : m.State == ModState.RunningWithErrors ? Amber : m.State == ModState.Skipped ? Dim : Red;
-                string mark = m.State == ModState.Running ? "ok" : m.State == ModState.RunningWithErrors ? "!" : m.State == ModState.Skipped ? "-" : "x";
-                Put(dc, fontSmall, c, mark, pad, y, S(22), rowH, 0);
-                Put(dc, fontText, m.State == ModState.Skipped ? Dim : Text, m.Name, pad + S(26), y, w - 2 * pad - S(26) - S(64), rowH, Native.DT_END_ELLIPSIS);
-                if (m.TookSeconds >= 0.5)
-                    Put(dc, fontSmall, m.TookSeconds >= 5 ? Amber : Dim, m.TookSeconds.ToString("0.0") + " s", pad, y, w - 2 * pad, rowH, Native.DT_RIGHT);
-            }
-            y += rowH;
-        }
-        y += S(8);
-
-        string foot;
-        uint footColor;
-        if (s.Done) { foot = "All mods started."; footColor = Green; }
-        else if (s.Current != null)    // Keel logs "STARTING i/n: name" before each start, so the slow mod is named while it is slow
-        {
-            foot = "Starting " + s.CurrentIndex + "/" + s.Total + ": " + Shorten(s.Current, 42) + (s.CurrentFor >= 1 ? "  -  " + s.CurrentFor.ToString("0") + " s" : "");
-            footColor = s.CurrentFor >= 5 ? Amber : Text;
-        }
-        else if (LoadingWindow.WaitingFor != null)
-        {
-            foot = "Waiting for you: " + LoadingWindow.WaitingFor;
-            footColor = Amber;
-        }
-        else if (s.Idle >= 2.5)
-        {
-            foot = "Still loading  -  " + s.Idle.ToString("0") + " s since the last message" + (string.IsNullOrEmpty(s.LastEvent) ? "" : ": " + Shorten(s.LastEvent, 34));
-            footColor = Amber;
-        }
-        else { foot = "Click to hide."; footColor = Dim; }
-        Put(dc, fontSmall, footColor, foot, pad, y, w - 2 * pad, S(20), Native.DT_END_ELLIPSIS);
+        int block = barW / 5, x = (int)(((s.Elapsed * 0.6) % 1.0) * (barW - block));
+        Fill(dc, pad + x, barY, block, barH, Accent);
     }
 
-    /// <summary>The summary card: what Keel did, how long the game took, what to look at.</summary>
-    internal static void DrawSummary(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontBold, IntPtr fontSmall)
+    private static void DrawRow(IntPtr dc, int w, ModLine m, float scale, IntPtr fontText, IntPtr fontSmall, int y)
+    {
+        int S(int v) => (int)Math.Round(v * scale);
+        int pad = S(10), rowH = S(19);
+        (uint c, string mark) = Mark(m.State);
+        Put(dc, fontSmall, c, mark, pad, y, S(22), rowH, 0);
+        Put(dc, fontText, c == Dim ? Dim : Text, m.Name, pad + S(26), y, w - 2 * pad - S(26) - S(64), rowH, Native.DT_END_ELLIPSIS);
+        if (m.TookSeconds >= 0.5)
+            Put(dc, fontSmall, m.TookSeconds >= 5 ? Amber : Dim, m.TookSeconds.ToString("0.0") + " s", pad, y, w - 2 * pad, rowH, Native.DT_RIGHT);
+    }
+
+    private static (uint color, string mark) Mark(PluginState state) => state switch
+    {
+        PluginState.Running => (Green, "ok"),
+        PluginState.RunningWithErrors => (Amber, "!"),
+        PluginState.Skipped or PluginState.LeftToAnchorChain => (Dim, "-"),
+        _ => (Red, "x"),
+    };
+
+    private static (string text, uint color) Foot(Progress.Snapshot s, string waitingFor)
+    {
+        if (s.Done)
+            return ("All mods started.", Green);
+        if (s.Current != null)    // Keel says which mod it starts before each start, so the slow mod is named while it is slow
+            return ("Starting " + s.CurrentIndex + "/" + s.Total + ": " + Shorten(s.Current, 42) + (s.CurrentFor >= 1 ? "  -  " + s.CurrentFor.ToString("0") + " s" : ""),
+                    s.CurrentFor >= 5 ? Amber : Text);
+        if (waitingFor != null)
+            return ("Waiting for you: " + waitingFor, Amber);
+        if (s.Idle >= 2.5)
+            return ("Still loading  -  " + s.Idle.ToString("0") + " s since the last message" + (string.IsNullOrEmpty(s.LastEvent) ? "" : ": " + Shorten(s.LastEvent, 34)), Amber);
+        return ("Click to hide.", Dim);
+    }
+
+    /// <summary>The summary card: what Keel did, how long the game took, what to look at. <paramref name="alert"/>: a crash note, or null.</summary>
+    internal static void DrawSummary(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontSmall, string alert)
     {
         int S(int v) => (int)Math.Round(v * scale);
         Fill(dc, 0, 0, w, h, Back);
-        string alert = LoadingWindow.Alert;
         bool amber = alert != null || s.HasProblems;
-        Fill(dc, 0, 0, w, S(24), Header);
+        Fill(dc, 0, 0, w, S(Layout.HeaderHeight), Header);
         Native.SetBkMode(dc, Native.TRANSPARENT);
-        int pad = S(10), y = 0, lineH = S(20);
+        int pad = S(Layout.Pad), y = 0, lineH = S(Layout.LineHeight);
 
-        string ver = string.IsNullOrEmpty(s.KeelVersion) ? "" : " " + s.KeelVersion;
-        Put(dc, fontSmall, Dim, "R.A.T.S. KEEL" + ver, pad, y, w - 2 * pad, S(24), Native.DT_END_ELLIPSIS);
-        y += S(27);
-
-        var sb = new StringBuilder();
-        sb.Append(s.Running).Append(" running · Game ready in ").Append(Clock(s.DoneElapsed > 0 ? s.DoneElapsed : s.Elapsed));
-        if (s.Skipped > 0) sb.Append(" · ").Append(s.Skipped).Append(" skipped");
-        Put(dc, fontSmall, Text, sb.ToString(), pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
+        Put(dc, fontSmall, Dim, s.Title, pad, y, w - 2 * pad, S(Layout.HeaderHeight), Native.DT_END_ELLIPSIS);
+        y += S(Layout.FirstLine);
+        Put(dc, fontSmall, Text, s.ReadyLine, pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
         y += lineH;
-
         Put(dc, fontSmall, amber ? Amber : Green, s.SummaryLine(alert), pad, y, w - 2 * pad, lineH, Native.DT_END_ELLIPSIS);
         y += lineH;
-        Put(dc, fontSmall, Dim, "Made by Kanalratte", pad, y, S(CreditWidth), lineH, Native.DT_END_ELLIPSIS);
+        Put(dc, fontSmall, Dim, Layout.Credit, pad, y, S(Layout.CreditWidth), lineH, Native.DT_END_ELLIPSIS);
     }
 
-    public const int CreditWidth = 130;
-    private const string ProfileUrl = "https://steamcommunity.com/profiles/76561198169349193";
-
     private static string Shorten(string s, int n) => s.Length <= n ? s : s.Substring(0, n - 1) + "...";
-
-    private static string Clock(double seconds) => ((int)seconds / 60) + ":" + ((int)seconds % 60).ToString("00");
 
     private static void Fill(IntPtr dc, int x, int y, int w, int h, uint rgb)
     {

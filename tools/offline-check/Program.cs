@@ -25,12 +25,7 @@ internal static class Program
             return 2;
         }
         string managed = args[0], core = args[1];
-        // Let Type.GetType find the game's Seapower-Scripts in that Managed folder: that is how Keel tells the builds apart.
-        AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
-        {
-            string p = Path.Combine(managed, new AssemblyName(e.Name).Name + ".dll");
-            return File.Exists(p) ? Assembly.LoadFrom(p) : null;
-        };
+        Program.ResolveFrom(managed);
         Console.WriteLine($"Game build: {GameState.BuildName} ({managed})");
 
         var folders = new List<ModFolder>();
@@ -50,24 +45,14 @@ internal static class Program
         List<PluginEntry> all = Scanner.Scan(folders, notes.Add, skipped, managed, core);
         using (var pre = new Preflight(managed, core))
         {
-            foreach (IGrouping<string, PluginEntry> dll in all.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Dll))
+            // The game's own verdict (GameVersionCheck = Standard). The game's version is not known here, so _info.ini statements are not judged.
+            List<IGrouping<string, PluginEntry>> dlls = all.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Dll).ToList();
+            var results = dlls.ToDictionary(d => d.Key, d => pre.Check(d.Key), StringComparer.OrdinalIgnoreCase);
+            foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
-                Preflight.Result r = pre.Check(dll.Key);
+                string matching = Preflight.MatchingMapBuild(dll.Key, results[dll.Key], results);
                 foreach (PluginEntry p in dll)
-                {
-                    if (r.ClassLoad.Count > 0)
-                        p.Stop(PluginState.NotStarted, $"Made for another game version: this build has no {Report.Short(r.ClassLoad)}.");
-                    else if (r.Fatal.Count > 0)
-                        p.Stop(PluginState.NotStarted, $"A patch does not fit the game: {Report.Short(r.Fatal, 10)}.");
-                    else
-                    {
-                        p.MissingUses.AddRange(r.Uses);
-                        if (r.Uses.Count > 0)
-                            p.Warnings.Add($"Uses {r.Uses.Count} thing(s) this game build lacks, e.g. {Report.Short(r.Uses)}.");
-                        if (r.Lookups.Count > 0)
-                            p.Warnings.Add($"Looks up {r.Lookups.Count} type(s)/method(s) by name that this game build lacks: {string.Join("; ", r.Lookups)}.");
-                    }
-                }
+                    Preflight.Judge(p, results[dll.Key], matching, strict: false, declared: null);
             }
             Console.WriteLine($"Type index for by-name lookups: {(pre.IndexMs > 0 ? pre.IndexMs + " ms" : "not needed")}");
         }
@@ -80,4 +65,14 @@ internal static class Program
         Console.WriteLine(Report.Text(all, "Offline check (nothing started; RUNNING = would start)", notes, skipped));
         return 0;
     }
+
+    /// <summary>
+    /// Assemblies the runtime cannot find come from that Managed folder: Type.GetType then finds the game's Seapower-Scripts there,
+    /// which is how Keel tells the builds apart.
+    /// </summary>
+    internal static void ResolveFrom(string managed) => AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
+    {
+        string p = Path.Combine(managed, new AssemblyName(e.Name).Name + ".dll");
+        return File.Exists(p) ? Assembly.LoadFrom(p) : null;
+    };
 }

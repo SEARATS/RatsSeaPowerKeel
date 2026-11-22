@@ -16,35 +16,13 @@ namespace SeaPowerKeel;
 /// </summary>
 internal sealed class CrashGuard
 {
-    public sealed class Verdict
-    {
-        /// <summary>The last session has a journal and it never reached a normal quit.</summary>
-        public bool Unclean;
-        /// <summary>"load" or "start" when the session ended inside that step of a mod, else null.</summary>
-        public string Step;
-        public string Guid;
-        public string Scene;
-        public string Began;
-    }
-
-    private static readonly string[] CrashMarkers =
-    {
-        "Got a UNKNOWN while executing native code",
-        "Native Crash Reporting",
-        "Crash!!!",
-        "A crash has been intercepted by the crash handler",
-        "Received signal SIG",
-    };
-
-    private const int MaxCrashLines = 400;
-
     private readonly string dir;
     private readonly string journalPath;
     private readonly string heldPath;
     private readonly string playerPrev;
     private FileStream journal;
 
-    public Verdict Previous { get; }
+    public CrashText.Journal Previous { get; }
 
     /// <summary>One short line for the summary card, when the last game crashed.</summary>
     public string Short { get; private set; }
@@ -70,9 +48,9 @@ internal sealed class CrashGuard
     {
         this.dir = dir;
         playerPrev = playerPrevLog;
-        journalPath = Path.Combine(dir, "Keel-session.txt");
-        heldPath = Path.Combine(dir, "Keel-held.txt");
-        Previous = Read(ReadLines(journalPath));
+        journalPath = Path.Combine(dir, KeelNames.JournalFile);
+        heldPath = Path.Combine(dir, KeelNames.HeldFile);
+        Previous = CrashText.ReadJournal(CrashText.ReadLines(journalPath));
         KeepLastStack();
         try
         {
@@ -90,7 +68,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            string stack = Path.Combine(dir, CrashText.StackFile), kept = Path.Combine(dir, CrashText.StackPrevFile);
+            string stack = Path.Combine(dir, KeelNames.StackFile), kept = Path.Combine(dir, KeelNames.StackPrevFile);
             if (File.Exists(stack) && new FileInfo(stack).Length > 0)
                 File.Copy(stack, kept, true);
             else if (File.Exists(kept))
@@ -119,52 +97,6 @@ internal sealed class CrashGuard
         }
     }
 
-    /// <summary>
-    /// Reads a journal. A "load" or "start" stays open until the next one or "done": the game gets a frame after each step, and a
-    /// BepInEx plugin's own Start() runs in that frame, so a crash there still counts against the mod.
-    /// </summary>
-    internal static Verdict Read(IEnumerable<string> lines)
-    {
-        var v = new Verdict();
-        bool any = false, quit = false;
-        foreach (string line in lines)
-        {
-            int tab = line.IndexOf('\t');
-            if (tab <= 0)
-                continue;
-            any = true;
-            string kind = line.Substring(0, tab), detail = line.Substring(tab + 1);
-            switch (kind)
-            {
-                case "session": v.Began = detail; break;
-                case "load":
-                case "start": v.Step = kind; v.Guid = detail; break;
-                case "done": v.Step = null; v.Guid = null; break;
-                case "scene": v.Scene = detail; break;
-                case "quit": quit = true; break;
-            }
-        }
-        v.Unclean = any && !quit;
-        if (!v.Unclean)
-        {
-            v.Step = null;
-            v.Guid = null;
-        }
-        return v;
-    }
-
-    /// <summary>The crash part of a Unity player log, or null when the log shows no crash.</summary>
-    internal static string CrashBlock(string log)
-    {
-        if (string.IsNullOrEmpty(log))
-            return null;
-        int at = CrashMarkers.Select(m => log.IndexOf(m, StringComparison.Ordinal)).Where(i => i >= 0).DefaultIfEmpty(-1).Min();
-        if (at < 0)
-            return null;
-        int lineStart = log.LastIndexOf('\n', at) + 1;
-        return string.Join("\n", log.Substring(lineStart).Replace("\r\n", "\n").Split('\n').Take(MaxCrashLines));
-    }
-
     /// <summary>The first part of a mod's main class name, or null when that says nothing about whose code it is.</summary>
     internal static string RootOf(PluginEntry p)
     {
@@ -191,7 +123,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            File.WriteAllLines(Path.Combine(dir, CrashText.ModsFile), Blamable(plugins).Select(p => $"{p.Guid}\t{p.Display}\t{RootOf(p)}"));
+            File.WriteAllLines(Path.Combine(dir, KeelNames.ModsFile), Blamable(plugins).Select(p => $"{p.Guid}\t{p.Display}\t{RootOf(p)}"));
         }
         catch (Exception)
         {
@@ -218,83 +150,108 @@ internal sealed class CrashGuard
     /// </summary>
     public void Apply(IReadOnlyCollection<PluginEntry> plugins, bool hold, Action<string> note)
     {
-        var held = new Dictionary<string, (string stamp, string reason)>();
-        foreach (string line in ReadLines(heldPath))
+        Dictionary<string, (string stamp, string reason)> held = ReadHeld();
+        string caughtStack = Previous.Unclean ? CrashText.ReadAll(Path.Combine(dir, KeelNames.StackPrevFile)) : null;
+        if (Previous.Unclean && CrashText.ClosedNormally(caughtStack, playerPrev))
         {
-            string[] parts = line.Split('\t');
-            if (parts.Length == 3)
-                held[parts[0]] = (parts[1], parts[2]);
+            // Only a line in the log (info): no notice on screen, no error - nothing went wrong (test 2026-11-18 found it as an error line).
+            QuietNote = "The last game ended without Keel's quit mark, but Unity shut it down the normal way: no crash.";
+            Previous.Unclean = false;
         }
-
-        var keptOn = new HashSet<string>(ReadLines(Path.Combine(dir, CrashText.KeepFile)).Select(l => l.Trim()));
         if (Previous.Unclean)
         {
-            string caught = ReadAll(Path.Combine(dir, CrashText.StackPrevFile));
-            string block = !string.IsNullOrWhiteSpace(caught) ? caught : CrashBlock(ReadAll(playerPrev));
-            string detail = CrashText.CrashLine(block);
-            WriteCrashFile(block);
-            string where = Previous.Scene != null ? $" (last scene: {Previous.Scene})" : "";
-            PluginEntry culprit = null;
-            string how = null;
-            if (Previous.Guid != null)
-            {
-                culprit = plugins.FirstOrDefault(p => p.Guid == Previous.Guid);
-                if (culprit != null)
-                    how = Previous.Step == "load" ? "while Keel was loading it" : "while Keel was starting it";
-            }
-            if (culprit == null)
-            {
-                culprit = Blame(block, plugins);
-                how = "with its code on the crash's stack";
-            }
-            if (culprit != null)
-            {
-                string why = $"The last game ended unexpectedly {how}.";
-                Short = $"Last game crashed: {culprit.Display}";
-                note($"The last game did not end normally{where}: {culprit.Display} {culprit.Version} ({how}). Details: Keel-crash.txt.");
-                if (hold && !keptOn.Contains(culprit.Guid))
-                    held[culprit.Guid] = (Stamp(culprit.Dll), why);
-            }
-            else
-            {
-                Short = "Last game crashed: cause unknown";
-                string loading = "";
-                if (CrashText.LastPack(block, out string packFolder, out string packFile))
-                {
-                    Short = $"Last game crashed loading {Path.GetFileName(packFile)}";
-                    loading = $" It was loading {Path.GetFileName(packFile)} from mod folder {packFolder} just before.";
-                }
-                note($"The last game did not end normally{where}, and Keel cannot tell for certain which mod did it{(detail != null ? $" ({detail})" : "")}.{loading} Details: Keel-crash.txt.");
-            }
+            var keptOn = new HashSet<string>(CrashText.ReadLines(Path.Combine(dir, KeelNames.KeepFile)).Select(l => l.Trim()));
+            PluginEntry culprit = Explain(plugins, caughtStack, note);
+            if (culprit != null && hold && !keptOn.Contains(culprit.Guid))
+                held[culprit.Guid] = (Stamp(culprit.Dll), $"The last game ended unexpectedly {culpritHow}.");
         }
-
+        else
+        {
+            // Keel-crash.txt describes the last unclean session only; after a clean one it would sit in the next report's bundle
+            // as if it were that session's crash (issue keel-bundle-stale-files).
+            try { File.Delete(Path.Combine(dir, KeelNames.CrashFile)); } catch (Exception) { /* it stays, it is dated */ }
+        }
         try
         {
-            File.Delete(Path.Combine(dir, CrashText.KeepFile));
+            File.Delete(Path.Combine(dir, KeelNames.KeepFile));
         }
         catch (Exception)
         {
             // only an answer to the last crash
         }
+        SaveHeld(HoldOut(plugins, held, hold));
+    }
 
+    /// <summary>A line for the log at info level only (set by <see cref="Apply"/>), or null.</summary>
+    public string QuietNote;
+
+    private string culpritHow;      // how Explain pinned the crash on its culprit
+
+    // The crash in words (note, Short, Keel-crash.txt) and the mod it is pinned on: the one Keel was loading or starting, else the
+    // one whose code is on the stack; null when Keel cannot tell.
+    private PluginEntry Explain(IReadOnlyCollection<PluginEntry> plugins, string caughtStack, Action<string> note)
+    {
+        string block = !string.IsNullOrWhiteSpace(caughtStack) ? caughtStack : CrashText.CrashBlock(CrashText.ReadAll(playerPrev));
+        WriteCrashFile(block);
+        string where = Previous.Scene != null ? $" (last scene: {Previous.Scene})" : "";
+        PluginEntry culprit = Previous.Guid != null ? plugins.FirstOrDefault(p => p.Guid == Previous.Guid) : null;
+        culpritHow = culprit == null ? null : Previous.Step == "load" ? "while Keel was loading it" : "while Keel was starting it";
+        if (culprit == null)
+        {
+            culprit = Blame(block, plugins);
+            culpritHow = "with its code on the crash's stack";
+        }
+        if (culprit != null)
+        {
+            Short = $"Last game crashed: {culprit.Display}";
+            note($"The last game did not end normally{where}: {culprit.Display} {culprit.Version} ({culpritHow}). Details: {KeelNames.CrashFile}.");
+            return culprit;
+        }
+        Short = "Last game crashed: cause unknown";
+        string loading = "";
+        if (CrashText.LastPack(block, out string packFolder, out string packFile))
+        {
+            Short = $"Last game crashed loading {Path.GetFileName(packFile)}";
+            loading = $" It was loading {Path.GetFileName(packFile)} from mod folder {packFolder} just before.";
+        }
+        string detail = CrashText.CrashLine(block);
+        note($"The last game did not end normally{where}, and Keel cannot tell for certain which mod did it{(detail != null ? $" ({detail})" : "")}.{loading} Details: {KeelNames.CrashFile}.");
+        return null;
+    }
+
+    private Dictionary<string, (string stamp, string reason)> ReadHeld()
+    {
+        var held = new Dictionary<string, (string stamp, string reason)>();
+        foreach (string line in CrashText.ReadLines(heldPath))
+        {
+            string[] parts = line.Split('\t');
+            if (parts.Length == 3)
+                held[parts[0]] = (parts[1], parts[2]);
+        }
+        return held;
+    }
+
+    // Keeps the held mods out (when hold is on) and returns the lines of the hold list that stay.
+    private List<string> HoldOut(IReadOnlyCollection<PluginEntry> plugins, Dictionary<string, (string stamp, string reason)> held, bool hold)
+    {
         var keep = new List<string>();
         foreach (KeyValuePair<string, (string stamp, string reason)> h in held)
         {
             PluginEntry p = plugins.FirstOrDefault(x => x.Guid == h.Key);
-            if (p == null)
-            {
-                keep.Add($"{h.Key}\t{h.Value.stamp}\t{h.Value.reason}");   // its folder is off for now: the hold stays
-                continue;
-            }
-            if (Stamp(p.Dll) != h.Value.stamp)
+            if (p != null && Stamp(p.Dll) != h.Value.stamp)
                 continue;   // the mod was updated: it gets another chance
-            keep.Add($"{h.Key}\t{h.Value.stamp}\t{h.Value.reason}");
-            if (hold && p.State == PluginState.Pending)
+            keep.Add($"{h.Key}\t{h.Value.stamp}\t{h.Value.reason}");   // with no mod (its folder is off for now) the hold stays too
+            if (p != null && hold && p.State == PluginState.Pending)
             {
                 p.Stop(PluginState.NotStarted, h.Value.reason + " Keel keeps it out so the game starts, until the mod is updated. To try it anyway, use 'Let held mods run' in this window.");
                 HeldActive = true;
             }
         }
+        return keep;
+    }
+
+    private void SaveHeld(List<string> keep)
+    {
         try
         {
             if (keep.Count > 0)
@@ -312,38 +269,11 @@ internal sealed class CrashGuard
     {
         try
         {
-            var sb = new StringBuilder();
-            sb.AppendLine($"The game session started {Previous.Began} did not end normally.");
-            sb.AppendLine($"Keel was {(Previous.Guid != null ? $"at the '{Previous.Step}' step of {Previous.Guid}" : "not loading or starting a mod")}; last scene: {Previous.Scene ?? "none"}.");
-            sb.AppendLine();
-            sb.AppendLine(block ?? "Player-prev.log shows no crash report.");
-            File.WriteAllText(Path.Combine(dir, "Keel-crash.txt"), sb.ToString());
+            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block));
         }
         catch (Exception)
         {
             // only a convenience
         }
-    }
-
-    private static string ReadAll(string path)
-    {
-        try
-        {
-            if (path == null || !File.Exists(path))
-                return null;
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream);
-            return reader.ReadToEnd();
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
-    private static IEnumerable<string> ReadLines(string path)
-    {
-        string text = ReadAll(path);
-        return text == null ? Array.Empty<string>() : text.Replace("\r\n", "\n").Split('\n').Where(l => l.Length > 0).ToArray();
     }
 }

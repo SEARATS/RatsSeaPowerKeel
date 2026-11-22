@@ -8,4 +8,5 @@ internal static class KeelPalette
     internal const uint Accent = 0xC04A3C;
     internal const uint Text = 0xD8DADB, Muted = 0xADB2B6, Amber = 0xD5A876;
     internal const uint Green = 0x9ABD9B, Red = 0xE6A49C, Blue = 0xA6C0CF;
+    internal const uint Faint = 0x7F8A98, Light = 0xD7DDE5;       // hints in the report; file names among the notes
 }

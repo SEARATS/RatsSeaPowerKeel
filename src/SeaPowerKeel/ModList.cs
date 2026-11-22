@@ -17,7 +17,7 @@ internal static class ModList
     /// <summary>Carries out the crash window's choice to keep a pack off. Returns the folder, or null.</summary>
     internal static string ApplyPackOff(string dir, string settingsPath)
     {
-        string file = Path.Combine(dir, CrashText.PackOffFile);
+        string file = Path.Combine(dir, KeelNames.PackOffFile);
         try
         {
             if (!File.Exists(file))
@@ -26,8 +26,7 @@ internal static class ModList
             File.Delete(file);
             if (folder.Length == 0 || !File.Exists(settingsPath))
                 return null;
-            var one = new[] { folder };
-            File.WriteAllText(settingsPath, SetFolders(File.ReadAllText(settingsPath), one, one));
+            File.WriteAllText(settingsPath, SwitchOff(File.ReadAllText(settingsPath), folder));
             return folder;
         }
         catch (Exception)
@@ -36,31 +35,14 @@ internal static class ModList
         }
     }
 
-    /// <summary>The folders switched on in the game's mod list, in its order.</summary>
-    internal static List<string> ListOn(string settings)
-    {
-        var on = new List<string>();
-        if (settings == null)
-            return on;
-        foreach (string line in settings.Replace("\r\n", "\n").Split('\n'))
-        {
-            Match m = ModLine.Match(line);
-            if (m.Success && m.Groups[3].Value == "True")
-                on.Add(m.Groups[2].Value);
-        }
-        return on;
-    }
-
-    /// <summary>The settings with every folder of <paramref name="managed"/> switched on, except those in <paramref name="switchedOff"/>. Other lines stay as they are.</summary>
-    internal static string SetFolders(string settings, ICollection<string> managed, ICollection<string> switchedOff)
+    /// <summary>The settings with <paramref name="folder"/> switched off in the mod list. Other lines stay as they are.</summary>
+    internal static string SwitchOff(string settings, string folder)
     {
         string newline = settings.Contains("\r\n") ? "\r\n" : "\n";
         IEnumerable<string> lines = settings.Replace("\r\n", "\n").Split('\n').Select(line =>
         {
             Match m = ModLine.Match(line);
-            if (!m.Success || !managed.Contains(m.Groups[2].Value))
-                return line;
-            return $"{m.Groups[1].Value}{m.Groups[2].Value},{(switchedOff.Contains(m.Groups[2].Value) ? "False" : "True")},{m.Groups[4].Value}";
+            return m.Success && m.Groups[2].Value == folder ? $"{m.Groups[1].Value}{folder},False,{m.Groups[4].Value}" : line;
         });
         return string.Join(newline, lines);
     }
