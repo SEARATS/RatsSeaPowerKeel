@@ -12,7 +12,6 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 - [ ] An install video for the by-hand way
 - [ ] Every release links its VirusTotal results; the GitHub release carries the same files and the source
 - [ ] Every release lists a SHA-256 checksum per file, so anyone can check the download and compare it with their own build
-- [ ] Answer the open Keel questions on the feedback board
 
 ## Wave 1: small wins
 
