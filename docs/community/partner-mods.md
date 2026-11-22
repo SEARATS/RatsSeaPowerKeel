@@ -11,6 +11,7 @@ My R.A.T.S. mods already run on Keel. The first real change is Radio:
 - Addons add whatever they want on top, each one its own item:
   - the R.A.T.S. Radio voices, with every language pack as its own addon
   - VOIP
+  - Alternative Mods
   - other sound mods from other authors
 
 ## Official partner mods
