@@ -2,7 +2,8 @@
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 
-- Mods and tools can wrap operations in `Keel.TrackActivity(pluginId, operation, detail)`.
+- Mods and tools can wrap operations in `Keel.TrackActivity(ActivityContext)` with
+  a `PluginId` owner and `ActivityKind` enum; the older string overload adapts to it.
   The journal records the operation before it starts and its completion afterward,
   including nested activity. A native crash can therefore leave useful context
   even when its stack file is empty.

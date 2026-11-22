@@ -124,13 +124,20 @@ Players can switch to `Strict` (any missing use or patch target keeps the DLL ou
 Keel 0.8.1 adds optional runtime diagnostic scopes:
 
 ```csharp
-using (Keel.TrackActivity("your.plugin.guid", "settings rebuild", "Advanced page"))
+var plugin = Keel.ForPlugin(new PluginId("your.plugin.guid"));
+using (plugin.BeginActivity(ActivityKind.SettingsRebuild, "Advanced page", "Refresh interval"))
 {
     RebuildPage();
 }
 ```
 
-The journal is flushed before the operation begins and after the scope finishes.
+`PluginActivity` binds ownership once. `BeginActivity` accepts a typed operation
+and `params string[]` diagnostic details; a mod-specific enum is accepted too.
+`ActivityContext` is the concrete owner/operation contract for lower-level callers.
+Tabs and line breaks remain visible as `\t`, `\r`, and `\n` in the journal;
+literal backslashes are escaped too, so these details cannot inject records.
+The old three-string overload is a compatibility adapter; new callers use the
+typed contract. The journal is flushed before the operation begins and after the scope finishes.
 Nested scopes retain both the tool and the mod that owns the callback. If native
 code ends the game without a usable stack, the watcher and next-start report can
 show the last recorded activity. This is diagnostic context, not proof of cause;

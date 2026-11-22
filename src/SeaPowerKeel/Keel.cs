@@ -28,9 +28,15 @@ public static class Keel
     internal static readonly List<PluginEntry> Plugins = new();
     internal static CrashGuard ActivityJournal;
 
+    public static PluginActivity ForPlugin(PluginId owner) => new(owner);
+
     /// <summary>Optional mod diagnostics: records an operation before native code can crash. Dispose after it finishes.</summary>
+    public static IDisposable TrackActivity(ActivityContext context) =>
+        ActivityJournal?.BeginActivity(context) ?? EmptyActivity.Instance;
+
+    // Compatibility for clients built before the typed activity contract.
     public static IDisposable TrackActivity(string pluginId, string operation, string detail = "") =>
-        ActivityJournal?.BeginActivity(pluginId, operation, detail) ?? EmptyActivity.Instance;
+        TrackActivity(new ActivityContext(new PluginId(pluginId), ActivityKind.Other, $"{operation}: {detail}"));
 
     private class EmptyActivity : IDisposable
     {

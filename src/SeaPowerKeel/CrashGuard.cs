@@ -103,14 +103,16 @@ internal sealed class CrashGuard
         }
     }
 
-    public IDisposable BeginActivity(string pluginId, string operation, string detail)
+    public IDisposable BeginActivity(ActivityContext context)
     {
+        if (context == null) throw new ArgumentNullException(nameof(context));
         string token = System.Guid.NewGuid().ToString("N");
-        Mark("activity", $"{token}\t{DateTime.UtcNow.Ticks}\t{Clean(pluginId)}\t{Clean(operation)}\t{Clean(detail)}");
+        Mark("activity", $"{token}\t{DateTime.UtcNow.Ticks}\t{Clean(context.Owner.Value)}\t{context.Kind}\t{Clean(context.Detail)}");
         return new ActivityScope(this, token);
     }
 
-    private static string Clean(string value) => (value ?? "").Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+    private static string Clean(string value) => (value ?? "").Replace("\\", "\\\\")
+        .Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
 
     private class ActivityScope(CrashGuard owner, string token) : IDisposable
     {
