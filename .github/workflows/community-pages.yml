@@ -27,18 +27,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: actions/configure-pages@v5
+        id: pages
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-
       - name: Build site
+        env:
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
+          sed -i "s|^site_url = .*|site_url = \"${PAGES_BASE_URL%/}/\"|" docs/zensical.toml
           python -m pip install zensical==0.1.3
           python -m zensical build --config-file docs/zensical.toml --clean
-
       - uses: actions/upload-pages-artifact@v4
         with:
           path: docs/site
-
       - uses: actions/deploy-pages@v5
         id: deployment
