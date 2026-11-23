@@ -21,6 +21,9 @@ The first official partner mods, and hopefully a lot more to come:
 - **VOIP**: go from the author, invited to the Discord
 - **Pilothouse**: go from the author, invited to the Discord
 - **Euromod**: interested, full answer still open
+- **Modern Naval Operations** (SEST Integration Pack): offered to test Keel against its ~200-item collection, invited to the Discord
+  - needs: dependency and load-order checks for its collection (Wave 2), changing map shapes such as Arctic sea ice on the
+    map layers (Wave 3)
 - **One more mod team**: in talks, name follows
 
 - Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.
