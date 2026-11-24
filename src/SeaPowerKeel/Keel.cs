@@ -1594,7 +1594,6 @@ internal sealed partial class KeelHost : MonoBehaviour
         var style = Text(11, color);
         style.wordWrap = false;
         style.alignment = TextAnchor.MiddleLeft;
-        style.margin.right = 10;
         return style;
     }
 
@@ -1628,6 +1627,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         nameStyle = Text(14, KeelPalette.Text, below: 1);
         sourceStyle = Text(11, KeelPalette.Muted);
         sourceStyle.richText = false;
+        fileStyle = new GUIStyle(sourceStyle) { alignment = TextAnchor.UpperRight };
+        compactRowStyle = new GUIStyle(rowStyle) { padding = new RectOffset(RowInset, RowInset, 2, 2), margin = new RectOffset(0, 0, 0, 1) };
         bodyStyle = Text(12, KeelPalette.Red);
         bodyStyle.margin = new RectOffset(0, 0, 5, 0);
         warnStyle = Text(12, KeelPalette.Amber);
@@ -1658,7 +1659,63 @@ internal sealed partial class KeelHost : MonoBehaviour
         return $"<color=#{color:X6}>{part.text}</color>";
     }));
 
-    private static int GroupOf(PluginEntry p) => Report.IsProblem(p) ? 0 : p.State == PluginState.Running ? 1 : 2;
+    private readonly Dictionary<string, bool> expandedPacks = new(StringComparer.OrdinalIgnoreCase);
+    private GUIStyle compactRowStyle, fileStyle;
+    private const int RowInset = 8;
+    private float VersionWidth => Mathf.Min(64, window.width * 0.09f);
+    private float StatusWidth => Mathf.Min(100, window.width * 0.13f);
+    private float NameWidth => window.width * 0.30f;
+    private float SourceWidth => Mathf.Min(132, window.width * 0.19f);
+
+    private void DrawPack(IGrouping<string, PluginEntry> pack, bool first)
+    {
+        PluginEntry plugin = pack.First();
+        ModFolder folder = plugin.Folder;
+        string title = !string.IsNullOrWhiteSpace(folder?.Title) ? folder.Title : folder?.Name ?? plugin.Display;
+        int problems = pack.Count(Report.IsProblem);
+        int dlls = pack.Select(p => p.Dll).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        string source = folder?.SteamId > 0 ? $"Workshop {folder.SteamId}" : "Local";
+        if (dlls == 1)
+        {
+            bool singlePlugin = pack.Count() == 1;
+            foreach (PluginEntry entry in pack)
+                Row(entry, singlePlugin ? title : entry.Display, entry == plugin ? source : "", entry == plugin,
+                    singlePlugin ? entry.Display : title);
+            return;
+        }
+        bool open = expandedPacks.TryGetValue(pack.Key, out bool selected) ? selected : first || problems > 0;
+        string total = $"{dlls} {(dlls == 1 ? "DLL" : "DLLs")}" + (problems > 0 ? $"  ·  {problems} {(problems == 1 ? "issue" : "issues")}" : "");
+        float nameOffset = RowInset + VersionWidth + StatusWidth;
+        float titleHeight = nameStyle.CalcHeight(new GUIContent(title), NameWidth);
+        float sourceHeight = sourceStyle.CalcHeight(new GUIContent(source), SourceWidth);
+        Rect header = GUILayoutUtility.GetRect(0, Mathf.Max(30, 10 + Mathf.Max(titleHeight, sourceHeight)), GUILayout.ExpandWidth(true));
+        Action select = () => expandedPacks[pack.Key] = !open;
+        bool clicked = GUI.Button(header, GUIContent.none, buttonStyle);
+        TrackRowButton(header, select);
+        GUI.Label(new Rect(header.x + RowInset, header.y + 6, VersionWidth, 20), open ? "▾" : "▸", sourceStyle);
+        GUIStyle countStyle = problems > 0 ? warnStyle : sourceStyle;
+        float sourceX = header.x + nameOffset + NameWidth;
+        float countWidth = Mathf.Min(countStyle.CalcSize(new GUIContent(total)).x + 2,
+            Mathf.Max(1, header.xMax - RowInset - sourceX - SourceWidth));
+        GUI.Label(new Rect(header.x + nameOffset, header.y + 4, NameWidth, header.height - 4), title, nameStyle);
+        GUI.Label(new Rect(sourceX, header.y + 6, SourceWidth, header.height - 6), source, sourceStyle);
+        GUI.Label(new Rect(header.xMax - RowInset - countWidth, header.y + 6, countWidth, header.height - 6), total, countStyle);
+        if (clicked)
+            select();
+        if (!open)
+            return;
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Space(RowInset);
+        GUILayout.Label("VERSION", sourceStyle, GUILayout.Width(VersionWidth));
+        GUILayout.Label("STATUS", sourceStyle, GUILayout.Width(StatusWidth));
+        GUILayout.Label("PLUGIN", sourceStyle, GUILayout.Width(NameWidth));
+        GUILayout.Label("DLL", fileStyle, GUILayout.ExpandWidth(true));
+        GUILayout.Space(RowInset);
+        GUILayout.EndHorizontal();
+        foreach (PluginEntry p in pack)
+            Row(p, p.Display);
+    }
 
     /// <summary>Opens a required item's Workshop page in the Steam client (the card's and the report's "Get it").</summary>
     private void OpenItem(RequiredItem item)
@@ -1674,13 +1731,19 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
     }
 
-    private void Row(PluginEntry p)
+    private void Row(PluginEntry p, string label, string source = null, bool showDll = true, string tooltip = null)
     {
-        GUILayout.BeginHorizontal(rowStyle);
-        GUILayout.Label(ReportFormat.Tag(p.State), statusStyles[p.State], GUILayout.Width(96), GUILayout.Height(18));
-        GUILayout.BeginVertical();
-        GUILayout.Label($"{p.Display}  <color=#{KeelPalette.Muted:X6}>{p.Version}</color>", nameStyle);
-        GUILayout.Label($"{p.Folder?.Label}  ·  {Path.GetFileName(p.Dll)}", sourceStyle);
+        GUILayout.BeginHorizontal(source == null ? rowStyle : compactRowStyle);
+        GUILayout.Label(p.Version.ToString(), sourceStyle, GUILayout.Width(VersionWidth));
+        GUILayout.Label(ReportFormat.Tag(p.State), statusStyles[p.State], GUILayout.Width(StatusWidth), GUILayout.Height(18));
+        GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(new GUIContent(label, tooltip), nameStyle, GUILayout.Width(NameWidth));
+        if (source != null)
+            GUILayout.Label(source, sourceStyle, GUILayout.Width(SourceWidth));
+        if (showDll)
+            GUILayout.Label(Path.GetFileName(p.Dll), fileStyle, GUILayout.ExpandWidth(true));
+        GUILayout.EndHorizontal();
         if (!string.IsNullOrEmpty(p.Reason))
             GUILayout.Label(p.Reason, bodyStyle);
         foreach (string w in p.Warnings)
@@ -1718,9 +1781,15 @@ internal sealed partial class KeelHost : MonoBehaviour
     private void RowButton(string text, float width, Action act)
     {
         bool clicked = GUILayout.Button(text, buttonStyle, GUILayout.Width(width), GUILayout.Height(27));
+        TrackRowButton(GUILayoutUtility.GetLastRect(), act);
+        if (clicked)
+            act();
+    }
+
+    private void TrackRowButton(Rect r, Action act)
+    {
         if (Event.current.type == EventType.Repaint)
         {
-            Rect r = GUILayoutUtility.GetLastRect();
             var inWindow = new Rect(window.x + newsScrollRect.x + r.x - scroll.x, window.y + newsScrollRect.y + r.y - scroll.y, r.width, r.height);
             var view = new Rect(window.x + newsScrollRect.x, window.y + newsScrollRect.y, newsScrollRect.width, newsScrollRect.height);
             float left = Mathf.Max(inWindow.xMin, view.xMin), right = Mathf.Min(inWindow.xMax, view.xMax);
@@ -1728,8 +1797,6 @@ internal sealed partial class KeelHost : MonoBehaviour
             if (right > left && bottom > top)
                 buttonSpots.Add((Rect.MinMaxRect(left, top, right, bottom), act));
         }
-        if (clicked)
-            act();
     }
 
     private const float HeaderHeight = 28;
@@ -1796,18 +1863,12 @@ internal sealed partial class KeelHost : MonoBehaviour
                 NewsRow(n);
             GUILayout.Space(8);
         }
-        int group = -1;
-        foreach (PluginEntry p in Report.Sorted(Keel.Plugins))
+        bool first = true;
+        foreach (var pack in Report.Sorted(Keel.Plugins).GroupBy(p => p.Folder?.Path ?? p.Dll ?? p.Guid, StringComparer.OrdinalIgnoreCase))
         {
-            if (GroupOf(p) != group)
-            {
-                group = GroupOf(p);
-                if (group != 0)
-                    GUILayout.Space(8);
-                int count = Keel.Plugins.Count(x => GroupOf(x) == group);
-                GUILayout.Label($"{(group == 0 ? "NEEDS ATTENTION" : group == 1 ? "RUNNING" : "OTHER")}  ({count})", groupStyle);
-            }
-            Row(p);
+            DrawPack(pack, first);
+            first = false;
+            GUILayout.Space(3);
         }
         if (Keel.Plugins.Count == 0)
             GUILayout.Label(done ? "No mod with a plugin is switched on." : "", noteStyle);
