@@ -9,6 +9,8 @@
   even when its stack file is empty.
 - The crash report and watcher show that context separately from attribution.
   A recent or unfinished operation alone never causes a mod to be held out.
+- The main-menu summary is smaller and shows up to two changed mods below it.
+  Closing the summary or dismissing the startup overlay leaves a Keel report button on the main menu.
 - Adds BCL-only `GetUiState`, `SetReportOpen` and `GetReport` methods so tools can
   detect the report overlay and avoid sending input through it.
 

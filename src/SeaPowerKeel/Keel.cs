@@ -1078,7 +1078,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (Loading.LoadingWindow.ReportRequested)      // a click on the loading window's summary
         {
             Loading.LoadingWindow.ReportRequested = false;
-            ToggleWindow();
+            SetReportOpen(true);
         }
         if (Time.unscaledTime > nextFlush)
         {
@@ -1336,7 +1336,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     // His layout 2026-11-12: the card is a glance (one line per mod), the report window shows two lines per mod and a click on a
     // mod opens all its notes there.
-    private const int NewsMods = 5, ReportNewsLines = 2;
+    private const int NewsMods = 2, ReportNewsLines = 2;
     private readonly HashSet<NewsItem> newsOpen = new();                      // mods opened in the report window
     private readonly Dictionary<NewsItem, Rect> newsRowRects = new();         // their rows, in the scroll view's content
     private Rect newsScrollRect;                                              // the scroll view, in the window
@@ -1356,8 +1356,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             return true;
         }
         scroll = Vector2.zero;          // What's new is the first section of the list
-        if (!showWindow)
-            ToggleWindow();
+        SetReportOpen(true);
         return true;
     }
 

@@ -426,9 +426,9 @@ internal sealed class Overlay
         public const int Width = 460, Rows = 8, TextPoints = 12, SmallPoints = 10;
         public static int Height(int rows) => 14 + 24 + 22 + 22 + rows * 19 + 8 + 20 + 14;
 
-        public const int SummaryWidth = 400, SummaryHeight = 94, SummaryMargin = 8;
+        public const int SummaryWidth = 300, SummaryHeight = 80, SummaryMargin = 8;
         public const double SummaryBottomShare = 0.05;          // the game's version text below the card
-        public const int Pad = 10, HeaderHeight = 24, FirstLine = 27, LineHeight = 20, CreditWidth = 130;
+        public const int Pad = 10, HeaderHeight = 22, FirstLine = 24, LineHeight = 17, CreditWidth = 130;
         public const string Credit = "Made by Kanalratte";
         public const string ProfileUrl = "https://steamcommunity.com/profiles/76561198169349193";
 

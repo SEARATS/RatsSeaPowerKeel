@@ -24,6 +24,7 @@ internal sealed partial class KeelHost
     private const int CardErrorsBeforeNewsCloses = 3;      // never an error every frame
 
     private bool cardOn, cardConfirmed, cardHidden, cardFailed;
+    private bool summaryCollapsed;
     private float cardSince;
     private long cardSceneTicks;
     private Rect cardHome;                    // GUI units: where the overlay left the card (or where it would be)
@@ -128,9 +129,9 @@ internal sealed partial class KeelHost
         MeasureMenu(screenH);
         var space = new CardSpace
         {
-            X = home.x, H = home.height, NewsUp = newsUp,
+            X = home.x, H = summaryCollapsed ? 24f : home.height, NewsUp = newsUp,
             Bottom = Mathf.Min(home.yMax, screenH * VersionTextTop - 6f),
-            Width = Mathf.Max(120f, PanelRight(screenW) - 2f * home.x),
+            Width = Mathf.Min(home.width, Mathf.Max(120f, PanelRight(screenW) - 2f * home.x)),
         };
         if (!newsUp)
             return space;
@@ -153,7 +154,7 @@ internal sealed partial class KeelHost
             log.LogInfo("Menu cards: What's new splits off the Keel card.");          // a signal for tests (frames of the split)
         }
         float p = splitStart < 0f ? (space.NewsUp && !card ? 1f : 0f) : Mathf.Clamp01((now - splitStart) / SplitSeconds);
-        if (card && space.NewsUp && p < 1f)
+        if (card && !summaryCollapsed && space.NewsUp && p < 1f)
         {
             DrawSplit(p, new Rect(space.X, space.Bottom - space.H, space.Width, space.H), space.Width, space.Bottom, space.NewsH);
             return;
@@ -176,13 +177,15 @@ internal sealed partial class KeelHost
     /// <summary>The overlay sits on its spot: Keel draws the card there from now on, and tells the overlay once it has.</summary>
     private void TakeOverSummary()
     {
-        if (cardOn || cardFailed || !LoadingWindow.SummaryReady || LoadingWindow.GameDrawsSummary || !GameState.MenuUp())
-            return;
+        if (cardOn || cardFailed || !LoadingWindow.Shown || !done || !GameState.MenuUp()) return;
+        if (!LoadingWindow.SummaryReady && !LoadingWindow.OverlayGone) return;
         cardOn = true;
         cardSince = Time.realtimeSinceStartup;
         cardSceneTicks = LoadingWindow.SceneLoadedTicks;
-        cardHome = new Rect(LoadingWindow.SummaryX / guiScale, LoadingWindow.SummaryY / guiScale,
-                            LoadingWindow.SummaryW / guiScale, LoadingWindow.SummaryH / guiScale);
+        // The player can dismiss the native loading window before it publishes a summary position.
+        summaryCollapsed = !LoadingWindow.SummaryReady;
+        cardHome = summaryCollapsed ? DefaultHome() : new Rect(LoadingWindow.SummaryX / guiScale,
+            LoadingWindow.SummaryY / guiScale, LoadingWindow.SummaryW / guiScale, LoadingWindow.SummaryH / guiScale);
         cardTop = cardHome.y;
     }
 
@@ -288,6 +291,12 @@ internal sealed partial class KeelHost
     /// <summary>The Keel card: what Keel did, how long the game took, what to look at (the overlay's summary, drawn by the game).</summary>
     private void DrawSummaryCard(Rect r)
     {
+        if (summaryCollapsed)
+        {
+            cardRect = new Rect(r.x, r.y, Mathf.Min(112f, r.width), r.height);
+            GUI.Box(cardRect, "Keel report", buttonStyle);
+            return;
+        }
         cardRect = r;
         if (!cardOn)
             return;
@@ -475,7 +484,7 @@ internal sealed partial class KeelHost
         GUI.Label(getItRect, "Get it", buttonStyle);
     }
 
-    /// <summary>A click on the Keel card: its × closes it, the credit opens his Steam profile, anywhere else opens the report.
+    /// <summary>A click on the Keel card: its × collapses it to a report button, the credit opens his Steam profile, anywhere else opens the report.
     /// Only the left button counts (no right click, his word 2026-11-12).</summary>
     private bool CardClick(Vector2 gui, int button)
     {
@@ -485,9 +494,14 @@ internal sealed partial class KeelHost
             return false;
         if (!FreshClick())
             return true;
+        if (summaryCollapsed)
+        {
+            SetReportOpen(true);
+            return true;
+        }
         if (cardCloseRect.Contains(gui))
         {
-            cardHidden = true;
+            summaryCollapsed = true;
             return true;
         }
         if (getItItem != null && getItRect.Contains(gui))
@@ -500,8 +514,7 @@ internal sealed partial class KeelHost
             try { Application.OpenURL(Overlay.Layout.ProfileUrl); } catch (Exception) { /* no browser: nothing to do */ }
             return true;
         }
-        if (!showWindow)
-            ToggleWindow();
+        SetReportOpen(true);
         return true;
     }
 
