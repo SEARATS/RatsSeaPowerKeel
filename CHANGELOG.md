@@ -43,6 +43,7 @@
 
 ## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
+- Plugin rows in the report show the Workshop pack's name beside its item ID.
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
 - **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0
   - a DLL listed under `flat =` in a mod's `keel.ini` is still left out; the partner-build note for older packages stays

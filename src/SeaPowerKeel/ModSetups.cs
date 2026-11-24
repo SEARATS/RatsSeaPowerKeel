@@ -135,7 +135,7 @@ internal static class ModSetups
         var e = new Euromod();
         foreach (ModFolder f in enabled)
         {
-            string name = WhatsNew.NameOf(f.Path) ?? "";
+            string name = f.Title;
             if (f.SteamId == EuromodMain || name.Equals("Euromod - Main Pack", StringComparison.OrdinalIgnoreCase))
                 e.Main = true;
             if (f.SteamId == EuromodAcPack || name.StartsWith("Euromod - Anchorchain Expansion Pack", StringComparison.OrdinalIgnoreCase)
