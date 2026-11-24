@@ -43,7 +43,7 @@ internal static class Scanner
         foreach (ModFolder folder in folders)
         {
             Manifest manifest = Manifest.Read(folder.Path, warn);
-            bool folderEarly = EarlyStart.FolderTiming(folder.Path) == true;
+            var folderTiming = EarlyStart.FolderTiming(folder.Path) ?? StartupTiming.AnchorChain;
             List<RequiredItem> required = RequiredItems.OfFolder(folder.Path);
             List<string> dlls;
             try
@@ -64,7 +64,7 @@ internal static class Scanner
                     skipped?.Add(new SkippedDll { Path = dll, Folder = folder, Reason = why });
                     continue;
                 }
-                List<PluginEntry> found = ScanDll(dll, folder, folderEarly, warn, resolver);
+                List<PluginEntry> found = ScanDll(dll, folder, folderTiming, warn, resolver);
                 // Some mods carry both entries in one DLL: the Anchor Chain one for the Workshop, the BepInEx one for players
                 // who copy the DLL into BepInEx\plugins. From a mod folder only the Anchor Chain entry is meant to run
                 // (the one Anchor Chain uses, the one the author tested); starting both would run the mod twice.
@@ -94,14 +94,14 @@ internal static class Scanner
         return all;
     }
 
-    private static List<PluginEntry> ScanDll(string dll, ModFolder folder, bool folderEarly, Action<string> warn, IAssemblyResolver resolver)
+    private static List<PluginEntry> ScanDll(string dll, ModFolder folder, StartupTiming folderTiming, Action<string> warn, IAssemblyResolver resolver)
     {
         var result = new List<PluginEntry>();
         try
         {
             using var stream = new MemoryStream(File.ReadAllBytes(dll));
             using ModuleDefinition module = ModuleDefinition.ReadModule(stream, new ReaderParameters { ReadSymbols = false, AssemblyResolver = resolver });
-            bool dllEarly = EarlyStart.AssemblyTiming(module.Assembly) ?? folderEarly;
+            var timing = folderTiming == StartupTiming.Blocking ? folderTiming : EarlyStart.AssemblyTiming(module.Assembly) ?? folderTiming;
             foreach (TypeDefinition type in module.GetTypes())
             {
                 if (!type.IsClass || type.IsAbstract || !type.HasCustomAttributes)
@@ -135,7 +135,8 @@ internal static class Scanner
                 entry.AssemblyName = module.Assembly.Name.Name;
                 entry.TypeName = type.FullName.Replace('/', '+');
                 entry.Folder = folder;
-                entry.StartEarly = dllEarly;
+                entry.StartEarly = timing != StartupTiming.AnchorChain;
+                entry.BlockingStart = timing == StartupTiming.Blocking;
                 result.Add(entry);
             }
         }

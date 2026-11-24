@@ -75,7 +75,7 @@ particular DLL, use assembly metadata:
 [assembly: System.Reflection.AssemblyMetadata("Keel.LoadTiming", "Early")]
 ```
 
-DLL metadata takes precedence over the folder setting. The older `StartEarly=true`
+DLL timing overrides folder timing unless either requests a blocking start. The older `StartEarly=true`
 flag is still supported. Keel begins discovery when BepInEx finishes starting
 its plugins, with Unity's first `Start` callback as a fallback. It checks
 enabled mods and plans their load order before calling the regular plugin entry
@@ -86,6 +86,12 @@ The report names that prerequisite.
 Early plugins can use `Keel.GetEnabledModFolders()` to read the selected mod
 directories in load order without initializing the game's file manager.
 Their load-screen hooks see the real end of the load screen.
+
+For a mod that changes the first loading image, set `BlockingStart=true` under
+`[Keel]` or add `[assembly: System.Reflection.AssemblyMetadata("Keel.BlockingStart", "true")]`.
+Either declaration implies early timing. Keel holds the first loading screen until
+eligible blocking mods have started. A blocker with an ordinary early prerequisite
+starts in the ordinary early phase.
 
 ## Required Workshop items
 

@@ -591,12 +591,12 @@ internal static class SelfTest
     {
         Console.WriteLine("Start early: a mod that asks for it starts before the load screen ends");
         Check(EarlyStart.InInfoIni("[Language_en]\nStartEarly=true\n") == null &&
-              EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") == false &&
-              EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n") == true,
+              EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") == StartupTiming.AnchorChain &&
+              EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n") == StartupTiming.Early,
               "the legacy start-early flag still works in the Keel section");
-        Check(EarlyStart.InInfoIni("[Keel]\nLoadTiming=Early\n") == true &&
-              EarlyStart.InInfoIni("[Keel]\nLoadTiming=AnchorChain\nStartEarly=true\n") == false &&
-              EarlyStart.InInfoIni("[Keel]\nLoadTiming=unknown\n") != true,
+        Check(EarlyStart.InInfoIni("[Keel]\nLoadTiming=Early\n") == StartupTiming.Early &&
+              EarlyStart.InInfoIni("[Keel]\nLoadTiming=AnchorChain\nStartEarly=true\n") == StartupTiming.AnchorChain &&
+              EarlyStart.InInfoIni("[Keel]\nLoadTiming=unknown\n") == null,
               "explicit timing overrides the legacy flag and invalid timing keeps the default");
         var eA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true };
         var eB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true };
@@ -619,6 +619,28 @@ internal static class SelfTest
         earlyAlias.State = PluginState.Running;
         Check(Planner.Replan(phases, new HashSet<string>()).SequenceEqual(new[] { normal }),
             "the normal phase retains an early dependency that started under an alternate GUID");
+
+        Check(EarlyStart.InInfoIni("[Keel]\nLoadTiming=Early\nBlockingStart=true") == StartupTiming.Blocking,
+              "blocking requests take precedence over ordinary early timing");
+        using (var assembly = Mono.Cecil.AssemblyDefinition.CreateAssembly(
+                   new Mono.Cecil.AssemblyNameDefinition("Screen", new Version(1, 0)), "Screen", Mono.Cecil.ModuleKind.Dll))
+        {
+            var module = assembly.MainModule;
+            var ctor = typeof(AssemblyMetadataAttribute).GetConstructor(new[] { typeof(string), typeof(string) });
+            var flag = new Mono.Cecil.CustomAttribute(module.ImportReference(ctor));
+            flag.ConstructorArguments.Add(new Mono.Cecil.CustomAttributeArgument(module.TypeSystem.String, "Keel.BlockingStart"));
+            flag.ConstructorArguments.Add(new Mono.Cecil.CustomAttributeArgument(module.TypeSystem.String, "true"));
+            assembly.CustomAttributes.Add(flag);
+            Check(EarlyStart.AssemblyTiming(assembly) == StartupTiming.Blocking, "DLL-only blocking timing survives discovery");
+        }
+        var bA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true, BlockingStart = true };
+        var bB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true, BlockingStart = true };
+        bB.Dependencies.Add(new Dependency { Guid = "c" });
+        var bC = new PluginEntry { Guid = "c", Name = "C", StartEarly = true };
+        var blockSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null, blocking: true);
+        var plainSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null);
+        Check(blockSet.SetEquals(new[] { bA }) && plainSet.SetEquals(new[] { bA, bB, bC }),
+              "blocking start: A blocks; B needs C, which does not block, so B starts early without holding the game; all three start early");
     }
 
     private static void RequiredItemChecks()
