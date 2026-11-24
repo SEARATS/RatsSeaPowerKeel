@@ -809,6 +809,14 @@ internal static class SelfTest
         Check(Runner.MissingKey("MissingFieldException: Field not found: SeaPower.ObjectBase SeaPower.AI._objectToDestroy Due to: Could not find field in class") == "SeaPower.AI::_objectToDestroy",
               "the same message on ONE line (as Unity logs it, with 'Due to: ...' after it) -> SeaPower.AI::_objectToDestroy");
         Check(Runner.MissingKey("NullReferenceException: Object reference not set") == null, "another exception gives no member");
+        Check(Runner.MissingKey("TypeLoadException: Could not resolve type with token 010000b7 from typeref (expected class 'World' in assembly 'Seapower-Scripts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null')") == "World",
+              "the Better TacMap report's missing-type format identifies World");
+        Check(Runner.MissingKey("TypeLoadException: Could not load type 'SeaPower.Outer+Inner' from assembly 'Seapower-Scripts, Version=0.0.0.0'") == "SeaPower.Outer/Inner",
+              "the alternate missing-type format preserves nested type identity");
+        Check(Runner.MissingKey("TypeLoadException: VTable setup failed") == null, "a type error without a named missing type does not remove patches");
+        Check(Runner.LoggedException("[BetterTacMap] Harmony patching failed: HarmonyLib.HarmonyException: Patching exception in method null"),
+              "a caught startup exception passed to Debug.LogError is a failure");
+        Check(!Runner.LoggedException("Optional icon unavailable"), "an ordinary error log does not claim an exception or roll startup back");
         var patched = Runner.PatchedMethodsIn("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
         Check(patched.Count == 1 && patched[0].type == "SeaPower.GameMain" && patched[0].method == "FixedUpdate", "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
         Check(Runner.PatchedMethodsIn("at SomeMod.Thing.Run ()").Count == 0, "a stack without a patched method gives none");

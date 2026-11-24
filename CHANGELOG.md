@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.2 - unreleased - recover from partial mod startup and missing game APIs
+
+- Caught startup exceptions logged through `Debug.LogError` now mark the plugin
+  failed. Keel removes patches added during that entry point and stops its BepInEx
+  component. Patches already installed by a sibling plugin remain. Ordinary error
+  logs mark the plugin with errors without rolling it back.
+- The broken-patch guard also handles missing game types and runs when the stack
+  explicitly names the mod. It only removes patches from the innermost target
+  when ownership and overload selection are unambiguous.
+- No new dependency or config migration. Existing `RemoveBrokenPatches` controls
+  runtime recovery. Restarting is still needed to clear a failed mod's custom
+  objects, events or other setup; Keel cannot unload its assembly or repair a
+  native access violation.
+- Verified in Sea Power `0.9.3-261116` with Better TacMap `0.2.0`: startup and two
+  mission load/unload cycles did not reproduce the newer `0.9.3-261123b` report.
+  Controlled game tests reproduced the old loader's false running state and
+  repeated errors, then verified startup rollback, sibling patch preservation,
+  ordinary error reporting and one-error recovery for missing types and methods.
+  A separate inline transpiler on `GameMain.LateUpdate` recovered with only game
+  frames on the stack. All 262 offline self-checks on the PR #10 stack passed.
+
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 
 - Mods and tools can wrap operations in `Keel.TrackActivity(ActivityContext)` with
