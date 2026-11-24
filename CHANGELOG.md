@@ -2,10 +2,10 @@
 
 ## 0.8.2 - unreleased - recover from partial mod startup and missing game APIs
 
-- Caught startup exceptions logged through `Debug.LogError` now mark the plugin
-  failed. Keel removes patches added during that entry point and stops its BepInEx
-  component. Patches already installed by a sibling plugin remain. Ordinary error
-  logs mark the plugin with errors without rolling it back.
+- Keel recognizes Better TacMap's explicit Harmony patch installation failure in
+  `Debug.LogError`. It removes the patches added during that entry point and
+  stops the failed BepInEx component. Patches already installed by a sibling plugin remain. Ordinary error
+  logs and caught optional-feature errors mark the plugin with errors.
 - The broken-patch guard also handles missing game types and runs when the stack
   explicitly names the mod. It only removes patches from the innermost target
   when ownership and overload selection are unambiguous. Mods sharing one DLL
@@ -20,7 +20,9 @@
   repeated errors, then verified startup rollback, sibling patch preservation,
   ordinary error reporting and one-error recovery for missing types and methods.
   A separate inline transpiler on `GameMain.LateUpdate` recovered with only game
-  frames on the stack. All 266 offline self-checks on the PR #10 stack passed.
+  frames on the stack. With Pilothouse and Euromod enabled, Optimal Target Distance
+  retained its native-target fallback and Keel reported the startup error. All 267
+  offline self-checks passed.
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 

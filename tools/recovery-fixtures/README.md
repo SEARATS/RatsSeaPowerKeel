@@ -12,7 +12,7 @@ Install only the prepared DLL in a disposable enabled mod folder with a compatib
 `_info.ini`. Use `GameVersionCheck=Standard` and `RemoveBrokenPatches=true`. The test
 starts five plugins from one DLL and writes `KEEL_RECOVERY PASS` after checking:
 
-- A caught Harmony startup exception logged through `Debug.LogError` marks the
+- An explicit Harmony patch installation failure logged through `Debug.LogError` marks the
   plugin failed, removes its newly installed patch and stops its component.
 - A healthy sibling keeps its patches on both the failed startup plugin's target and the runtime missing-type target.
 - An ordinary error log marks its plugin with errors without rolling it back.

@@ -814,9 +814,11 @@ internal static class SelfTest
         Check(Runner.MissingKey("TypeLoadException: Could not load type 'SeaPower.Outer+Inner' from assembly 'Seapower-Scripts, Version=0.0.0.0'") == "SeaPower.Outer/Inner",
               "the alternate missing-type format preserves nested type identity");
         Check(Runner.MissingKey("TypeLoadException: VTable setup failed") == null, "a type error without a named missing type does not remove patches");
-        Check(Runner.LoggedException("[BetterTacMap] Harmony patching failed: HarmonyLib.HarmonyException: Patching exception in method null"),
+        Check(Runner.ReportsPatchFailure("[BetterTacMap] Harmony patching failed: HarmonyLib.HarmonyException: Patching exception in method null"),
               "a caught startup exception passed to Debug.LogError is a failure");
-        Check(!Runner.LoggedException("Optional icon unavailable"), "an ordinary error log does not claim an exception or roll startup back");
+        Check(!Runner.ReportsPatchFailure("Optional icon unavailable"), "an ordinary error log does not claim an exception or roll startup back");
+        Check(!Runner.ReportsPatchFailure("[OptimalTargetDist] AAW interception disabled; native target rules retained: System.NotSupportedException: Unknown AAW rejection layout: 0"),
+            "an optional feature falling back to native rules does not roll back the plugin");
         var patched = Runner.InnermostPatchedMethod("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
         Check(patched == ("SeaPower.GameMain", "FixedUpdate"), "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
         Check(Runner.InnermostPatchedMethod("DMD<Game::Inner>()\nDMD<Game::Outer>()") == ("Game", "Inner"),

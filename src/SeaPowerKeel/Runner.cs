@@ -25,7 +25,6 @@ internal sealed class Runner
     private readonly Dictionary<string, string> libraryIndex = new(StringComparer.OrdinalIgnoreCase);  // assembly name -> path
     private readonly List<(string[] namespaces, PluginEntry plugin)> owners = new();
     private PluginEntry starting;
-    private string startupError;
     private string startupException;
 
     public string AnchorChainDll;
@@ -294,8 +293,8 @@ internal sealed class Runner
     public void Prepare(PluginEntry p)
     {
         var watch = Stopwatch.StartNew();
+        p.FirstStartupError = null;
         starting = p;
-        startupError = null;
         startupException = null;
         try
         {
@@ -311,8 +310,8 @@ internal sealed class Runner
                     return;
                 }
                 p.Instance = Activator.CreateInstance(type);
-                if (startupError != null)
-                    p.Stop(PluginState.Failed, "Error while being created: " + startupError);
+                if (startupException != null)
+                    p.Stop(PluginState.Failed, "Exception while being created: " + startupException);
             }
         }
         catch (Exception ex)
@@ -334,7 +333,6 @@ internal sealed class Runner
         Assembly asm = null;
         HashSet<(MethodBase target, MethodInfo method)> before = null;
         starting = p;
-        startupError = null;
         startupException = null;
         try
         {
@@ -356,8 +354,8 @@ internal sealed class Runner
             }
             if (startupException != null)
                 p.Stop(PluginState.Failed, "Exception while starting: " + startupException);
-            else if (startupError != null)
-                p.Stop(PluginState.RunningWithErrors, "Logged an error while starting: " + startupError);
+            else if (p.FirstStartupError != null)
+                p.Stop(PluginState.RunningWithErrors, "Logged an error during startup: " + p.FirstStartupError);
             else
                 p.State = PluginState.Running;
         }
@@ -419,8 +417,8 @@ internal sealed class Runner
         if (starting != null)
         {
             string summary = FirstLine(message);
-            startupError ??= summary;
-            if (type == LogType.Exception || LoggedException(message))
+            starting.FirstStartupError ??= summary;
+            if (type == LogType.Exception || ReportsPatchFailure(message))
                 startupException ??= summary;
             ModError?.Invoke(starting, message, stackTrace);
             return;
@@ -443,8 +441,9 @@ internal sealed class Runner
     /// <summary>Remove patches that use missing game methods, fields or types; off = only name the mod.</summary>
     public static bool GuardPatches = true;
 
-    // Mods often catch their own startup exception and pass it to Debug.LogError instead of LogException.
-    internal static bool LoggedException(string message) => message?.Contains("Exception:") == true;
+    // Better TacMap reports a failed installation this way. Other mods log caught exceptions after a successful fallback.
+    internal static bool ReportsPatchFailure(string message) =>
+        message?.IndexOf("Harmony patching failed: HarmonyLib.HarmonyException:", StringComparison.OrdinalIgnoreCase) >= 0;
 
     /// <summary>
     /// The missing type or <c>Namespace.Type::Member</c> named by a compatibility error, in the form used by
