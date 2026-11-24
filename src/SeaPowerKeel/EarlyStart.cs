@@ -77,9 +77,18 @@ internal static class EarlyStart
     /// <summary>Selects pending early plugins whose prerequisites can also start early.</summary>
     public static HashSet<PluginEntry> Set(IList<PluginEntry> all, Action<PluginEntry, string> note, bool blocking = false)
     {
+        return Eligible(all, p => blocking ? p.BlockingStart : p.StartEarly, (plugin, late) =>
+            note?.Invoke(plugin, blocking
+                ? $"Cannot block the load screen because it must start after {late.Display}."
+                : $"Starts at Anchor Chain timing because it must start after {late.Display}."));
+    }
+
+    internal static HashSet<PluginEntry> Eligible(IList<PluginEntry> all, Func<PluginEntry, bool> eligible,
+                                                  Action<PluginEntry, PluginEntry> deferred = null)
+    {
         List<PluginEntry> pending = all.Where(p => p.State == PluginState.Pending).ToList();
         var prerequisites = Planner.Prerequisites(pending);
-        var early = new HashSet<PluginEntry>(pending.Where(p => blocking ? p.BlockingStart : p.StartEarly));
+        var early = new HashSet<PluginEntry>(pending.Where(eligible));
         bool changed;
         do
         {
@@ -91,9 +100,7 @@ internal static class EarlyStart
                     continue;
                 early.Remove(plugin);
                 changed = true;
-                note?.Invoke(plugin, blocking
-                    ? $"Cannot block the load screen because it must start after {late.Display}."
-                    : $"Starts at Anchor Chain timing because it must start after {late.Display}.");
+                deferred?.Invoke(plugin, late);
             }
         } while (changed);
         return early;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2 - unreleased
+
+- Default-timed plugins start in the loader’s Awake call when its mod folder is already visible. Otherwise Keel waits for unit data and the finished loading screen, then retries discovery every half second for up to a minute.
+
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 
 - Early mods use the same startup sequence as first-screen blockers. Checks for ordinary mods run after the early entry points.

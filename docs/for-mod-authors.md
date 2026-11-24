@@ -62,8 +62,14 @@ DLLs not named there are scanned as usual. Without `keel.ini` every DLL is scann
 
 ## Start early (opt-in)
 
-The default is Anchor Chain timing. On the current Sea Power build, regular
-mods wait for the startup load screen. Choose early timing if your mod can
+The default is Anchor Chain timing. Keel checks the game’s live directories in
+`Awake`. If the folder supplying Keel is visible and enabled, default plugins
+start before that call returns. Otherwise Keel waits for unit data and a load
+screen reading `Done`, then checks immediately and every 0.5 seconds for up to
+60 seconds. Compatibility checks and dependency order still apply. A default
+plugin that needs an early plugin waits until that prerequisite has started.
+
+Choose early timing if your mod can
 start before the game's startup services and UI are ready. Defer
 scene-dependent work until Unity loads a scene.
 
@@ -76,7 +82,7 @@ particular DLL, use assembly metadata:
 ```
 
 DLL timing overrides folder timing unless either requests a blocking start. The older `StartEarly=true`
-flag is still supported. Keel begins discovery when BepInEx finishes starting
+flag is still supported. Keel dispatches early mods when BepInEx finishes starting
 its plugins, with Unity's first `Start` callback as a fallback. It checks
 enabled mods and plans their load order before calling the regular plugin entry
 point. An early plugin waits for any dependency or load-before prerequisite

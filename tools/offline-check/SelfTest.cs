@@ -103,6 +103,7 @@ internal static class SelfTest
             EuromodChecks(tmp);
             LoadScreenEndChecks();
             EarlyStartChecks();
+            AnchorTimingChecks();
             RequiredItemChecks();
             ReportFactsChecks(tmp);
         }
@@ -587,6 +588,31 @@ internal static class SelfTest
         Check(ModSetups.ReadSubmods(ModSetups.SetSubmod("; note\n", "euromod.extended-guidance", true))["euromod.extended-guidance"], "what the button writes reads back as on");
     }
 
+    private static void AnchorTimingChecks()
+    {
+        int probes = 0;
+        float now = 0;
+        var immediate = AnchorChainStartup.Discover(() => ++probes == 1, () => now);
+        Check(!immediate.Any() && probes == 1, "Anchor Chain discovers the loader before the first yield");
+
+        probes = 0;
+        using var late = AnchorChainStartup.Discover(() => ++probes == 3, () => now).GetEnumerator();
+        Check(late.MoveNext() && late.Current == AnchorChainStartup.Wait.StartupDone && probes == 1,
+              "missing folders in Awake wait for game readiness");
+        now = 180;
+        Check(late.MoveNext() && late.Current == AnchorChainStartup.Wait.RetryFolders && probes == 2,
+              "the discovery deadline starts at readiness even after a long game load");
+        now += AnchorChainStartup.RetrySeconds;
+        Check(!late.MoveNext() && probes == 3, "folder retry starts immediately when discovery succeeds");
+
+        probes = 0;
+        using var missing = AnchorChainStartup.Discover(() => { probes++; return false; }, () => now).GetEnumerator();
+        missing.MoveNext();
+        missing.MoveNext();
+        now += 60;
+        Check(!missing.MoveNext() && probes == 2, "discovery ends at the deadline without a further attempt");
+    }
+
     private static void EarlyStartChecks()
     {
         Console.WriteLine("Start early: a mod that asks for it starts before the load screen ends");
@@ -616,6 +642,10 @@ internal static class SelfTest
         var phases = new List<PluginEntry> { earlyAlias, normal };
         Check(EarlyStart.Set(phases, null).SetEquals(new[] { earlyAlias }),
             "normal timing is the default and an early plugin can satisfy a later dependency");
+        var transitive = new PluginEntry { Guid = "transitive" };
+        transitive.Dependencies.Add(new Dependency { Guid = "normal", Hard = true });
+        Check(EarlyStart.Eligible(new[] { eC, earlyAlias, normal, transitive }, p => !p.StartEarly).SetEquals(new[] { eC }),
+            "Awake starts only default plugins independent of pending early prerequisites");
         earlyAlias.State = PluginState.Running;
         Check(Planner.Replan(phases, new HashSet<string>()).SequenceEqual(new[] { normal }),
             "the normal phase retains an early dependency that started under an alternate GUID");

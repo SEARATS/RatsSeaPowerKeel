@@ -71,6 +71,35 @@ internal static class GameState
             return null;
         if (fileManager.GetType().GetField("directories", Any)?.GetValue(fileManager) is not IEnumerable dirs)
             return null;
+        return ReadFolders(dirs);
+    }
+
+    // Match the standalone preloader: InstanceExists before Instance, then the public Directories getter.
+    // Under takeover, Keel's selected folder supplies the loader in place of the standalone AnchorChain.dll.
+    internal static List<ModFolder> AnchorChainFolders(string loaderPath)
+    {
+        object manager = ExistingSingleton(T("SeaPower.FileManager"));
+        if (manager?.GetType().GetProperty("Directories", Any)?.GetValue(manager) is not IEnumerable dirs)
+            return null;
+        var folders = ReadFolders(dirs);
+        string path = Path.GetFullPath(loaderPath);
+        return folders?.Any(f => f.Enabled && Directory.Exists(f.Path) &&
+            path.StartsWith(Path.GetFullPath(f.Path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) == true ? folders : null;
+    }
+
+    private static readonly object[] silentSingletonProbe = { false };
+
+    private static object ExistingSingleton(Type type)
+    {
+        Type singleton = type?.BaseType;
+        var exists = singleton?.GetMethod("InstanceExists", Any);
+        return exists?.Invoke(null, exists.GetParameters().Length == 0 ? null : silentSingletonProbe) is true
+            ? singleton.GetProperty("Instance", Any)?.GetValue(null) : null;
+    }
+
+    private static List<ModFolder> ReadFolders(IEnumerable dirs)
+    {
         var list = new List<ModFolder>();
         string streaming = Path.GetFullPath(Application.streamingAssetsPath).TrimEnd('\\', '/');
         foreach (object d in dirs)
@@ -115,8 +144,8 @@ internal static class GameState
             Type screenType = T("SeaPower.LoadScreen");
             if (unitsType == null || screenType == null)
                 return true;
-            UnityEngine.Object units = Find(unitsType);
-            UnityEngine.Object screen = Find(screenType);
+            object units = ExistingSingleton(unitsType);
+            object screen = ExistingSingleton(screenType);
             if (units == null || screen == null)
                 return false;
             object data = unitsType.GetProperty("UnitData", Any)?.GetValue(units) ?? unitsType.GetField("UnitData", Any)?.GetValue(units);
