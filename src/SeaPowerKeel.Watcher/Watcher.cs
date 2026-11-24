@@ -166,7 +166,7 @@ internal static class Watcher
     /// </summary>
     private static void WriteCrashFile(CrashText.Journal journal, string dir, string stack) =>
         TryWrite(Path.Combine(dir, KeelNames.CrashFile),
-                 CrashText.CrashFileText(journal.Began, journal.Step, journal.Guid, journal.Scene, string.IsNullOrWhiteSpace(stack) ? null : stack, journal.Activities));
+                 CrashText.CrashFileText(journal, string.IsNullOrWhiteSpace(stack) ? null : stack));
 
     private static bool Ask(string text, string name, string detail, string dir, bool isPack, out bool keepOff)
     {

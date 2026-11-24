@@ -5,7 +5,7 @@
 - Mods and tools can wrap operations in `Keel.TrackActivity(ActivityContext)` with
   a `PluginId` owner and `ActivityKind` enum; the older string overload adapts to it.
   The journal records the operation before it starts and its completion afterward,
-  including nested activity. A native crash can therefore leave useful context
+  including nested activity. Concurrent callers can dispose the same scope safely. A native crash can therefore leave useful context
   even when its stack file is empty.
 - The crash report and watcher show that context separately from attribution.
   A recent or unfinished operation alone never causes a mod to be held out.

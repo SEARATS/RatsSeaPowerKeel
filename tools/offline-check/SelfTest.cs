@@ -346,7 +346,7 @@ internal static class SelfTest
             $"activity-end\ta\t{ticks + 1}");
         Check(completeUi.Activities.Single().Ended == ticks + 1 && CrashText.ActivityHint(completeUi).Contains("completed"),
             "completed UI work is distinguished from an interrupted callback");
-        Check(CrashText.CrashFileText("x", null, null, "main-menu", null, activeUi.Activities)
+        Check(CrashText.CrashFileText(activeUi, null)
             .Contains("not proof of cause") && CrashText.ActivityHint(activeUi).Contains("my.settings"),
             "an empty native crash record still includes the last settings owner as diagnostic context");
         Check(V("session\tx", "activity\tbroken", "activity-end\tbroken", "activity\ta\t-1\tx\ty\tz").Activities.Count == 0,
@@ -395,6 +395,13 @@ internal static class SelfTest
         var concurrentJournal = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile)));
         Check(concurrentJournal.Activities.Count == 32 && concurrentJournal.Activities.All(item => item.Ended > 0),
             "concurrent callbacks leave complete journal records through the semaphore");
+        var shared = concurrent.BeginActivity(new ActivityContext(new PluginId("shared"), ActivityKind.GameAction));
+        System.Threading.Tasks.Parallel.For(0, 64, _ => shared.Dispose());
+        var sharedLines = CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile));
+        Check(sharedLines.Count(line => line.StartsWith("activity-end\t", StringComparison.Ordinal)) == 65,
+            "concurrent disposal writes one completion per scope");
+        Check(V($"activity\ta\t{ticks}\tx\ty\tz", "activity-end\ta\t-1").Activities.Single().Ended == 0,
+            "a damaged completion timestamp leaves the activity open");
         concurrent.Mark("quit", "");
 
         Check(CrashText.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
@@ -758,7 +765,7 @@ internal static class SelfTest
         File.WriteAllText(shut, "lots\nInput System module state changed to: ShutdownInProgress.\nInput System polling thread exited.\nInput System module state changed to: Shutdown.\n");
         File.WriteAllText(cut, "lots\n[Info : Mod] starting\n");
         Check(CrashText.LogEndedNormally(shut) && !CrashText.LogEndedNormally(cut) && !CrashText.LogEndedNormally(Path.Combine(tmp, "none.log")), "a normal Unity shutdown is told from a log that just stops");
-        Check(CrashText.CrashFileText("2026-11-18 10:00:00", null, null, "Menu", null).Contains("No crash record"), "a crash text without a record says so");
+        Check(CrashText.CrashFileText(new CrashText.Journal { Began = "2026-11-18 10:00:00", Scene = "Menu" }, null).Contains("No crash record"), "a crash text without a record says so");
 
         string dir = Path.Combine(tmp, "packcheck");
         Directory.CreateDirectory(dir);

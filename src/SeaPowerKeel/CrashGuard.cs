@@ -84,23 +84,19 @@ internal sealed class CrashGuard
     /// <summary>One step, handed to the operating system at once. Never throws.</summary>
     public void Mark(string kind, string detail)
     {
-        if (journal == null)
-            return;
+        journalGate.Wait();
         try
         {
+            if (journal == null) return;
             byte[] line = Encoding.UTF8.GetBytes(kind + "\t" + detail + Environment.NewLine);
-            journalGate.Wait();
-            try
-            {
-                journal?.Write(line, 0, line.Length);
-                journal?.Flush();
-            }
-            finally { journalGate.Release(); }
+            journal.Write(line, 0, line.Length);
+            journal.Flush();
         }
         catch (Exception)
         {
             journal = null;
         }
+        finally { journalGate.Release(); }
     }
 
     public IDisposable BeginActivity(ActivityContext context)
@@ -116,12 +112,11 @@ internal sealed class CrashGuard
 
     private class ActivityScope(CrashGuard owner, string token) : IDisposable
     {
-        private bool ended;
+        private int ended;
         public void Dispose()
         {
-            if (ended) return;
-            ended = true;
-            owner.Mark("activity-end", $"{token}\t{DateTime.UtcNow.Ticks}");
+            if (Interlocked.Exchange(ref ended, 1) == 0)
+                owner.Mark("activity-end", $"{token}\t{DateTime.UtcNow.Ticks}");
         }
     }
 
@@ -297,7 +292,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block, Previous.Activities));
+            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous, block));
         }
         catch (Exception)
         {
