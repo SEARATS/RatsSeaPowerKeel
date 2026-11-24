@@ -775,13 +775,19 @@ internal sealed partial class KeelHost : MonoBehaviour
                     yield return null;
         }
         // Now what the early start left for later: the setup look, What's new, the pack check, the version check of the others.
+        bool Remaining(PluginEntry p) => !earlySet.Contains(p);
+        var files = Keel.Plugins.Where(p => p.State == PluginState.Pending && Remaining(p))
+            .Select(p => p.Dll).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var prepared = !anchorDiscoveryFinished && versionCheck.Value != "Off" && files.Length > 0
+            ? Preflight.Prepared.Start(Paths.ManagedPath, Paths.BepInExAssemblyDirectory, files) : null;
         LookBeforeStartLate(pass.Enabled);
         if (!anchorDiscoveryFinished)
             yield return StartupSignal.AnchorChain;
         if (anchorFolders != null)
         {
             RefreshAnchorFolders(pass);
-            yield return Check(p => !earlySet.Contains(p), yieldBetweenDlls: false);
+            yield return Check(Remaining, yieldBetweenDlls: false,
+                prepared: prepared?.IsCompletedSuccessfully == true ? prepared.Result : null);
         }
         sequence.Replan = replanAll;
     }
@@ -795,14 +801,14 @@ internal sealed partial class KeelHost : MonoBehaviour
     private void RefreshAnchorFolders(Pass pass)
     {
         var enabled = anchorFolders.Where(f => f.Enabled).ToList();
-        if (enabled.Select(f => f.Path).SequenceEqual(pass.Enabled.Select(f => f.Path), StringComparer.OrdinalIgnoreCase))
+        if (enabled.Count == pass.Enabled.Count && enabled.Zip(pass.Enabled, (a, b) => ModFolders.SamePath(a.Path, b.Path)).All(same => same))
             return;
 
         // The early list came from disk. Only the game's live selection can supply the remaining plugins.
         Keel.Plugins.RemoveAll(p => p.State == PluginState.Pending);
-        var previouslySeen = Keel.Plugins.Select(p => (p.Dll, p.TypeName)).ToHashSet();
+        var previouslySeen = Keel.Plugins.Select(p => (Path.GetFullPath(p.Dll), p.TypeName)).ToHashSet();
         var fresh = Scanner.Scan(enabled, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
-        Keel.Plugins.AddRange(fresh.Where(p => !previouslySeen.Contains((p.Dll, p.TypeName))));
+        Keel.Plugins.AddRange(fresh.Where(p => !previouslySeen.Contains((Path.GetFullPath(p.Dll), p.TypeName))));
         pass.All = anchorFolders;
         liveFolders = pass.Enabled = enabled;
         Keel.EnabledModFolders = enabled.Select(f => f.Path).ToArray();
@@ -1113,7 +1119,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         return System.IO.File.Exists(path) ? path : null;
     }
 
-    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool yieldBetweenDlls = true)
+    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool yieldBetweenDlls = true, Preflight.Prepared prepared = null)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
@@ -1136,7 +1142,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             {
                 try
                 {
-                    results[dll.Key] = preflight.Check(dll.Key);
+                    results[dll.Key] = prepared?.For(dll.Key) ?? preflight.Check(dll.Key);
                 }
                 catch (Exception ex)
                 {

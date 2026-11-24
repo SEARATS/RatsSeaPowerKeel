@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -109,13 +111,50 @@ internal sealed class Preflight : IDisposable
         resolver.AddSearchDirectory(bepInExCore);
     }
 
-    public Result Check(string dll)
+    // Only metadata crosses the worker boundary. Recheck the bytes before accepting a result:
+    // Workshop can replace a DLL between discovery and the game's readiness callback.
+    internal class Prepared
+    {
+        private readonly Dictionary<string, (byte[] Hash, Result Result)> checks = new(StringComparer.OrdinalIgnoreCase);
+
+        internal static Task<Prepared> Start(string managed, string core, string[] files) => Task.Run(() =>
+        {
+            var batch = new Prepared();
+            try
+            {
+                using var reader = new Preflight(managed, core);
+                using var sha = SHA256.Create();
+                foreach (string file in files)
+                {
+                    try
+                    {
+                        byte[] bytes = File.ReadAllBytes(file);
+                        batch.checks[Path.GetFullPath(file)] = (sha.ComputeHash(bytes), reader.Check(file, bytes));
+                    }
+                    catch (Exception) { } // The regular check will report unreadable or invalid DLLs.
+                }
+            }
+            catch (Exception) { } // Initialization failures also fall back to the regular check.
+            return batch;
+        });
+
+        internal Result For(string file)
+        {
+            if (!checks.TryGetValue(Path.GetFullPath(file), out var check)) return null;
+            using var sha = SHA256.Create();
+            using var input = File.OpenRead(file);
+            return sha.ComputeHash(input).SequenceEqual(check.Hash) ? check.Result : null;
+        }
+    }
+
+    public Result Check(string dll) => Check(dll, null);
+
+    private Result Check(string dll, byte[] bytes)
     {
         if (byDll.TryGetValue(dll, out Result cached))
             return cached;
         var r = new Result();
-        byDll[dll] = r;
-        using var stream = new MemoryStream(File.ReadAllBytes(dll));
+        using var stream = new MemoryStream(bytes ?? File.ReadAllBytes(dll));
         using ModuleDefinition mod = ModuleDefinition.ReadModule(stream, new ReaderParameters { AssemblyResolver = resolver, ReadSymbols = false });
         var classLoad = new SortedSet<string>();
         var uses = new SortedSet<string>();
@@ -141,7 +180,7 @@ internal sealed class Preflight : IDisposable
         r.ClassLoad.AddRange(classLoad);
         r.Uses.AddRange(uses.Except(classLoad));
         r.Lookups.AddRange(patches);
-        return r;
+        return byDll[dll] = r;
     }
 
     // A type, method or field of the game's own assemblies (not of the mod, the runtime or BepInEx).

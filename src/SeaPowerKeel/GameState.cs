@@ -81,11 +81,13 @@ internal static class GameState
         object manager = ExistingSingleton(T("SeaPower.FileManager"));
         if (manager?.GetType().GetProperty("Directories", Any)?.GetValue(manager) is not IEnumerable dirs)
             return null;
-        var folders = ReadFolders(dirs);
+        object[] entries = dirs.Cast<object>().ToArray();
+        var folders = ReadFolders(entries);
         string path = Path.GetFullPath(loaderPath);
-        return folders?.Any(f => f.Enabled && Directory.Exists(f.Path) &&
+        if (folders?.Any(f => f.Enabled && Directory.Exists(f.Path) &&
             path.StartsWith(Path.GetFullPath(f.Path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) == true ? folders : null;
+                + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) == true) return folders;
+        return AnchorChainStartup.HasStandaloneLoader(entries.Select(DirectoryOf)) ? folders ?? new List<ModFolder>() : null;
     }
 
     private static readonly object[] silentSingletonProbe = { false };
@@ -113,11 +115,14 @@ internal static class GameState
         return list.Count > 0 ? list : null;
     }
 
+    private static DirectoryInfo DirectoryOf(object entry) =>
+        entry?.GetType().GetProperty("DirectoryInfo", Any)?.GetValue(entry) as DirectoryInfo;
+
     // One entry of the game's list as a mod folder; null for the game's own folders.
     private static ModFolder ModOf(object d, string streaming)
     {
         Type t = d.GetType();
-        if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
+        if (DirectoryOf(d) is not { } info)
             return null;
         // The game lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
         string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();

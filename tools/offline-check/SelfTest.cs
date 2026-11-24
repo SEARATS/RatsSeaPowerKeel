@@ -103,7 +103,8 @@ internal static class SelfTest
             EuromodChecks(tmp);
             LoadScreenEndChecks();
             EarlyStartChecks();
-            AnchorTimingChecks();
+            AnchorTimingChecks(tmp);
+            PreparedChecks(tmp, managed, core);
             RequiredItemChecks();
             ReportFactsChecks(tmp);
         }
@@ -588,8 +589,29 @@ internal static class SelfTest
         Check(ModSetups.ReadSubmods(ModSetups.SetSubmod("; note\n", "euromod.extended-guidance", true))["euromod.extended-guidance"], "what the button writes reads back as on");
     }
 
-    private static void AnchorTimingChecks()
+    private static void PreparedChecks(string tmp, string managed, string core)
     {
+        string file = Path.Combine(tmp, "warm.dll");
+        using (var module = Mono.Cecil.ModuleDefinition.CreateModule("Warm", Mono.Cecil.ModuleKind.Dll))
+            module.Write(file);
+        string missing = file + ".missing";
+        var batch = Preflight.Prepared.Start(managed, core, new[] { missing, file }).GetAwaiter().GetResult();
+        Check(batch.For(file) != null && batch.For(missing) == null, "a missing DLL does not discard other prepared checks");
+        var stamp = File.GetLastWriteTimeUtc(file);
+        byte[] bytes = File.ReadAllBytes(file);
+        bytes[^1] ^= 1;
+        File.WriteAllBytes(file, bytes);
+        File.SetLastWriteTimeUtc(file, stamp);
+        Check(batch.For(file) == null, "replacement bytes invalidate the prepared result even at the same length and timestamp");
+    }
+
+    private static void AnchorTimingChecks(string tmp)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(tmp, "standalone"));
+        Check(!AnchorChainStartup.HasStandaloneLoader(new[] { folder }), "an empty game directory does not supply a loader");
+        var nested = folder.CreateSubdirectory("nested");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "AnchorChain.keel.bin"), Path.Combine(nested.FullName, "AnchorChain.dll"));
+        Check(AnchorChainStartup.HasStandaloneLoader(new[] { folder }), "a standalone loader nested in a live directory is discoverable");
         int probes = 0;
         float now = 0;
         var immediate = AnchorChainStartup.Discover(() => ++probes == 1, () => now);

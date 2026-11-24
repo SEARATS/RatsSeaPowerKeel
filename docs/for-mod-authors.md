@@ -63,8 +63,8 @@ DLLs not named there are scanned as usual. Without `keel.ini` every DLL is scann
 ## Start early (opt-in)
 
 The default is Anchor Chain timing. Keel checks the game’s live directories in
-`Awake`. If the folder supplying Keel is visible and enabled, default plugins
-start before that call returns. Otherwise Keel waits for unit data and a load
+`Awake`. If the enabled Keel folder or a standalone Anchor Chain loader is visible,
+default plugins start before that call returns. Otherwise Keel waits for unit data and a load
 screen reading `Done`, then checks immediately and every 0.5 seconds for up to
 60 seconds. Compatibility checks and dependency order still apply. A default
 plugin that needs an early plugin waits until that prerequisite has started.
