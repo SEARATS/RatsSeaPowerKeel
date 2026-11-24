@@ -817,9 +817,17 @@ internal static class SelfTest
         Check(Runner.LoggedException("[BetterTacMap] Harmony patching failed: HarmonyLib.HarmonyException: Patching exception in method null"),
               "a caught startup exception passed to Debug.LogError is a failure");
         Check(!Runner.LoggedException("Optional icon unavailable"), "an ordinary error log does not claim an exception or roll startup back");
-        var patched = Runner.PatchedMethodsIn("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
-        Check(patched.Count == 1 && patched[0].type == "SeaPower.GameMain" && patched[0].method == "FixedUpdate", "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
-        Check(Runner.PatchedMethodsIn("at SomeMod.Thing.Run ()").Count == 0, "a stack without a patched method gives none");
+        var patched = Runner.InnermostPatchedMethod("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
+        Check(patched == ("SeaPower.GameMain", "FixedUpdate"), "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
+        Check(Runner.InnermostPatchedMethod("DMD<Game::Inner>()\nDMD<Game::Outer>()") == ("Game", "Inner"),
+            "an ambiguous inner frame never falls through to an outer caller");
+        var first = new PluginEntry { Guid = "first" };
+        var sibling = new PluginEntry { Guid = "sibling" };
+        Check(Runner.PatchOwner([first, sibling], sibling.Guid) == sibling
+            && Runner.PatchOwner([first, sibling], "custom") == null
+            && Runner.PatchOwner([first], "custom") == first,
+            "a shared DLL requires a matching Harmony owner ID, while a single-plugin DLL can use a custom ID");
+        Check(Runner.InnermostPatchedMethod("at SomeMod.Thing.Run ()") == null, "a stack without a patched method gives none");
     }
 
     private static string ThisDll => typeof(SelfTest).Assembly.Location;

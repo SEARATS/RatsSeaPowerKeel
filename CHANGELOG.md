@@ -8,7 +8,8 @@
   logs mark the plugin with errors without rolling it back.
 - The broken-patch guard also handles missing game types and runs when the stack
   explicitly names the mod. It only removes patches from the innermost target
-  when ownership and overload selection are unambiguous.
+  when ownership and overload selection are unambiguous. Mods sharing one DLL
+  can use their plugin ID as their Harmony ID to identify their own patches.
 - No new dependency or config migration. Existing `RemoveBrokenPatches` controls
   runtime recovery. Restarting is still needed to clear a failed mod's custom
   objects, events or other setup; Keel cannot unload its assembly or repair a
@@ -19,7 +20,7 @@
   repeated errors, then verified startup rollback, sibling patch preservation,
   ordinary error reporting and one-error recovery for missing types and methods.
   A separate inline transpiler on `GameMain.LateUpdate` recovered with only game
-  frames on the stack. All 262 offline self-checks on the PR #10 stack passed.
+  frames on the stack. All 266 offline self-checks on the PR #10 stack passed.
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 

@@ -17,7 +17,10 @@ public class Healthy : BaseUnityPlugin
     internal static int Calls;
     private void Awake()
     {
-        new Harmony("keel.fixture.healthy").Patch(AccessTools.Method(typeof(SharedTarget), nameof(SharedTarget.Tick)),
+        var harmony = new Harmony("keel.fixture.healthy");
+        harmony.Patch(AccessTools.Method(typeof(SharedTarget), nameof(SharedTarget.Tick)),
+            postfix: new HarmonyMethod(typeof(Healthy), nameof(Postfix)));
+        harmony.Patch(AccessTools.Method(typeof(MissingType), nameof(MissingType.Target)),
             postfix: new HarmonyMethod(typeof(Healthy), nameof(Postfix)));
         gameObject.AddComponent<Verify>();
     }
@@ -96,7 +99,7 @@ public class MissingType : BaseUnityPlugin
         transpiler: new HarmonyMethod(typeof(MissingType), nameof(Transpiler)));
     private static IEnumerable<CodeInstruction> Transpiler() => FailureCode.Throw(typeof(TypeLoadException), FailureCode.TypeMessage);
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void Target() { }
+    internal static void Target() { }
     private void Update()
     {
         if (!TestProbe.Ready || attempts >= 2 || Time.unscaledTime < nextAttempt) return;
@@ -139,7 +142,9 @@ internal class Verify : MonoBehaviour
         enabled = false;
         SharedTarget.Tick();
         var patches = Harmony.GetPatchInfo(AccessTools.Method(typeof(SharedTarget), nameof(SharedTarget.Tick)));
-        bool healthy = Healthy.Calls > 0 && patches.Postfixes.Any(p => p.owner == "keel.fixture.healthy");
+        var runtimeTarget = Harmony.GetPatchInfo(AccessTools.Method(typeof(MissingType), nameof(MissingType.Target)));
+        bool healthy = Healthy.Calls > 0 && patches.Postfixes.Any(p => p.owner == "keel.fixture.healthy")
+            && runtimeTarget?.Postfixes.Any(p => p.owner == "keel.fixture.healthy") == true;
         bool partial = patches.Postfixes.Any(p => p.owner == "keel.fixture.caught");
         string report = TestProbe.Report;
         bool recovered = report.Contains("[FAILED] Recovery caught startup") && !partial && CaughtFailure.Updates == 0 &&

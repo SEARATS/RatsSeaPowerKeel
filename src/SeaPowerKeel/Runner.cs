@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
@@ -24,7 +25,7 @@ internal sealed class Runner
     private readonly Dictionary<string, string> libraryIndex = new(StringComparer.OrdinalIgnoreCase);  // assembly name -> path
     private readonly List<(string[] namespaces, PluginEntry plugin)> owners = new();
     private PluginEntry starting;
-    private readonly List<string> startErrors = new();
+    private string startupError;
     private string startupException;
 
     public string AnchorChainDll;
@@ -128,16 +129,18 @@ internal sealed class Runner
         {
             behaviour.enabled = false;
             UnityEngine.Object.Destroy(behaviour);
-            Chainloader.PluginInfos.Remove(p.Guid);
+            if (behaviour is BaseUnityPlugin plugin && Chainloader.PluginInfos.TryGetValue(p.Guid, out var info) && info == plugin.Info)
+                Chainloader.PluginInfos.Remove(p.Guid);
         }
     }
 
     private static IEnumerable<(MethodBase target, MethodInfo method)> PatchesIn(Assembly asm) =>
-        HarmonyLib.Harmony.GetAllPatchedMethods().ToList().SelectMany(target =>
-            HarmonyLib.Harmony.GetPatchInfo(target) is { } info
-                ? AllPatches(info).Where(patch => patch.PatchMethod?.DeclaringType?.Assembly == asm)
-                    .Select(patch => (target, patch.PatchMethod))
-                : Enumerable.Empty<(MethodBase, MethodInfo)>()).Distinct();
+        (from target in HarmonyLib.Harmony.GetAllPatchedMethods()
+         let info = HarmonyLib.Harmony.GetPatchInfo(target)
+         where info != null
+         from patch in AllPatches(info)
+         where patch.PatchMethod?.DeclaringType?.Assembly == asm
+         select (target, patch.PatchMethod)).Distinct();
 
     private int RemovePatches(PluginEntry p, IEnumerable<(MethodBase target, MethodInfo method)> patches)
     {
@@ -292,7 +295,7 @@ internal sealed class Runner
     {
         var watch = Stopwatch.StartNew();
         starting = p;
-        startErrors.Clear();
+        startupError = null;
         startupException = null;
         try
         {
@@ -308,8 +311,8 @@ internal sealed class Runner
                     return;
                 }
                 p.Instance = Activator.CreateInstance(type);
-                if (startErrors.Count > 0)
-                    p.Stop(PluginState.Failed, "Error while being created: " + startErrors[0]);
+                if (startupError != null)
+                    p.Stop(PluginState.Failed, "Error while being created: " + startupError);
             }
         }
         catch (Exception ex)
@@ -331,7 +334,7 @@ internal sealed class Runner
         Assembly asm = null;
         HashSet<(MethodBase target, MethodInfo method)> before = null;
         starting = p;
-        startErrors.Clear();
+        startupError = null;
         startupException = null;
         try
         {
@@ -353,8 +356,8 @@ internal sealed class Runner
             }
             if (startupException != null)
                 p.Stop(PluginState.Failed, "Exception while starting: " + startupException);
-            else if (startErrors.Count > 0)
-                p.Stop(PluginState.RunningWithErrors, "Logged an error while starting: " + startErrors[0]);
+            else if (startupError != null)
+                p.Stop(PluginState.RunningWithErrors, "Logged an error while starting: " + startupError);
             else
                 p.State = PluginState.Running;
         }
@@ -415,9 +418,10 @@ internal sealed class Runner
     {
         if (starting != null)
         {
-            startErrors.Add(FirstLine(message));
+            string summary = FirstLine(message);
+            startupError ??= summary;
             if (type == LogType.Exception || LoggedException(message))
-                startupException ??= FirstLine(message);
+                startupException ??= summary;
             ModError?.Invoke(starting, message, stackTrace);
             return;
         }
@@ -450,7 +454,7 @@ internal sealed class Runner
     {
         if (message?.StartsWith("TypeLoadException", StringComparison.Ordinal) == true)
         {
-            var match = System.Text.RegularExpressions.Regex.Match(message, @"(?:expected (?:class|valuetype)|Could not load type) '([^']+)' (?:in|from) assembly '");
+            var match = Regex.Match(message, @"(?:expected (?:class|valuetype)|Could not load type) '([^']+)' (?:in|from) assembly '");
             return match.Success ? match.Groups[1].Value.Replace('+', '/') : null;
         }
         if (message == null || !(message.StartsWith("MissingMethodException") || message.StartsWith("MissingFieldException")))
@@ -486,25 +490,14 @@ internal sealed class Runner
     private static IEnumerable<HarmonyLib.Patch> AllPatches(HarmonyLib.Patches info) =>
         info.Prefixes.Concat(info.Postfixes).Concat(info.Transpilers).Concat(info.Finalizers);
 
-    /// <summary>The game methods a stack trace shows as patched ("SeaPower.GameMain.DMD&lt;SeaPower.GameMain::FixedUpdate&gt;"): type name and method name.</summary>
-    internal static List<(string type, string method)> PatchedMethodsIn(string stackTrace)
+    // A DMD frame names a patched method but does not identify its overload.
+    internal static (string type, string method)? InnermostPatchedMethod(string stackTrace)
     {
-        var found = new List<(string, string)>();
-        if (string.IsNullOrEmpty(stackTrace))
-            return found;
-        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(stackTrace, @"DMD<([^>\s]+?)::([^>\s]+?)>"))
-            if (!found.Contains((m.Groups[1].Value, m.Groups[2].Value)))
-                found.Add((m.Groups[1].Value, m.Groups[2].Value));
-        return found;
+        var frame = Regex.Match(stackTrace ?? "", @"DMD<([^>\s]+?)::([^>\s]+?)>");
+        return frame.Success ? (frame.Groups[1].Value, frame.Groups[2].Value) : null;
     }
 
-    /// <summary>
-    /// A missing game method, field or type, possibly with only game frames (a Harmony patch rewrote a game method).
-    /// Finds the mods whose DLL uses that member (from the preflight's list of what this
-    /// build lacks); the one whose patch sits on the method the stack shows is the culprit, and Keel takes that patch off again
-    /// so the error stops (a popup on every frame otherwise). The rest of the mod keeps running. When the patch cannot be found,
-    /// the candidates are only named.
-    /// </summary>
+    /// <summary>Match a missing game reference against preflight findings and the failing patch. Report ambiguous matches.</summary>
     private PluginEntry GuardMissingMember(string message, string stackTrace, PluginEntry direct)
     {
         string key = MissingKey(message);
@@ -515,15 +508,13 @@ internal sealed class Runner
         if (candidates.Count == 0)
             return null;
         string what = NotFound(message) ?? key;
-        Dictionary<PluginEntry, (string method, int removed)> taken = GuardPatches ? TakeOffPatches(candidates, stackTrace) : new();
-        foreach (KeyValuePair<PluginEntry, (string method, int removed)> t in taken)
+        if (GuardPatches && TakeOffPatches(candidates, stackTrace) is { } recovery)
         {
-            if (blamed.Add(t.Key.Guid + "|" + key + "|guard"))
-                Warn(t.Key, $"The game could not find '{what}'. {t.Key.Display} uses it and this game build does not have it: the mod was made for another game version. " +
-                            $"Its patch on {t.Value.method} caused the error; Keel took {t.Value.removed} patch(es) of the mod off that method so the game can go on. The rest of the mod keeps running (see its warnings).");
+            var (plugin, method, count) = recovery;
+            if (blamed.Add(plugin.Guid + "|" + key + "|guard"))
+                Warn(plugin, $"This game build is missing '{what}'. Keel removed {count} patch(es) installed by {plugin.Display} on {method}. The rest of the mod keeps running.");
+            return plugin;
         }
-        if (taken.Count > 0)
-            return taken.Keys.First();
         if (candidates.Count == 1)
         {
             PluginEntry p = candidates[0];
@@ -548,45 +539,49 @@ internal sealed class Runner
         log.LogWarning(why);
     }
 
-    // Remove patches only from the innermost unambiguous target and owner. Outer callers and other mods stay untouched.
-    private Dictionary<PluginEntry, (string method, int removed)> TakeOffPatches(List<PluginEntry> candidates, string stackTrace)
+    private (PluginEntry plugin, string method, int count)? TakeOffPatches(List<PluginEntry> candidates, string stackTrace)
     {
-        var where = new Dictionary<PluginEntry, (string method, int removed)>();
+        if (InnermostPatchedMethod(stackTrace) is not { } frame)
+            return null;
         try
         {
-            foreach ((string typeName, string methodName) in PatchedMethodsIn(stackTrace))
+            var type = HarmonyLib.AccessTools.TypeByName(frame.type);
+            if (type == null) return null;
+            var targets = HarmonyLib.AccessTools.GetDeclaredMethods(type).Where(m => m.Name == frame.method)
+                .Select(method => (method, info: HarmonyLib.Harmony.GetPatchInfo(method)))
+                .Where(target => target.info != null).ToList();
+            if (targets.Count != 1) return null;
+
+            var (target, info) = targets[0];
+            var pluginsByAssembly = ownerRegistered.ToLookup(p => p.AssemblyName);
+            var patches = new List<(MethodInfo method, PluginEntry owner)>();
+            foreach (var patch in AllPatches(info))
             {
-                Type type = HarmonyLib.AccessTools.TypeByName(typeName);
-                if (type == null)
-                    continue;
-                var targets = HarmonyLib.AccessTools.GetDeclaredMethods(type).Where(m => m.Name == methodName)
-                    .Select(m => (original: (MethodBase)m, info: HarmonyLib.Harmony.GetPatchInfo(m)))
-                    .Where(t => t.info != null).ToList();
-                if (targets.Count != 1)
-                    continue;
-                var target = targets[0];
-                var patches = AllPatches(target.info).ToList();
-                List<PluginEntry> implicated = candidates.Where(c => patches.Any(patch =>
-                    patch.PatchMethod?.DeclaringType?.Assembly.GetName().Name == c.AssemblyName)).ToList();
-                if (implicated.Count != 1)
-                    continue;
-                PluginEntry owner = implicated[0];
-                int removed = RemovePatches(owner, patches.Where(patch =>
-                    patch.PatchMethod?.DeclaringType?.Assembly.GetName().Name == owner.AssemblyName)
-                    .Select(patch => (target.original, patch.PatchMethod)).Distinct());
-                if (removed > 0)
-                {
-                    where[owner] = (typeName + "." + methodName, removed);
-                    return where;
-                }
+                var method = patch.PatchMethod;
+                var plugins = pluginsByAssembly[method?.DeclaringType?.Assembly.GetName().Name];
+                var owner = PatchOwner(plugins, patch.owner);
+                if (owner == null && plugins.Any(candidates.Contains)) return null;
+                patches.Add((method, owner));
             }
+            var implicated = patches.Select(p => p.owner).Where(candidates.Contains).Distinct().ToList();
+            if (implicated.Count != 1) return null;
+
+            var plugin = implicated[0];
+            // Harmony removes every registration of a patch method. Preserve methods shared with another owner.
+            var removable = patches.GroupBy(p => p.method).Where(group => group.All(p => p.owner == plugin))
+                .Select(group => ((MethodBase)target, group.Key));
+            int count = RemovePatches(plugin, removable);
+            return count > 0 ? (plugin, $"{frame.type}.{frame.method}", count) : null;
         }
         catch (Exception ex)
         {
             log.LogWarning($"Keel could not take a failing patch off: {ex.GetType().Name}: {ex.Message}");
+            return null;
         }
-        return where;
     }
+
+    internal static PluginEntry PatchOwner(IEnumerable<PluginEntry> plugins, string harmonyId) =>
+        plugins.Count() == 1 ? plugins.First() : plugins.FirstOrDefault(p => p.Guid == harmonyId);
 
     // A message's first line, cut for the report.
     private const int LineLength = 240;

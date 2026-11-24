@@ -15,7 +15,6 @@ namespace KeelGameFrames
     {
         private float verifyAt;
         private static MethodBase Target => AccessTools.Method(AccessTools.TypeByName("SeaPower.GameMain"), "LateUpdate");
-        private static bool Ready() => TestProbe.Ready;
 
         private static IEnumerable<CodeInstruction> Transpiler() =>
             new[]
@@ -27,7 +26,7 @@ namespace KeelGameFrames
 
         private void Update()
         {
-            if (!Ready()) return;
+            if (!TestProbe.Ready) return;
             if (verifyAt == 0)
             {
                 new Harmony("keel.fixture.game-frames").Patch(Target,
@@ -36,12 +35,13 @@ namespace KeelGameFrames
                 return;
             }
             if (Time.unscaledTime < verifyAt) return;
+            verifyAt = Time.unscaledTime + 1;
             var info = Harmony.GetPatchInfo(Target);
             bool removed = info == null || info.Transpilers.All(p => p.owner != "keel.fixture.game-frames");
             bool attributed = TestProbe.Report.Contains("[ERRORS] Recovery game frames");
             if (!attributed) return; // GameMain.LateUpdate first runs after a mission loads.
             enabled = false;
-            Debug.Log($"KEEL_GAME_FRAMES {(removed && attributed ? "PASS" : "FAIL")} removed={removed} attributed={attributed}");
+            Debug.Log($"KEEL_GAME_FRAMES {(removed ? "PASS" : "FAIL")} removed={removed} attributed={attributed}");
         }
     }
 }

@@ -14,7 +14,7 @@ starts five plugins from one DLL and writes `KEEL_RECOVERY PASS` after checking:
 
 - A caught Harmony startup exception logged through `Debug.LogError` marks the
   plugin failed, removes its newly installed patch and stops its component.
-- A previously started sibling's patch on the same target remains installed.
+- A healthy sibling keeps its patches on both the failed startup plugin's target and the runtime missing-type target.
 - An ordinary error log marks its plugin with errors without rolling it back.
 - Missing-type and missing-method errors each occur once. The failing patch comes
   off, so the second invocation succeeds. These exceptions deliberately reproduce
