@@ -4,7 +4,7 @@
 
 - Default-timed plugins start in the loader’s Awake call when its mod folder is already visible. A visible standalone Anchor Chain installation also satisfies discovery. Otherwise Keel waits for unit data and the finished loading screen, then retries discovery every half second for up to a minute.
 
-- While early mods run, Keel checks the remaining DLLs on a worker. At dispatch it verifies the file contents and checks any new or changed DLLs synchronously.
+- While the game starts, Keel checks pending DLLs on a worker, including when every mod uses default timing. At dispatch it verifies the file contents and checks any new or changed DLLs synchronously.
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
@@ -120,6 +121,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private bool chainloaderReady, anchorDiscoveryFinished;
     private Coroutine startupPump;
     private List<ModFolder> anchorFolders;
+    private Task<Preflight.Prepared> preparingChecks;
     private ConfigEntry<bool> loadAcMods;
     private ConfigEntry<bool> takeOver;
     private Takeover.Record takeoverRecord;     // what the patcher did this start (null: it did not run)
@@ -448,6 +450,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             listed = anchorFolders;
             if (listed == null)
             {
+                preparingChecks = null;
                 WriteReport();
                 done = true;
                 yield break;
@@ -531,7 +534,10 @@ internal sealed partial class KeelHost : MonoBehaviour
         List<PluginEntry> saved = Scanner.Scan(disk.Where(f => f.Enabled).ToList(), scanNotes.Add,
             scanSkipped, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
         if (!saved.Any(p => p.StartEarly && p.State == PluginState.Pending))
+        {
+            PrepareChecks(saved);
             return null;
+        }
         plugins = saved;
         skippedDlls.AddRange(scanSkipped);
         scanNotes.ForEach(Warn);
@@ -776,18 +782,14 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         // Now what the early start left for later: the setup look, What's new, the pack check, the version check of the others.
         bool Remaining(PluginEntry p) => !earlySet.Contains(p);
-        var files = Keel.Plugins.Where(p => p.State == PluginState.Pending && Remaining(p))
-            .Select(p => p.Dll).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var prepared = !anchorDiscoveryFinished && versionCheck.Value != "Off" && files.Length > 0
-            ? Preflight.Prepared.Start(Paths.ManagedPath, Paths.BepInExAssemblyDirectory, files) : null;
+        PrepareChecks(Keel.Plugins.Where(Remaining));
         LookBeforeStartLate(pass.Enabled);
         if (!anchorDiscoveryFinished)
             yield return StartupSignal.AnchorChain;
         if (anchorFolders != null)
         {
             RefreshAnchorFolders(pass);
-            yield return Check(Remaining, yieldBetweenDlls: false,
-                prepared: prepared?.IsCompletedSuccessfully == true ? prepared.Result : null);
+            yield return Check(Remaining, yieldBetweenDlls: false);
         }
         sequence.Replan = replanAll;
     }
@@ -1119,7 +1121,16 @@ internal sealed partial class KeelHost : MonoBehaviour
         return System.IO.File.Exists(path) ? path : null;
     }
 
-    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool yieldBetweenDlls = true, Preflight.Prepared prepared = null)
+    private void PrepareChecks(IEnumerable<PluginEntry> plugins)
+    {
+        if (anchorDiscoveryFinished || versionCheck.Value == "Off") return;
+        string[] files = plugins.Where(p => p.State == PluginState.Pending).Select(p => p.Dll)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (files.Length > 0)
+            preparingChecks = Preflight.Prepared.Start(Paths.ManagedPath, Paths.BepInExAssemblyDirectory, files);
+    }
+
+    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool yieldBetweenDlls = true)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
@@ -1134,6 +1145,8 @@ internal sealed partial class KeelHost : MonoBehaviour
             Warn($"Game version check unavailable: {ex.Message}");
             yield break;
         }
+        var prepared = preparingChecks?.IsCompletedSuccessfully == true ? preparingChecks.Result : null;
+        preparingChecks = null;
         using (preflight)
         {
             List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending && (only == null || only(p))).GroupBy(p => p.Dll).ToList();
