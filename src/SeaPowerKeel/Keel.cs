@@ -1504,8 +1504,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         {
             try
             {
-                string ini = Path.Combine(root, folder, "_info.ini");
-                string name = File.Exists(ini) ? File.ReadLines(ini).FirstOrDefault(l => l.StartsWith("Name=", StringComparison.OrdinalIgnoreCase))?.Substring(5).Trim() : null;
+                string name = ModFolder.ReadTitle(Path.Combine(root, folder));
                 if (!string.IsNullOrEmpty(name))
                     return $"{name} ({folder})";
             }
@@ -1589,6 +1588,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         rowStyle.normal.background = Solid(KeelPalette.Row);
         nameStyle = Text(14, KeelPalette.Text, below: 1);
         sourceStyle = Text(11, KeelPalette.Muted);
+        sourceStyle.richText = false;
         bodyStyle = Text(12, KeelPalette.Red);
         bodyStyle.margin = new RectOffset(0, 0, 5, 0);
         warnStyle = Text(12, KeelPalette.Amber);

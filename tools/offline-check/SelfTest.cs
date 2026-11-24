@@ -171,11 +171,12 @@ internal static class SelfTest
         void Acf(long ta) => File.WriteAllText(acf, "\"AppWorkshop\"\n{\n\t\"appid\"\t\t\"1286220\"\n\t\"WorkshopItemsInstalled\"\n\t{\n\t\t\"111\"\n\t\t{\n\t\t\t\"size\"\t\t\"1\"\n\t\t\t\"timeupdated\"\t\t\"" + ta + "\"\n\t\t}\n\t}\n\t\"WorkshopItemDetails\"\n\t{\n\t\t\"222\"\n\t\t{\n\t\t\t\"timeupdated\"\t\t\"5\"\n\t\t}\n\t}\n}\n");
         Acf(1794001000);
         Check(WhatsNew.SteamTimes(ws).TryGetValue(111, out long t1) && t1 == 1794001000 && !WhatsNew.SteamTimes(ws).ContainsKey(222), "Steam's timeupdated is read for installed items only");
-        Check(WhatsNew.NameOf(a) == "Alpha Mod", "the mod's English name from _info.ini");
 
         var fa = new ModFolder { Path = a, Name = "111", SteamId = 111, Enabled = true };
         var fb = new ModFolder { Path = b, Name = "222", SteamId = 222, Enabled = true };
         var fl = new ModFolder { Path = local, Name = "MyLocal", Enabled = true };
+        Check(fa.Title == "Alpha Mod" && fa.Label == "Alpha Mod (Workshop 111)", "the report names the English Workshop package and its item ID");
+        Check(fb.Label == "Workshop 222" && fl.Label == "MyLocal", "unnamed Workshop packages and local folders keep their identifiers");
         PluginEntry Plug(ModFolder f, string guid, string v, PluginState s) => new() { Guid = guid, Name = guid, Folder = f, Version = new Version(v), State = s };
 
         var first = new List<ModFolder> { fa, fb, fl };
