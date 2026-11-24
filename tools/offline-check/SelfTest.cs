@@ -791,6 +791,9 @@ internal static class SelfTest
         Check(r.Fatal.Any(x => x.Contains("BadResultPatch") && x.Contains("__result")), "a patch taking __result as int on a float method is caught");
         Check(r.Fatal.Any(x => x.Contains("BadArgumentPatch")), "a patch taking a float argument as int is caught");
         Check(!r.Fatal.Any(x => x.Contains("GoodPatch")), "patches that fit, or take object, are left alone");
+        Check(r.Lookups.Where(x => x.Contains("::SmoothDamp(")).SequenceEqual(
+            new[] { "UnityEngine.Mathf::SmoothDamp(Single, Single, Single, Single, Single)" }),
+            "ref arguments select the matching overload and a missing by-value overload is still reported");
 
         string ini = Path.Combine(tmp, "packoff.ini");
         File.WriteAllText(ini, "Mod1Directory=77,True,77\r\nMod2Directory=88,True,88\r\n");
@@ -1388,3 +1391,10 @@ public static class BadResultPatch { public static void Postfix(ref int __result
 public static class BadArgumentPatch { public static void Prefix(int t) { } }
 [HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "Repeat")]
 public static class GoodPatch { public static void Prefix(float t, object length) { } }
+[HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "SmoothDamp", HarmonyLib.MethodType.Normal,
+    new[] { typeof(float), typeof(float), typeof(float), typeof(float) },
+    new[] { HarmonyLib.ArgumentType.Normal, HarmonyLib.ArgumentType.Normal, HarmonyLib.ArgumentType.Ref, HarmonyLib.ArgumentType.Normal })]
+public static class RefOverloadPatch { public static void Prefix() { } }
+[HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "SmoothDamp", HarmonyLib.MethodType.Normal,
+    new[] { typeof(float), typeof(float), typeof(float), typeof(float), typeof(float) })]
+public static class AbsentValueOverloadPatch { public static void Prefix() { } }

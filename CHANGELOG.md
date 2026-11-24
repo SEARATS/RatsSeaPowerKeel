@@ -10,6 +10,9 @@
   explicitly names the mod. It only removes patches from the innermost target
   when ownership and overload selection are unambiguous. Mods sharing one DLL
   can use their plugin ID as their Harmony ID to identify their own patches.
+- The compatibility check now reads Harmony's ref, out and pointer argument
+  modifiers when matching overloads. This clears a false warning about UNREP's
+  speed-command patch.
 - No new dependency or config migration. Existing `RemoveBrokenPatches` controls
   runtime recovery. Restarting is still needed to clear a failed mod's custom
   objects, events or other setup; Keel cannot unload its assembly or repair a
@@ -21,7 +24,7 @@
   ordinary error reporting and one-error recovery for missing types and methods.
   A separate inline transpiler on `GameMain.LateUpdate` recovered with only game
   frames on the stack. With Pilothouse and Euromod enabled, Optimal Target Distance
-  retained its native-target fallback and Keel reported the startup error. All 267
+  retained its native-target fallback and Keel reported the startup error. All 268
   offline self-checks passed.
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability

@@ -295,6 +295,20 @@ internal sealed class Preflight : IDisposable
                     case CustomAttributeArgument[] list when arg.Type.GetElementType().Name == "Type":
                         spec.Args = list.Select(x => x.Value as TypeReference).ToList();
                         break;
+                    case CustomAttributeArgument[] modes when arg.Type.GetElementType().FullName == "HarmonyLib.ArgumentType"
+                            && modes.Length == spec.Args?.Count:
+                        for (int i = 0; i < modes.Length; i++)
+                        {
+                            TypeReference type = spec.Args[i];
+                            if (type != null)
+                                spec.Args[i] = (HarmonyLib.ArgumentType)modes[i].Value switch
+                                {
+                                    HarmonyLib.ArgumentType.Ref or HarmonyLib.ArgumentType.Out => new ByReferenceType(type),
+                                    HarmonyLib.ArgumentType.Pointer => new PointerType(type),
+                                    _ => type,
+                                };
+                        }
+                        break;
                     case int kind when arg.Type.Name == "MethodType":
                         spec.Kind = (MethodKind)kind;
                         break;
