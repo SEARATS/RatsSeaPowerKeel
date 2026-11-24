@@ -18,7 +18,45 @@ internal sealed class ModFolder
     public bool Enabled;
     public int Order;             // position in the game's mod list, 0 = top
 
-    public string Label => SteamId != 0 ? $"Workshop {SteamId}" : Name;
+    private string title;
+    public string Title => title ??= ReadTitle(Path) ?? "";
+    public string Label => SteamId == 0 ? Name
+        : Title.Length == 0 ? $"Workshop {SteamId}" : $"{Title} (Workshop {SteamId})";
+
+    /// <summary>The mod's own name from its _info.ini (<c>Name=</c>, English section first), or null.</summary>
+    public static string ReadTitle(string folder)
+    {
+        try
+        {
+            string ini = System.IO.Path.Combine(folder, "_info.ini");
+            if (!File.Exists(ini))
+                return null;
+            string first = null;
+            bool english = false;
+            foreach (string raw in File.ReadLines(ini))
+            {
+                string line = raw.Trim();
+                if (line.StartsWith("["))
+                {
+                    english = line.Equals("[Language_en]", StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
+                if (!line.StartsWith("Name=", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string value = line.Substring(5).Trim();
+                if (value.Length == 0)
+                    continue;
+                if (english)
+                    return value;
+                first ??= value;
+            }
+            return first;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }
 
 /// <summary>
