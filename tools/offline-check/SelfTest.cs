@@ -374,9 +374,41 @@ internal static class SelfTest
         }
         finally { Keel.ActivityJournal = previousJournal; }
         var boundActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile))).Activities.Last();
-        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.GameAction)
+        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.Other)
             && boundActivity.Detail == "ActivityOperation.RebuildPage Advanced RefreshSeconds" && boundActivity.Ended > 0,
-            "plugin-bound activities accept a mod-specific enum and params details without repeating the owner");
+            "plugin-bound activities accept a mod-specific enum (kept as Other) and params details without repeating the owner");
+        int linesBeforeBlank = CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count();
+        bool blankThrew = false;
+        try
+        {
+            Keel.ActivityJournal = activityWriter;
+            using (Keel.ForPlugin(new PluginId("  ")).BeginActivity(ActivityKind.UiInput, "x")) { }
+            using (Keel.TrackActivity(new ActivityContext(new PluginId(null), (ActivityKind)99))) { }
+            using (Keel.TrackActivity(null)) { }
+        }
+        catch (Exception) { blankThrew = true; }
+        finally { Keel.ActivityJournal = previousJournal; }
+        Check(!blankThrew && CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count() == linesBeforeBlank,
+            "a blank owner, an unknown kind or no context gives an empty scope: no exception, nothing written");
+        Check(new ActivityContext(new PluginId("x"), (ActivityKind)99).Kind == ActivityKind.Other, "an unknown activity kind is kept as Other");
+
+        string limitDir = Path.Combine(tmp, "activitylimit");
+        Directory.CreateDirectory(limitDir);
+        var limited = new CrashGuard(limitDir, null) { ActivitiesPerSession = 3 };
+        for (int i = 0; i < 10; i++)
+            using (limited.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction, new string('d', 300)))) { }
+        var limitLines = CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile)).ToList();
+        var limitJournal = CrashText.ReadJournal(limitLines);
+        Check(limitJournal.Activities.Count == 3 && limitLines.Count(l => l.StartsWith("activity-limit\t", StringComparison.Ordinal)) == 1,
+            "past the session limit activities write nothing more, and the limit is noted once");
+        Check(limitJournal.Activities[0].Detail.Length == 203, "a long activity detail is cut to 200 characters");
+        var perSecond = new CrashGuard(limitDir, null) { ActivitiesPerSecond = 2 };
+        int before = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count;
+        for (int i = 0; i < 10; i++)
+            using (perSecond.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction))) { }
+        int written = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count - before;
+        Check(written is >= 2 and <= 4, "a burst within one second writes at most the per-second limit");
+        perSecond.Mark("quit", "");
         activityWriter.Mark("done", "");
         var contextRun = new CrashGuard(activityDir, null);
         var contextMod = new PluginEntry { Guid = "my.settings", Name = "Settings", TypeName = "MySettings.Plugin", Dll = "missing.dll" };
@@ -388,7 +420,7 @@ internal static class SelfTest
 
         string concurrentDir = Path.Combine(tmp, "concurrentactivity");
         Directory.CreateDirectory(concurrentDir);
-        var concurrent = new CrashGuard(concurrentDir, null);
+        var concurrent = new CrashGuard(concurrentDir, null) { ActivitiesPerSecond = 1000 };
         System.Threading.Tasks.Parallel.For(0, 64, index =>
         {
             using (concurrent.BeginActivity(new ActivityContext(new PluginId("parallel"), ActivityKind.GameAction, index.ToString()))) { }

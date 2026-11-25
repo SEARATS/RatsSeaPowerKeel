@@ -2,17 +2,18 @@
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 
-- Mods and tools can wrap operations in `Keel.TrackActivity(ActivityContext)` with
-  a `PluginId` owner and `ActivityKind` enum; the older string overload adapts to it.
-  The journal records the operation before it starts and its completion afterward,
-  including nested activity. Concurrent callers can dispose the same scope safely. A native crash can therefore leave useful context
-  even when its stack file is empty.
-- The crash report and watcher show that context separately from attribution.
-  A recent or unfinished operation alone never causes a mod to be held out.
-- The main-menu summary is smaller and shows up to two changed mods below it.
-  Closing the summary or dismissing the startup overlay leaves a Keel report button on the main menu.
-- Adds BCL-only `GetUiState`, `SetReportOpen` and `GetReport` methods so tools can
-  detect the report overlay and avoid sending input through it.
+- **Mods can record what they are doing** (`Keel.ForPlugin(...).BeginActivity(...)`, `Keel.TrackActivity(ActivityContext)`)
+  - written to the journal before the operation starts and when it ends, nested scopes included
+  - why: a native crash often leaves an empty stack; the last activity gives the next report some context
+  - never throws (blank owner, unknown kind: an empty scope); at most 20 per second and 5000 per session, details cut at 200 characters
+- **Crash report and watcher show the last activities** apart from the blame
+  - context only: an unfinished activity never holds a mod out
+- **Main-menu card is smaller**, shows up to two changed mods
+  - its × and a dismissed loading window leave a small Keel report button on the main menu
+- **For tools**: `Keel.GetUiState()`, `SetReportOpen(bool)`, `GetReport()`
+  - why: a tool can see the report window and not click through it
+  - `GetReport()` builds the text without writing `Keel-report.txt`
+- 18 new self-test checks
 
 ## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 

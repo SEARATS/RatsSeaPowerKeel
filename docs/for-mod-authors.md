@@ -131,25 +131,27 @@ using (plugin.BeginActivity(ActivityKind.SettingsRebuild, "Advanced page", "Refr
 }
 ```
 
-`PluginActivity` binds ownership once. `BeginActivity` accepts a typed operation
-and `params string[]` diagnostic details; a mod-specific enum is accepted too.
-`ActivityContext` is the concrete owner/operation contract for lower-level callers.
-Tabs and line breaks remain visible as `\t`, `\r`, and `\n` in the journal;
-literal backslashes are escaped too, so these details cannot inject records.
-The old three-string overload is a compatibility adapter; new callers use the
-typed contract. The journal is flushed before the operation begins and after the scope finishes.
-Nested scopes retain both the tool and the mod that owns the callback. If native
-code ends the game without a usable stack, the watcher and next-start report can
-show the last recorded activity. This is diagnostic context, not proof of cause;
-it never holds a mod out by itself. Do not put player-entered values, credentials
-or other private data in the detail string. Mods can discover this method by
-reflection and use a no-op scope when Keel is absent or older.
+- `PluginActivity` binds the owner once; `BeginActivity` takes an `ActivityKind` (or your own enum, recorded as `Other`
+  with its name first in the detail) and any number of detail strings
+- `Keel.TrackActivity(ActivityContext)` is the same for lower-level callers
+- Never throws: a blank plugin id, an unknown kind or a `null` context gives a scope that writes nothing
+- The journal line is flushed before the operation starts and again when the scope is disposed; nested scopes keep both owners
+- Tabs, line breaks and backslashes in details are written escaped (`\t`, `\r`, `\n`, `\\`), so a detail cannot fake a record
+- Details are cut at 200 characters
+- **Meant for rare operations** (a settings page rebuild, a menu action, a scene change), not per-frame code:
+  - Keel writes at most 20 activities per second and 5000 per game session; past that a scope writes nothing
+  - the crash report shows only the last 32 anyway
+- If native code ends the game without a usable stack, the watcher and the next start's report show the last activity
+  - context only, not proof of cause: it never holds a mod out by itself
+- No player-entered values, credentials or other private data in a detail
+- Keel absent or older: find the method by reflection and use a no-op scope
 
-For tooling, `Keel.GetUiState()` returns a concrete `KeelUiState` with `Version`,
-`StartupComplete`, `ReportOpen`, and `WaitingFor` properties. `SetReportOpen(bool)` controls
-the report, and `GetReport()` returns its current text. Call these on the game's
-main thread. A tool should keep inspection available and block UI-changing
-actions while startup is incomplete or the report is open.
+For tools (call on the game's main thread):
+
+- `Keel.GetUiState()` returns a `KeelUiState`: `Version`, `StartupComplete`, `ReportOpen`, `WaitingFor`
+- `Keel.SetReportOpen(bool)` opens or closes the report window (several calls in one frame all count)
+- `Keel.GetReport()` returns the report text, without writing `Keel-report.txt`
+- Keep inspection available, block UI-changing actions while startup is incomplete or the report is open
 
 Keel starts plugins one at a time. One that throws while starting is marked `FAILED` and the next one starts. Exceptions
 your mod throws later (from `Update`, Harmony patches ...) are counted against it by its namespaces in the stack trace and

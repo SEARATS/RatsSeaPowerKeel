@@ -32,19 +32,16 @@ public static class Keel
 
     /// <summary>Optional mod diagnostics: records an operation before native code can crash. Dispose after it finishes.</summary>
     public static IDisposable TrackActivity(ActivityContext context) =>
-        ActivityJournal?.BeginActivity(context) ?? EmptyActivity.Instance;
+        context == null || context.Owner.IsEmpty ? EmptyActivity.Instance
+            : ActivityJournal?.BeginActivity(context) ?? EmptyActivity.Instance;
 
-    // Compatibility for clients built before the typed activity contract.
-    public static IDisposable TrackActivity(string pluginId, string operation, string detail = "") =>
-        TrackActivity(new ActivityContext(new PluginId(pluginId), ActivityKind.Other, $"{operation}: {detail}"));
-
-    private class EmptyActivity : IDisposable
+    internal sealed class EmptyActivity : IDisposable
     {
         internal static readonly EmptyActivity Instance = new();
         public void Dispose() { }
     }
 
-    /// <summary>BCL-only interoperability for tooling, without a reference to Keel's internal UI types.</summary>
+    /// <summary>For tools: Keel's UI state as plain values, without Unity or Keel's internal UI types.</summary>
     public static KeelUiState GetUiState() => new(Version, KeelHost.Current?.StartupComplete ?? false,
         KeelHost.Current?.ReportOpen ?? false, Loading.LoadingWindow.WaitingFor);
 
@@ -81,15 +78,22 @@ internal sealed partial class KeelHost : MonoBehaviour
     internal bool StartupComplete => done;
     internal bool ReportOpen => showWindow;
 
+    // Sets the state outright: ToggleWindow drops a second call in the same frame (its hotkey guard), so a tool's open/close would be lost.
     internal void SetReportOpen(bool open)
     {
-        if (showWindow != open) ToggleWindow();
+        if (showWindow == open)
+            return;
+        showWindow = open;
+        noticeUntil = 0;
+        if (open && done)
+            WriteReport();
     }
 
+    // A tool may ask every frame: build the text, never write the file for it.
     internal string ReadReport()
     {
-        WriteReport();
-        return File.Exists(reportPath) ? File.ReadAllText(reportPath) : "";
+        try { return ReportText(); }
+        catch (Exception ex) { return $"Keel could not build the report: {ex.Message}"; }
     }
     internal static string PendingStubVersion, PendingPath;
     public string StubVersion = PendingStubVersion;
@@ -956,15 +960,20 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         try
         {
-            string text = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
-            if (news is { Count: > 0 })
-                text += Environment.NewLine + "WHAT'S NEW SINCE THE LAST START" + Environment.NewLine + WhatsNew.Text(news).Replace("\n", Environment.NewLine);
-            File.WriteAllText(reportPath, text);
+            File.WriteAllText(reportPath, ReportText());
         }
         catch (Exception ex)
         {
             log.LogWarning($"Cannot write {reportPath}: {ex.Message}");
         }
+    }
+
+    private string ReportText()
+    {
+        string text = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
+        if (news is { Count: > 0 })
+            text += Environment.NewLine + "WHAT'S NEW SINCE THE LAST START" + Environment.NewLine + WhatsNew.Text(news).Replace("\n", Environment.NewLine);
+        return text;
     }
 
     private void ToggleWindow()
