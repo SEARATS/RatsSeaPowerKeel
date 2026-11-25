@@ -31,7 +31,7 @@ Who we start with (partners, wanted modders): [partner-mods.md](partner-mods.md)
 
 ## Wave 2: Keel becomes the interface
 
-- [ ] Anchor Chain carried on inside Keel; Anchor Chain 1.3 offers the switch (draft PR #5) 
+- [ ] Anchor Chain carried on inside Keel; Anchor Chain 1.3 offers the switch ([Anchor Chain PR #33](https://github.com/SeaPower-Modders/AnchorChain/pull/33), waiting for its merge and release) 
 - [ ] Conflict finder: the report names two mods patching the same game method 
 - [ ] Per-mod start and frame cost in the report; safe start (game + Keel only) 
 - [ ] Declared dependencies and a load order Keel sorts itself 
