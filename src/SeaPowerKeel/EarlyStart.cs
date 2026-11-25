@@ -19,9 +19,13 @@ namespace SeaPowerKeel;
 internal static class EarlyStart
 {
     public const string InfoKey = "StartEarly", MetadataKey = "Keel.StartEarly";
+    public const string BlockingInfoKey = "BlockingStart", BlockingMetadataKey = "Keel.BlockingStart";
 
     /// <summary>True when <paramref name="infoIni"/> (the text of a mod's _info.ini) has [Keel] StartEarly=true.</summary>
-    public static bool InInfoIni(string infoIni)
+    public static bool InInfoIni(string infoIni) => InInfoIni(infoIni, InfoKey);
+
+    /// <summary>True when <paramref name="infoIni"/> has [Keel] <paramref name="key"/>=true.</summary>
+    public static bool InInfoIni(string infoIni, string key)
     {
         bool inKeel = false;
         foreach (string raw in (infoIni ?? "").Split('\n'))
@@ -33,19 +37,24 @@ internal static class EarlyStart
                 continue;
             }
             int eq = line.IndexOf('=');
-            if (inKeel && eq > 0 && line.Substring(0, eq).Trim().Equals(InfoKey, StringComparison.OrdinalIgnoreCase))
+            if (inKeel && eq > 0 && line.Substring(0, eq).Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
                 return IsTrue(line.Substring(eq + 1));
         }
         return false;
     }
 
     /// <summary>True when the folder's _info.ini asks for an early start (false when there is none or it cannot be read).</summary>
-    public static bool FolderAsks(string folder)
+    public static bool FolderAsks(string folder) => FolderHas(folder, InfoKey) || FolderBlocks(folder);
+
+    /// <summary>True when the folder's _info.ini asks for a blocking start: before the game's first frame, holding the game up.</summary>
+    public static bool FolderBlocks(string folder) => FolderHas(folder, BlockingInfoKey);
+
+    private static bool FolderHas(string folder, string key)
     {
         try
         {
             string path = Path.Combine(folder ?? "", "_info.ini");
-            return File.Exists(path) && InInfoIni(File.ReadAllText(path));
+            return File.Exists(path) && InInfoIni(File.ReadAllText(path), key);
         }
         catch (Exception)
         {
@@ -54,10 +63,15 @@ internal static class EarlyStart
     }
 
     /// <summary>True when the assembly carries AssemblyMetadata("Keel.StartEarly", "true").</summary>
-    public static bool AssemblyAsks(AssemblyDefinition assembly) =>
+    public static bool AssemblyAsks(AssemblyDefinition assembly) => AssemblyHas(assembly, MetadataKey);
+
+    /// <summary>True when the assembly carries AssemblyMetadata("Keel.BlockingStart", "true").</summary>
+    public static bool AssemblyBlocks(AssemblyDefinition assembly) => AssemblyHas(assembly, BlockingMetadataKey);
+
+    private static bool AssemblyHas(AssemblyDefinition assembly, string key) =>
         assembly?.CustomAttributes.Any(a => a.AttributeType.FullName == "System.Reflection.AssemblyMetadataAttribute"
                                             && a.ConstructorArguments.Count == 2
-                                            && a.ConstructorArguments[0].Value as string == MetadataKey
+                                            && a.ConstructorArguments[0].Value as string == key
                                             && IsTrue(a.ConstructorArguments[1].Value as string)) == true;
 
     private static bool IsTrue(string v) => (v ?? "").Trim().Trim('"').Equals("true", StringComparison.OrdinalIgnoreCase) || (v ?? "").Trim() == "1";
@@ -66,9 +80,9 @@ internal static class EarlyStart
     /// The plugins that start early: those that asked and are still to start, less every one that depends on, or must start after,
     /// a plugin Keel starts later (repeated until stable). <paramref name="note"/> gets one line per plugin moved to the later start.
     /// </summary>
-    public static HashSet<PluginEntry> Set(IList<PluginEntry> all, Action<PluginEntry, string> note)
+    public static HashSet<PluginEntry> Set(IList<PluginEntry> all, Action<PluginEntry, string> note, bool blocking = false)
     {
-        var early = new HashSet<PluginEntry>(all.Where(p => p.StartEarly && p.State == PluginState.Pending));
+        var early = new HashSet<PluginEntry>(all.Where(p => (blocking ? p.BlockingStart : p.StartEarly) && p.State == PluginState.Pending));
         var byGuid = all.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Guid).ToDictionary(g => g.Key, g => g.First());
         bool changed = true;
         while (changed)
@@ -85,7 +99,8 @@ internal static class EarlyStart
                     continue;
                 early.Remove(p);
                 changed = true;
-                note?.Invoke(p, $"Asked to start early, but it needs {late}, which starts after the load screen: it starts with the others.");
+                note?.Invoke(p, blocking ? $"Asked for a blocking start, but it needs {late}, which does not hold the game up: it starts early without it."
+                           : $"Asked to start early, but it needs {late}, which starts after the load screen: it starts with the others.");
             }
         }
         return early;

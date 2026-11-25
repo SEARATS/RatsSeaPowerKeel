@@ -1,7 +1,26 @@
 # Changelog
 
-## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
+## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics
 
+- **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
+  - why: a mod that replaces the load-screen pictures must run before the first one shows
+  - implies `StartEarly`
+- **`StartEarly` mods start in the game's first frames**, one per frame, next to the game (they no longer hold it up)
+- **The early opt-in is seen in the DLL too**: Keel looks at the plugins of the mod list on disk before the game's first frame
+  - the same scan serves the start when the game's list matches it, so no DLL is read twice
+- **Early start waits only for what it needs**: only the early mods' DLLs are checked before they start; setup look, What's new, pack check and the other mods' check follow
+  - one game-version index serves all three check steps
+- **The main-menu card no longer hitches the game once a second** (rgreat)
+  - the type lookups are made once
+  - the menu is measured on a screen-size change or a new scene, then every 10 s (a mod may add an entry later)
+  - where the game's UI root has no size, the menu view is the frame
+- 3 new self-test checks
+- **The in-game report groups plugins by mod** (PR #13 by agm-114)
+  - a mod with one DLL: one compact row
+  - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves
+  - a closed pack still shows its issue count
+  - Local or the Workshop id after the mod name; DLL names lined up at the right edge
+- **The text report names each plugin's Workshop pack** (name and id)
 - **Mods can record what they are doing** (`Keel.ForPlugin(...).BeginActivity(...)`, `Keel.TrackActivity(ActivityContext)`)
   - written to the journal before the operation starts and when it ends, nested scopes included
   - why: a native crash often leaves an empty stack; the last activity gives the next report some context
@@ -15,12 +34,8 @@
   - `GetReport()` builds the text without writing `Keel-report.txt`
 - 18 new self-test checks
 
-## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
+## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
-- The in-game report groups plugins by mod. Single-DLL mods use compact rows.
-  Multi-DLL packs expand to show their plugins and keep the issue count visible
-  when collapsed. Local or Workshop appears after the mod name, and DLL names
-  align at the right edge. The text report includes Workshop pack names and IDs.
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
 - **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0
   - a DLL listed under `flat =` in a mod's `keel.ini` is still left out; the partner-build note for older packages stays
