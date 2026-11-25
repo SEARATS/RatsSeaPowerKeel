@@ -41,6 +41,7 @@ internal sealed class PluginEntry
     public bool AcConfigRequired = true;               // [ACConfig(required)]: a config file that cannot be made keeps the mod from starting
     public bool Exported = true;                        // Anchor Chain only sees public (exported) plugin classes
     public bool StartEarly;                             // asked to start before the load screen ends (EarlyStart)
+    public bool BlockingStart;                          // asked to start before the game's first frame, holding the game up (EarlyStart)
     /// <summary>The Workshop items the mod's folder names as required in its _info.ini (RequiredItems).</summary>
     public readonly List<RequiredItem> RequiredItems = new();
     /// <summary>Set when the mod is kept out because a plugin it needs is missing or too old and that plugin comes from a required item: the card offers it.</summary>

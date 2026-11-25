@@ -374,9 +374,41 @@ internal static class SelfTest
         }
         finally { Keel.ActivityJournal = previousJournal; }
         var boundActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile))).Activities.Last();
-        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.GameAction)
+        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.Other)
             && boundActivity.Detail == "ActivityOperation.RebuildPage Advanced RefreshSeconds" && boundActivity.Ended > 0,
-            "plugin-bound activities accept a mod-specific enum and params details without repeating the owner");
+            "plugin-bound activities accept a mod-specific enum (kept as Other) and params details without repeating the owner");
+        int linesBeforeBlank = CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count();
+        bool blankThrew = false;
+        try
+        {
+            Keel.ActivityJournal = activityWriter;
+            using (Keel.ForPlugin(new PluginId("  ")).BeginActivity(ActivityKind.UiInput, "x")) { }
+            using (Keel.TrackActivity(new ActivityContext(new PluginId(null), (ActivityKind)99))) { }
+            using (Keel.TrackActivity(null)) { }
+        }
+        catch (Exception) { blankThrew = true; }
+        finally { Keel.ActivityJournal = previousJournal; }
+        Check(!blankThrew && CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count() == linesBeforeBlank,
+            "a blank owner, an unknown kind or no context gives an empty scope: no exception, nothing written");
+        Check(new ActivityContext(new PluginId("x"), (ActivityKind)99).Kind == ActivityKind.Other, "an unknown activity kind is kept as Other");
+
+        string limitDir = Path.Combine(tmp, "activitylimit");
+        Directory.CreateDirectory(limitDir);
+        var limited = new CrashGuard(limitDir, null) { ActivitiesPerSession = 3 };
+        for (int i = 0; i < 10; i++)
+            using (limited.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction, new string('d', 300)))) { }
+        var limitLines = CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile)).ToList();
+        var limitJournal = CrashText.ReadJournal(limitLines);
+        Check(limitJournal.Activities.Count == 3 && limitLines.Count(l => l.StartsWith("activity-limit\t", StringComparison.Ordinal)) == 1,
+            "past the session limit activities write nothing more, and the limit is noted once");
+        Check(limitJournal.Activities[0].Detail.Length == 203, "a long activity detail is cut to 200 characters");
+        var perSecond = new CrashGuard(limitDir, null) { ActivitiesPerSecond = 2 };
+        int before = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count;
+        for (int i = 0; i < 10; i++)
+            using (perSecond.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction))) { }
+        int written = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count - before;
+        Check(written is >= 2 and <= 4, "a burst within one second writes at most the per-second limit");
+        perSecond.Mark("quit", "");
         activityWriter.Mark("done", "");
         var contextRun = new CrashGuard(activityDir, null);
         var contextMod = new PluginEntry { Guid = "my.settings", Name = "Settings", TypeName = "MySettings.Plugin", Dll = "missing.dll" };
@@ -388,7 +420,7 @@ internal static class SelfTest
 
         string concurrentDir = Path.Combine(tmp, "concurrentactivity");
         Directory.CreateDirectory(concurrentDir);
-        var concurrent = new CrashGuard(concurrentDir, null);
+        var concurrent = new CrashGuard(concurrentDir, null) { ActivitiesPerSecond = 1000 };
         System.Threading.Tasks.Parallel.For(0, 64, index =>
         {
             using (concurrent.BeginActivity(new ActivityContext(new PluginId("parallel"), ActivityKind.GameAction, index.ToString()))) { }
@@ -534,6 +566,25 @@ internal static class SelfTest
         var earlySet = EarlyStart.Set(new List<PluginEntry> { eA, eB, eC, eD, eE }, (p, why) => whyLate.Add(p.Guid));
         Check(earlySet.SetEquals(new[] { eA }) && whyLate.Count == 2,
               "start early: A early; B waits (needs C, which waits); D waits (E must load before it)");
+        Check(EarlyStart.InInfoIni("[Keel]\nBlockingStart=true\n", EarlyStart.BlockingInfoKey) && !EarlyStart.InInfoIni("[Keel]\nStartEarly=true\n", EarlyStart.BlockingInfoKey)
+              && !EarlyStart.InInfoIni("[Keel]\nBlockingStart=true\n"),
+              "blocking start: only [Keel] BlockingStart=true counts for it, and it is not a plain StartEarly");
+        var bA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true, BlockingStart = true };
+        var bB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true, BlockingStart = true };
+        bB.Dependencies.Add(new Dependency { Guid = "c" });
+        var bC = new PluginEntry { Guid = "c", Name = "C", StartEarly = true };
+        var blockSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null, blocking: true);
+        var plainSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null);
+        Check(blockSet.SetEquals(new[] { bA }) && plainSet.SetEquals(new[] { bA, bB, bC }),
+              "blocking start: A blocks; B needs C, which does not block, so B starts early without holding the game; all three start early");
+        string nowhere = Path.Combine(Path.GetTempPath(), "keel-selftest-nowhere");
+        var diskFolder = new ModFolder { Path = nowhere + Path.DirectorySeparatorChar, Name = "x", Enabled = true };
+        EarlyScan early = EarlyScan.Of(new List<ModFolder> { diskFolder });
+        var gameFolder = new ModFolder { Path = nowhere.ToUpperInvariant(), Name = "x", Enabled = true };
+        var otherFolder = new ModFolder { Path = nowhere + "-other", Name = "y", Enabled = true };
+        Check(early.UseFor(new List<ModFolder> { otherFolder }, _ => { }, new List<SkippedDll>()) == null
+              && early.UseFor(new List<ModFolder> { gameFolder }, _ => { }, new List<SkippedDll>()) != null,
+              "early scan: used again only when the game's list turns on the same folders");
     }
 
     private static void RequiredItemChecks()

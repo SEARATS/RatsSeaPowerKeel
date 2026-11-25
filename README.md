@@ -5,7 +5,7 @@ Keel is the mod loader for Sea Power's code mods and carries on Anchor Chain: it
 | | |
 | --- | --- |
 | Questions | [R.A.T.S. Discord](https://discord.gg/CzuHd4f8Yf): help, ideas, talk; the first place to ask |
-| Version | `0.8.2` (unreleased) |
+| Version | `0.8.1` (unreleased) |
 | Game | Sea Power 0.9.3 (public and beta) tested in the game with 0.6.0 (2026-11-18); `_info.ini` declares 0.9.0 up to, not including, 0.10.0 |
 | Needs | [BepInEx 5](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) (KeelSetup adds it); Keel is the loader itself and needs no other one |
 | Get it | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459) |

@@ -23,4 +23,4 @@
 | `Loading window.Opacity` | `0.92` | 0.4 to 1 |
 | `Loading window.SecondsAfterLastMod` | `2` | The full window stays this long after every mod has started, then glides to the corner |
 | `Loading window.LongestSeconds` | `300` | The full window is done this long after the game process started, whatever happens |
-| `Loading window.ClickHides` | `true` | A click hides the full window; a click on the summary opens Keel's report, its x button collapses the summary to a Keel report button |
+| `Loading window.ClickHides` | `true` | A click hides the full window; a click on the summary opens Keel's report, its x button collapses the summary to a Keel report button, which has its own x |

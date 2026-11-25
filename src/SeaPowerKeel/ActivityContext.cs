@@ -2,11 +2,12 @@ using System;
 
 namespace SeaPowerKeel;
 
+// Diagnostics must never break the mod that calls them: a blank owner or an unknown kind gives an empty scope, no exception.
 public readonly struct PluginId
 {
     public string Value { get; }
-    public PluginId(string value) => Value = !string.IsNullOrWhiteSpace(value)
-        ? value : throw new ArgumentException("Supply the owning plugin's ID.", nameof(value));
+    public PluginId(string value) => Value = string.IsNullOrWhiteSpace(value) ? null : value;
+    public bool IsEmpty => Value == null;
     public override string ToString() => Value ?? "";
 }
 
@@ -20,10 +21,8 @@ public class ActivityContext
 
     public ActivityContext(PluginId owner, ActivityKind kind, params string[] details)
     {
-        if (string.IsNullOrWhiteSpace(owner.Value)) throw new ArgumentException("Supply the owning plugin's ID.", nameof(owner));
-        if (!Enum.IsDefined(typeof(ActivityKind), kind)) throw new ArgumentOutOfRangeException(nameof(kind));
         Owner = owner;
-        Kind = kind;
+        Kind = Enum.IsDefined(typeof(ActivityKind), kind) ? kind : ActivityKind.Other;
         Detail = string.Join(" ", details ?? Array.Empty<string>());
     }
 }
@@ -32,12 +31,12 @@ public class ActivityContext
 public class PluginActivity
 {
     public PluginId Owner { get; }
-    public PluginActivity(PluginId owner) => Owner = !string.IsNullOrWhiteSpace(owner.Value)
-        ? owner : throw new ArgumentException("Supply the owning plugin's ID.", nameof(owner));
+    public PluginActivity(PluginId owner) => Owner = owner;
 
     public IDisposable BeginActivity(ActivityKind operation, params string[] details) =>
         Keel.TrackActivity(new ActivityContext(Owner, operation, details));
 
+    // A mod's own enum says more than any ActivityKind: recorded as Other, with its name leading the detail.
     public IDisposable BeginActivity<TOperation>(TOperation operation, params string[] details) where TOperation : struct, Enum =>
-        BeginActivity(ActivityKind.GameAction, $"{typeof(TOperation).Name}.{operation}", string.Join(" ", details ?? Array.Empty<string>()));
+        BeginActivity(ActivityKind.Other, $"{typeof(TOperation).Name}.{operation}", string.Join(" ", details ?? Array.Empty<string>()));
 }

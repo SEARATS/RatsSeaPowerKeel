@@ -293,8 +293,13 @@ internal sealed partial class KeelHost
     {
         if (summaryCollapsed)
         {
-            cardRect = new Rect(r.x, r.y, Mathf.Min(112f, r.width), r.height);
-            GUI.Box(cardRect, "Keel report", buttonStyle);
+            // The report button has its own × too (his rule: every card closes with a visible ×); the hotkey still opens the report.
+            cardRect = new Rect(r.x, r.y, Mathf.Min(136f, r.width), r.height);
+            GUI.Box(new Rect(cardRect.x, cardRect.y, cardRect.width - 26f, cardRect.height), "Keel report", buttonStyle);
+            EnsureNewsStyles();
+            var spot = CloseSpot(cardRect);
+            GUI.Label(spot, "×", newsClose);
+            cardCloseRect = new Rect(spot.x - 4, cardRect.y, spot.width + 8, cardRect.height);
             return;
         }
         cardRect = r;
@@ -484,7 +489,7 @@ internal sealed partial class KeelHost
         GUI.Label(getItRect, "Get it", buttonStyle);
     }
 
-    /// <summary>A click on the Keel card: its × collapses it to a report button, the credit opens his Steam profile, anywhere else opens the report.
+    /// <summary>A click on the Keel card: its × collapses it to a report button (whose own × closes it), the credit opens his Steam profile, anywhere else opens the report.
     /// Only the left button counts (no right click, his word 2026-11-12).</summary>
     private bool CardClick(Vector2 gui, int button)
     {
@@ -496,7 +501,10 @@ internal sealed partial class KeelHost
             return true;
         if (summaryCollapsed)
         {
-            SetReportOpen(true);
+            if (cardCloseRect.Contains(gui))
+                cardHidden = true;          // gone for this game; Ctrl+Shift+K still opens the report
+            else
+                SetReportOpen(true);
             return true;
         }
         if (cardCloseRect.Contains(gui))
@@ -528,7 +536,10 @@ internal sealed partial class KeelHost
     private const float PanelFallbackShare = 0.1875f;     // 360 of 1920
     private const int MaxVisuals = 4000;                  // a cap on the walk through the menu's visual tree
 
-    private float exitBottom = -1f, menuMeasuredAt = -10f, panelRight = -1f;
+    private float exitBottom = -1f, menuMeasuredAt = -10f, panelRight = -1f, menuMeasuredH = -1f;
+    private int menuHits, menuTries;
+    private long menuSceneTicks = -1;
+    private Type mainMenuType;
 
     /// <summary>The right edge of the grey menu panel in GUI units, as <see cref="MeasureMenu"/> found it.</summary>
     private float PanelRight(float screenW) => panelRight > 0f ? panelRight * screenW : screenW * PanelFallbackShare;
@@ -536,14 +547,26 @@ internal sealed partial class KeelHost
     /// <summary>
     /// The lower edge of the main menu's lowest entry (EXIT) in GUI units into <see cref="exitBottom"/>, and the menu panel's right
     /// edge into <see cref="panelRight"/>: the lowest Button of the game's MainMenuView in the menu column (Noesis, by name),
-    /// measured once a second. Else the fallback shares.
+    /// measured on a size change or a new scene, then now and then (not every frame or second). Else the fallback shares.
     /// </summary>
     private void MeasureMenu(float screenH)
     {
-        float now = Time.realtimeSinceStartup;
-        if (now - menuMeasuredAt < 1f && exitBottom > 0f)
+        float now = Time.realtimeSinceStartup, px = screenH * guiScale;
+        // Once a second hitched the game (~90 ms each time, the by-name type lookups, now made once). The menu moves when the screen
+        // changes size or a scene is loaded (a Mods-menu reload builds it again): then measure, once more 3 s after the first hit (it
+        // may still be settling), retry a few times if nothing is found, and after that every 10 s, for an entry a mod adds later.
+        if (!Mathf.Approximately(menuMeasuredH, px) || menuSceneTicks != LoadingWindow.SceneLoadedTicks)
+        {
+            menuMeasuredH = px;
+            menuSceneTicks = LoadingWindow.SceneLoadedTicks;
+            menuHits = menuTries = 0;
+            menuMeasuredAt = -10f;
+        }
+        bool settled = menuHits >= 2 || menuTries >= 5;
+        if (now - menuMeasuredAt < (settled ? 10f : menuHits == 0 ? 1f : 3f))
             return;
         menuMeasuredAt = now;
+        menuTries++;
         float found = -1f;
         try
         {
@@ -553,7 +576,10 @@ internal sealed partial class KeelHost
         {
             // the fallback below
         }
-        exitBottom = found > 0f ? found : screenH * ExitFallbackShare;
+        if (found > 0f)
+            menuHits++;
+        if (found > 0f || menuHits == 0)
+            exitBottom = found > 0f ? found : screenH * ExitFallbackShare;
     }
 
     /// <summary>Noesis' visual tree helpers, found by name (Keel references no game or Noesis assembly).</summary>
@@ -562,10 +588,11 @@ internal sealed partial class KeelHost
         public Type Point;
         public MethodInfo Count, Child;
         public object Root;
+        private static Type treeType, pointType;     // AccessTools.TypeByName walks every assembly on each call: look up once
 
         public static VisualTree Of(object view)
         {
-            Type tree = AccessTools.TypeByName("Noesis.VisualTreeHelper"), point = AccessTools.TypeByName("Noesis.Point");
+            Type tree = treeType ??= AccessTools.TypeByName("Noesis.VisualTreeHelper"), point = pointType ??= AccessTools.TypeByName("Noesis.Point");
             if (view == null || tree == null || point == null)
                 return null;
             const BindingFlags statics = BindingFlags.Public | BindingFlags.Static;
@@ -581,12 +608,16 @@ internal sealed partial class KeelHost
     // The lowest entry's lower edge as a share of the UI root's height (-1: none); sets panelRight on the way.
     private float LowestEntry()
     {
-        object view = AccessTools.TypeByName("SeapowerUI.MainMenuView")?.GetField("Instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+        mainMenuType ??= AccessTools.TypeByName("SeapowerUI.MainMenuView");
+        object view = mainMenuType?.GetField("Instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
         VisualTree vt = VisualTree.Of(view);
         if (vt == null)
             return -1f;
-        (float x0, float y0) = ToScreen(vt.Root, vt.Point, 0, 0);
-        (float x1, float y1) = ToScreen(vt.Root, vt.Point, Prop(vt.Root, "ActualWidth"), Prop(vt.Root, "ActualHeight"));
+        // The frame the shares are measured in: the UI root. In some game versions GetRoot gives a bare Visual without a size (0x0):
+        // then the menu view itself is the frame (it fills the screen there).
+        object frame = Prop(vt.Root, "ActualWidth") > 0 && Prop(vt.Root, "ActualHeight") > 0 ? vt.Root : view;
+        (float x0, float y0) = ToScreen(frame, vt.Point, 0, 0);
+        (float x1, float y1) = ToScreen(frame, vt.Point, Prop(frame, "ActualWidth"), Prop(frame, "ActualHeight"));
         if (y1 <= y0 || x1 <= x0)
             return -1f;
         (float vx, float _) = ToScreen(view, vt.Point, Prop(view, "ActualWidth"), 0);
