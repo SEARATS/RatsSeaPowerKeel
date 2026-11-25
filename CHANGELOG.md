@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1 - unreleased - start early: the game waits only for blocking mods
+## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod
 
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
@@ -15,8 +15,14 @@
   - the menu is measured on a screen-size change or a new scene, then every 10 s (a mod may add an entry later)
   - where the game's UI root has no size, the menu view is the frame
 - 3 new self-test checks
+- **The in-game report groups plugins by mod** (PR #13 by agm-114)
+  - a mod with one DLL: one compact row
+  - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves
+  - a closed pack still shows its issue count
+  - Local or the Workshop id after the mod name; DLL names lined up at the right edge
+- **The text report names each plugin's Workshop pack** (name and id)
 
-## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
+## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
 - **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0
