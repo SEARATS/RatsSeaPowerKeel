@@ -2,30 +2,24 @@
 
 ## 0.8.2 - unreleased - recover from partial mod startup and missing game APIs
 
-- Keel recognizes Better TacMap's explicit Harmony patch installation failure in
-  `Debug.LogError`. It removes the patches added during that entry point and
-  stops the failed BepInEx component. Patches already installed by a sibling plugin remain. Ordinary error
-  logs and caught optional-feature errors mark the plugin with errors.
-- The broken-patch guard also handles missing game types and runs when the stack
-  explicitly names the mod. It only removes patches from the innermost target
-  when ownership and overload selection are unambiguous. Mods sharing one DLL
-  can use their plugin ID as their Harmony ID to identify their own patches.
-- The compatibility check now reads Harmony's ref, out and pointer argument
-  modifiers when matching overloads. This clears a false warning about UNREP's
-  speed-command patch.
-- No new dependency or config migration. Existing `RemoveBrokenPatches` controls
-  runtime recovery. Restarting is still needed to clear a failed mod's custom
-  objects, events or other setup; Keel cannot unload its assembly or repair a
-  native access violation.
-- Verified in Sea Power `0.9.3-261116` with Better TacMap `0.2.0`: startup and two
-  mission load/unload cycles did not reproduce the newer `0.9.3-261123b` report.
-  Controlled game tests reproduced the old loader's false running state and
-  repeated errors, then verified startup rollback, sibling patch preservation,
-  ordinary error reporting and one-error recovery for missing types and methods.
-  A separate inline transpiler on `GameMain.LateUpdate` recovered with only game
-  frames on the stack. With Pilothouse and Euromod enabled, Optimal Target Distance
-  retained its native-target fallback and Keel reported the startup error. All 268
-  offline self-checks passed.
+### Mod start
+
+- A start fails only when it really broke: the entry point threw, or an exception escaped a plugin's Awake
+- Failed start: Keel takes off the Harmony patches the mod added in its constructor and entry point, and stops it
+- Patches a plugin adds later (BepInEx `Start()`, coroutines) stay; restart the game to clear a failed mod fully
+- A mod that catches its own error and logs it (an optional feature) keeps running, marked with errors
+- Errors logged during a start count for that mod only when its code is on the stack; game and Unity errors blame nobody
+
+### Broken patches at runtime (`RemoveBrokenPatches`)
+
+- Also catches missing game types, not only missing methods and fields
+- Removes a patch only when owner and overload are clear; with several patched overloads it only names the mod
+- A mod on the stack that merely called a patched game method no longer hides the mod whose patch broke
+- Mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
+
+### Compatibility check
+
+- Reads Harmony's ref, out and pointer argument kinds when matching overloads (false warning on UNREP's speed patch)
 
 ## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
 

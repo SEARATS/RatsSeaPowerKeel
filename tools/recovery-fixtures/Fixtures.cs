@@ -56,6 +56,23 @@ public class CaughtFailure : BaseUnityPlugin
     private void Update() => Updates++;
 }
 
+// Same partial patching, but the exception escapes Awake: Unity catches it, so the start was cut short.
+[BepInPlugin("keel.fixture.uncaught", "Recovery uncaught startup", "1.0.0")]
+[BepInDependency("keel.fixture.healthy")]
+public class UncaughtFailure : BaseUnityPlugin
+{
+    internal static int Updates;
+    private void Awake()
+    {
+        var harmony = new Harmony("keel.fixture.uncaught");
+        harmony.Patch(AccessTools.Method(typeof(SharedTarget), nameof(SharedTarget.Tick)),
+            postfix: new HarmonyMethod(typeof(UncaughtFailure), nameof(Postfix)));
+        harmony.CreateClassProcessor(typeof(MissingTargetPatch)).Patch();
+    }
+    private static void Postfix() { }
+    private void Update() => Updates++;
+}
+
 [HarmonyPatch(typeof(SharedTarget), "MissingTarget")]
 internal static class MissingTargetPatch
 {
@@ -145,11 +162,14 @@ internal class Verify : MonoBehaviour
         var runtimeTarget = Harmony.GetPatchInfo(AccessTools.Method(typeof(MissingType), nameof(MissingType.Target)));
         bool healthy = Healthy.Calls > 0 && patches.Postfixes.Any(p => p.owner == "keel.fixture.healthy")
             && runtimeTarget?.Postfixes.Any(p => p.owner == "keel.fixture.healthy") == true;
-        bool partial = patches.Postfixes.Any(p => p.owner == "keel.fixture.caught");
+        // A caught, self-reported failure keeps its patch and keeps running; an uncaught one is rolled back and stopped.
+        bool caughtKept = patches.Postfixes.Any(p => p.owner == "keel.fixture.caught") && CaughtFailure.Updates > 0;
+        bool partial = patches.Postfixes.Any(p => p.owner == "keel.fixture.uncaught");
         string report = TestProbe.Report;
-        bool recovered = report.Contains("[FAILED] Recovery caught startup") && !partial && CaughtFailure.Updates == 0 &&
+        bool recovered = report.Contains("[ERRORS] Recovery caught startup") && caughtKept &&
+            report.Contains("[FAILED] Recovery uncaught startup") && !partial && UncaughtFailure.Updates == 0 &&
             report.Contains("[ERRORS] Recovery ordinary error") && MissingType.Errors == 1 && MissingMethod.Errors == 1 && healthy;
-        Debug.Log($"KEEL_RECOVERY {(recovered ? "PASS" : "BASELINE")} healthy={healthy} partial_patch={partial} failed_updates={CaughtFailure.Updates} type_errors={MissingType.Errors} method_errors={MissingMethod.Errors}");
+        Debug.Log($"KEEL_RECOVERY {(recovered ? "PASS" : "BASELINE")} healthy={healthy} caught_kept={caughtKept} partial_patch={partial} failed_updates={UncaughtFailure.Updates} type_errors={MissingType.Errors} method_errors={MissingMethod.Errors}");
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(typeof(Verify).Assembly.Location), "result.txt"), report);
     }
 }

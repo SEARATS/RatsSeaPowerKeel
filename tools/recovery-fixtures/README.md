@@ -10,18 +10,20 @@ check a missing type and method without changing any game assembly.
 
 Install only the prepared DLL in a disposable enabled mod folder with a compatible
 `_info.ini`. Use `GameVersionCheck=Standard` and `RemoveBrokenPatches=true`. The test
-starts five plugins from one DLL and writes `KEEL_RECOVERY PASS` after checking:
+starts six plugins from one DLL and writes `KEEL_RECOVERY PASS` after checking:
 
-- An explicit Harmony patch installation failure logged through `Debug.LogError` marks the
-  plugin failed, removes its newly installed patch and stops its component.
+- A Harmony failure the plugin catches and logs itself marks it with errors; its patch
+  and component stay.
+- The same failure escaping `Awake` marks the plugin failed, removes its newly
+  installed patch and stops its component.
 - A healthy sibling keeps its patches on both the failed startup plugin's target and the runtime missing-type target.
 - An ordinary error log marks its plugin with errors without rolling it back.
 - Missing-type and missing-method errors each occur once. The failing patch comes
   off, so the second invocation succeeds. These exceptions deliberately reproduce
   the report's error formats; they are not a reproduction of the native crash.
 
-An unchanged 0.8.1 loader writes `KEEL_RECOVERY BASELINE`, with the partial startup
-patch still installed and both runtime exceptions occurring twice. Compare its
+An unchanged 0.8.1 loader writes `KEEL_RECOVERY BASELINE`, with the uncaught failure's
+startup patch still installed and both runtime exceptions occurring twice. Compare its
 report with the updated loader's report, then remove the fixture and restore the
 original mod selections, config and installed loader.
 

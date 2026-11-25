@@ -818,11 +818,15 @@ internal static class SelfTest
         Check(Runner.MissingKey("TypeLoadException: Could not load type 'SeaPower.Outer+Inner' from assembly 'Seapower-Scripts, Version=0.0.0.0'") == "SeaPower.Outer/Inner",
               "the alternate missing-type format preserves nested type identity");
         Check(Runner.MissingKey("TypeLoadException: VTable setup failed") == null, "a type error without a named missing type does not remove patches");
-        Check(Runner.ReportsPatchFailure("[BetterTacMap] Harmony patching failed: HarmonyLib.HarmonyException: Patching exception in method null"),
-              "a caught startup exception passed to Debug.LogError is a failure");
-        Check(!Runner.ReportsPatchFailure("Optional icon unavailable"), "an ordinary error log does not claim an exception or roll startup back");
-        Check(!Runner.ReportsPatchFailure("[OptimalTargetDist] AAW interception disabled; native target rules retained: System.NotSupportedException: Unknown AAW rejection layout: 0"),
-            "an optional feature falling back to native rules does not roll back the plugin");
+        Check(Runner.JudgeStartLog(exception: true, onLiveStack: true, inTrace: true) == Runner.StartLog.Errors,
+              "a mod that catches an exception and logs it itself keeps running with errors (no rollback)");
+        Check(Runner.JudgeStartLog(exception: false, onLiveStack: true, inTrace: false) == Runner.StartLog.Errors,
+              "an error logged by game code the starting mod called counts for that mod");
+        Check(Runner.JudgeStartLog(exception: true, onLiveStack: false, inTrace: true) == Runner.StartLog.Aborted,
+              "an exception that escaped the mod's Awake (mod in the trace, not on the live stack) fails the start");
+        Check(Runner.JudgeStartLog(exception: false, onLiveStack: false, inTrace: false) == Runner.StartLog.NotItsOwn
+            && Runner.JudgeStartLog(exception: true, onLiveStack: false, inTrace: false) == Runner.StartLog.NotItsOwn,
+              "a game or Unity error without the mod's code is not blamed on the starting mod");
         var patched = Runner.InnermostPatchedMethod("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
         Check(patched == ("SeaPower.GameMain", "FixedUpdate"), "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
         Check(Runner.InnermostPatchedMethod("DMD<Game::Inner>()\nDMD<Game::Outer>()") == ("Game", "Inner"),
