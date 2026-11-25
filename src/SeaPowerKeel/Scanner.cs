@@ -25,8 +25,6 @@ internal static class Scanner
             return "Anchor Chain's own library: Keel uses it as a library for Anchor Chain mods and never as a plugin.";
         if (name.Equals(KeelNames.AnchorChainPreloaderFile, StringComparison.OrdinalIgnoreCase))
             return "Anchor Chain's preloader (the BepInEx stub that starts Anchor Chain): not a mod.";
-        if (PreparationDll.Matches(name))
-            return "Startup preparation DLL, handled by the Keel stub.";
         return null;
     }
 
@@ -43,7 +41,7 @@ internal static class Scanner
         foreach (ModFolder folder in folders)
         {
             Manifest manifest = Manifest.Read(folder.Path, warn);
-            var folderTiming = EarlyStart.FolderTiming(folder.Path) ?? StartupTiming.AnchorChain;
+            bool folderEarly = EarlyStart.FolderAsks(folder.Path), folderBlocking = EarlyStart.FolderBlocks(folder.Path);
             List<RequiredItem> required = RequiredItems.OfFolder(folder.Path);
             List<string> dlls;
             try
@@ -64,7 +62,7 @@ internal static class Scanner
                     skipped?.Add(new SkippedDll { Path = dll, Folder = folder, Reason = why });
                     continue;
                 }
-                List<PluginEntry> found = ScanDll(dll, folder, folderTiming, warn, resolver);
+                List<PluginEntry> found = ScanDll(dll, folder, warn, resolver);
                 // Some mods carry both entries in one DLL: the Anchor Chain one for the Workshop, the BepInEx one for players
                 // who copy the DLL into BepInEx\plugins. From a mod folder only the Anchor Chain entry is meant to run
                 // (the one Anchor Chain uses, the one the author tested); starting both would run the mod twice.
@@ -84,6 +82,8 @@ internal static class Scanner
                 foreach (PluginEntry p in found)
                 {
                     p.Order = order++;
+                    p.StartEarly |= folderEarly || folderBlocking;
+                    p.BlockingStart |= folderBlocking;
                     p.RequiredItems.AddRange(required);
                     if (offBuild != null && p.State == PluginState.Pending)
                         p.Stop(PluginState.Skipped, $"{offBuild} build: this game has the {GameState.BuildName} (keel.ini)");
@@ -94,14 +94,14 @@ internal static class Scanner
         return all;
     }
 
-    private static List<PluginEntry> ScanDll(string dll, ModFolder folder, StartupTiming folderTiming, Action<string> warn, IAssemblyResolver resolver)
+    private static List<PluginEntry> ScanDll(string dll, ModFolder folder, Action<string> warn, IAssemblyResolver resolver)
     {
         var result = new List<PluginEntry>();
         try
         {
             using var stream = new MemoryStream(File.ReadAllBytes(dll));
             using ModuleDefinition module = ModuleDefinition.ReadModule(stream, new ReaderParameters { ReadSymbols = false, AssemblyResolver = resolver });
-            var timing = folderTiming == StartupTiming.Blocking ? folderTiming : EarlyStart.AssemblyTiming(module.Assembly) ?? folderTiming;
+            bool dllBlocking = EarlyStart.AssemblyBlocks(module.Assembly), dllEarly = dllBlocking || EarlyStart.AssemblyAsks(module.Assembly);
             foreach (TypeDefinition type in module.GetTypes())
             {
                 if (!type.IsClass || type.IsAbstract || !type.HasCustomAttributes)
@@ -135,8 +135,8 @@ internal static class Scanner
                 entry.AssemblyName = module.Assembly.Name.Name;
                 entry.TypeName = type.FullName.Replace('/', '+');
                 entry.Folder = folder;
-                entry.StartEarly = timing != StartupTiming.AnchorChain;
-                entry.BlockingStart = timing == StartupTiming.Blocking;
+                entry.StartEarly = dllEarly;
+                entry.BlockingStart = dllBlocking;
                 result.Add(entry);
             }
         }
@@ -336,4 +336,48 @@ internal sealed class Manifest
         bool forFlat = flat.Contains(rel) || flat.Contains(Path.GetFileName(dll));
         return forFlat && !forGlobe ? "Flat map" : null;
     }
+}
+
+/// <summary>
+/// The scan Keel makes from the disk's mod list before the game's first frame, to see whether a mod asks to start early.
+/// When the game's own list later turns on the same folders in the same order, the scan is used as it is (each DLL is read once);
+/// its warnings and left-out DLLs are passed on only then, so nothing is reported twice.
+/// </summary>
+internal sealed class EarlyScan
+{
+    public List<PluginEntry> Plugins;
+    private List<ModFolder> folders;
+    private readonly List<string> warnings = new();
+    private readonly List<SkippedDll> skipped = new();
+
+    public static EarlyScan Of(List<ModFolder> enabled, params string[] searchDirs)
+    {
+        var scan = new EarlyScan { folders = enabled };
+        scan.Plugins = Scanner.Scan(enabled, scan.warnings.Add, scan.skipped, searchDirs);
+        return scan;
+    }
+
+    /// <summary>The plugins for <paramref name="enabled"/>, bound to its folders; null when the scan saw other folders.</summary>
+    public List<PluginEntry> UseFor(List<ModFolder> enabled, Action<string> warn, List<SkippedDll> skippedOut)
+    {
+        if (enabled.Count != folders.Count || enabled.Where((f, i) => !SamePath(f.Path, folders[i].Path)).Any())
+            return null;
+        // The game's list has its own folder objects: the plugins point at those from now on.
+        foreach (PluginEntry p in Plugins)
+            p.Folder = Rebind(p.Folder, enabled);
+        foreach (SkippedDll d in skipped)
+            d.Folder = Rebind(d.Folder, enabled);
+        warnings.ForEach(warn);
+        skippedOut.AddRange(skipped);
+        return Plugins;
+    }
+
+    private ModFolder Rebind(ModFolder f, List<ModFolder> enabled)
+    {
+        int i = f == null ? -1 : folders.IndexOf(f);
+        return i < 0 ? f : enabled[i];
+    }
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals((a ?? "").TrimEnd('\\', '/'), (b ?? "").TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 }

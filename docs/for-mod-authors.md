@@ -62,42 +62,57 @@ DLLs not named there are scanned as usual. Without `keel.ini` every DLL is scann
 
 ## Start early (opt-in)
 
-The default is Anchor Chain timing. Keel checks the game’s live directories in
-`Awake`. If the enabled Keel folder or a standalone Anchor Chain loader is visible,
-default plugins start before that call returns. Otherwise Keel waits for unit data and a load
-screen reading `Done`, then checks immediately and every 0.5 seconds for up to
-60 seconds. Compatibility checks and dependency order still apply. A default
-plugin that needs an early plugin waits until that prerequisite has started.
+On the 3D globe build Keel starts mods after the game's start-up load screen (mods started during it can keep the unit data
+from loading or crash in Noesis). If your mod is safe there and needs to run while the game loads, ask for it. Either one:
 
-Choose early timing if your mod can
-start before the game's startup services and UI are ready. Defer
-scene-dependent work until Unity loads a scene.
+- **`_info.ini`** of your mod folder (every plugin in the folder):
+  ```ini
+  [Keel]
+  StartEarly=true
+  ```
+- **Your DLL** (every plugin in it), no reference to Keel needed:
+  ```csharp
+  [assembly: System.Reflection.AssemblyMetadata("Keel.StartEarly", "true")]
+  ```
 
-Set `LoadTiming=Early` under `[Keel]` in `_info.ini` to apply it to the folder.
-`LoadTiming=AnchorChain` explicitly selects the default. To set timing for a
-particular DLL, use assembly metadata:
+- **What happens:** your mod starts as soon as Keel has checked it, in the game's first frames, one mod per frame next to the game
+  (the game does not wait for it); every other mod still waits for the load screen.
+- **Right before the first load screen (blocking start):** the game's own start-up holds the main thread for seconds before its
+  first frame, so a frame-based start cannot be earlier than the load screen itself. A mod that must run before it shows its first
+  picture (it replaces the pictures) adds one more key, in `_info.ini` (`BlockingStart=true`, same `[Keel]` section) or in the DLL
+  (`[assembly: System.Reflection.AssemblyMetadata("Keel.BlockingStart", "true")]`); it implies `StartEarly`. Keel starts such a mod at
+  the moment the game calls `LoadScreen.ExecuteLoadScreen` for the first time, and **the game waits until it is done**: ask for it
+  only when you need it, and keep its start short. (Unity's API belongs to the main thread, so the wait cannot be moved elsewhere.)
+- **Dependencies:** a mod that needs (or must load after) a mod that waits starts with the others; the report says why.
+- **Seen in the report and log:** "Started before the load screen ended (the mod asked for it): ...".
+- **Load-screen hooks:** an early mod sees the real end of the load screen (Keel does not call its postfix again).
 
-```csharp
-[assembly: System.Reflection.AssemblyMetadata("Keel.LoadTiming", "Early")]
-```
+## Prepare data during the splash (opt-in)
 
-DLL timing overrides folder timing unless either requests a blocking start. The older `StartEarly=true`
-flag is still supported. Keel dispatches early mods when BepInEx finishes starting
-its plugins, with Unity's first `Start` callback as a fallback. It checks
-enabled mods and plans their load order before calling the regular plugin entry
-point. An early plugin waits for any dependency or load-before prerequisite
-scheduled at Anchor Chain timing.
-The report names that prerequisite.
+For slow work that needs nothing of the game (reading, converting or indexing your own files): Keel runs it on a worker while the
+game shows its splash, so your plugin finds it done instead of doing it on the main thread (agm-114, PR #16).
 
-Early plugins can use `Keel.GetEnabledModFolders()` to read the selected mod
-directories in load order without initializing the game's file manager.
-Their load-screen hooks see the real end of the load screen.
-
-For a mod that changes the first loading image, set `BlockingStart=true` under
-`[Keel]` or add `[assembly: System.Reflection.AssemblyMetadata("Keel.BlockingStart", "true")]`.
-Either declaration implies early timing. Keel holds the first loading screen until
-eligible blocking mods have started. A blocker with an ordinary early prerequisite
-starts in the ordinary early phase.
+- **Ask for it** in `_info.ini`:
+  ```ini
+  [Keel]
+  Prepare=MyMod.Prepare.dll
+  ```
+  - the file sits at the top of your mod folder (no subfolder)
+  - Keel reads only this key: no other DLL runs this way, whatever its name
+- **The DLL** has one public static method:
+  ```csharp
+  public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)
+  ```
+  - `report("Indexing 1200 voices")` shows a line in Keel's loading window; `report(null)` clears it
+  - it must not reference Unity, the game, BepInEx, Harmony, Anchor Chain or Keel: it runs off the main thread, before they are ready
+  - keep it in its own small DLL, apart from your plugin
+- **Your plugin waits for it** with `Keel.WhenPrepared(<your mod folder>)`: a `Task` that is done when the preparation finished, failed
+  or was skipped (done at once without one). Check `IsCompleted` in `Update`; never block the main thread on it.
+- **One after another:** preparations run one at a time, in mod-list order, on one worker.
+- **A crash during it:** if the game dies while your preparation runs, Keel names it at the next start and skips it until your mod is
+  updated (`BepInEx\Keel-prepare.txt`; off with `HoldOutCrashers=false`). Your plugin still starts; `WhenPrepared` is done at once.
+- **Your own progress:** a mod that draws its own start-up progress calls `Keel.HandOffStartupWindow()`; Keel's loading window then
+  hides and comes back as the summary card when Keel is done.
 
 ## Required Workshop items
 
@@ -150,25 +165,27 @@ using (plugin.BeginActivity(ActivityKind.SettingsRebuild, "Advanced page", "Refr
 }
 ```
 
-`PluginActivity` binds ownership once. `BeginActivity` accepts a typed operation
-and `params string[]` diagnostic details; a mod-specific enum is accepted too.
-`ActivityContext` is the concrete owner/operation contract for lower-level callers.
-Tabs and line breaks remain visible as `\t`, `\r`, and `\n` in the journal;
-literal backslashes are escaped too, so these details cannot inject records.
-The old three-string overload is a compatibility adapter; new callers use the
-typed contract. The journal is flushed before the operation begins and after the scope finishes.
-Nested scopes retain both the tool and the mod that owns the callback. If native
-code ends the game without a usable stack, the watcher and next-start report can
-show the last recorded activity. This is diagnostic context, not proof of cause;
-it never holds a mod out by itself. Do not put player-entered values, credentials
-or other private data in the detail string. Mods can discover this method by
-reflection and use a no-op scope when Keel is absent or older.
+- `PluginActivity` binds the owner once; `BeginActivity` takes an `ActivityKind` (or your own enum, recorded as `Other`
+  with its name first in the detail) and any number of detail strings
+- `Keel.TrackActivity(ActivityContext)` is the same for lower-level callers
+- Never throws: a blank plugin id, an unknown kind or a `null` context gives a scope that writes nothing
+- The journal line is flushed before the operation starts and again when the scope is disposed; nested scopes keep both owners
+- Tabs, line breaks and backslashes in details are written escaped (`\t`, `\r`, `\n`, `\\`), so a detail cannot fake a record
+- Details are cut at 200 characters
+- **Meant for rare operations** (a settings page rebuild, a menu action, a scene change), not per-frame code:
+  - Keel writes at most 20 activities per second and 5000 per game session; past that a scope writes nothing
+  - the crash report shows only the last 32 anyway
+- If native code ends the game without a usable stack, the watcher and the next start's report show the last activity
+  - context only, not proof of cause: it never holds a mod out by itself
+- No player-entered values, credentials or other private data in a detail
+- Keel absent or older: find the method by reflection and use a no-op scope
 
-For tooling, `Keel.GetUiState()` returns a concrete `KeelUiState` with `Version`,
-`StartupComplete`, `ReportOpen`, and `WaitingFor` properties. `SetReportOpen(bool)` controls
-the report, and `GetReport()` returns its current text. Call these on the game's
-main thread. A tool should keep inspection available and block UI-changing
-actions while startup is incomplete or the report is open.
+For tools (call on the game's main thread):
+
+- `Keel.GetUiState()` returns a `KeelUiState`: `Version`, `StartupComplete`, `ReportOpen`, `WaitingFor`
+- `Keel.SetReportOpen(bool)` opens or closes the report window (several calls in one frame all count)
+- `Keel.GetReport()` returns the report text, without writing `Keel-report.txt`
+- Keep inspection available, block UI-changing actions while startup is incomplete or the report is open
 
 Keel starts plugins one at a time. One that throws while starting is marked `FAILED` and the next one starts. Exceptions
 your mod throws later (from `Update`, Harmony patches ...) are counted against it by its namespaces in the stack trace and

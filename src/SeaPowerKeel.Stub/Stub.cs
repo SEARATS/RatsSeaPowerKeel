@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
-using UnityEngine;
 
 namespace SeaPowerKeel.Stub;
 
 /// <summary>
 /// The only part of R.A.T.S. Keel that goes into <c>BepInEx\plugins</c>. It finds <c>SeaPowerKeel.dll</c> in the game's
-/// enabled mod folders (newest version wins) and starts it. It also finds startup preparation DLLs during the splash.
+/// enabled mod folders (newest version wins) and starts it. It knows nothing about the game, so it is the same file for
+/// every game build and should never need replacing: the loader itself comes and updates through the Workshop.
 /// </summary>
-[BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.1.0")]
+[BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.0.0")]
 public class Stub : BaseUnityPlugin
 {
     public const string Guid = KeelNames.StubGuid;
@@ -58,9 +58,7 @@ public class Stub : BaseUnityPlugin
                 Logger.LogError($"{pick.path} has no {LoaderType}.Boot: not a Keel loader this stub can start.");
                 return;
             }
-            void Prepare(Action<string> report) => StartupPreparation.Queue(Application.version,
-                Application.streamingAssetsPath, ModFolders.WorkshopRoot, ModFolders.UserSettings, report, Logger);
-            PreparationDll.DuringBoot(() => boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path }), Prepare);
+            boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path });
         }
         catch (Exception ex)
         {

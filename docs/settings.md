@@ -7,7 +7,7 @@
 | `Loading.AnchorChainMods` | `true` | Start Anchor Chain mods (Keel runs them itself) |
 | `Loading.TakeOver` | `true` | While Keel is on, other mod loaders do not start ([Takeover](how-it-works.md#takeover)); `false`: an installed other loader starts its mods and Keel leaves those to it |
 | `Loading.GameVersionCheck` | `Standard` | `Standard`: leave out DLLs that would stop missions from loading, warn about the rest; `Strict`: leave out any DLL with a missing part (also a missing Harmony patch target or by-name lookup); `Off` |
-| `Loading.RemoveBrokenPatches` | `true` | When the game throws 'Method not found' / 'Field not found' because a mod's Harmony patch uses something this build lacks, Keel takes that mod's patch off the failing game method again and names the mod; `false`: Keel only names the mod |
+| `Loading.RemoveBrokenPatches` | `true` | For missing methods, fields or types, remove the mod's patches from the innermost failing method when the preflight findings and stack identify one owner and target; `false`: only name the mod. Other patches stay installed. |
 | `Loading.HoldOutCrashers` | `true` | Keep out a mod that took the game down, until it is updated; `false`: Keel only names it |
 | `Loading.DisabledPlugins` | empty | Plugin ids Keel does not start although their folder is on |
 | `Logging.TimestampedLog` | `true` | Write `BepInEx\Keel-log.txt` with times and the mod each exception came from |
@@ -23,4 +23,4 @@
 | `Loading window.Opacity` | `0.92` | 0.4 to 1 |
 | `Loading window.SecondsAfterLastMod` | `2` | The full window stays this long after every mod has started, then glides to the corner |
 | `Loading window.LongestSeconds` | `300` | The full window is done this long after the game process started, whatever happens |
-| `Loading window.ClickHides` | `true` | A click hides the full window; a click on the summary opens Keel's report, its x button closes it |
+| `Loading window.ClickHides` | `true` | A click hides the full window; a click on the summary opens Keel's report, its x button collapses the summary to a Keel report button, which has its own x |

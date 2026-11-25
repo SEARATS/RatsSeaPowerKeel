@@ -6,12 +6,11 @@ using System.Reflection;
 using System.Reflection.Emit;
 using AnchorChain;
 using SeaPowerKeel;
-using SeaPowerKeel.Stub;
 
 // Keel's own tests, run outside the game: dotnet run -c Release --project tools/offline-check -- --selftest <Managed> <BepInEx core>
 // The mods tested are classes of this very assembly (see the AnchorChain namespace below): the scanner reads DLLs through
 // Mono.Cecil without running them, so a copy of this DLL in a temp folder is a mod folder. Nothing of the game is started.
-internal static class SelfTest
+internal static partial class SelfTest
 {
     private enum ActivityOperation { RebuildPage }
     private static int failures, checks;
@@ -74,8 +73,6 @@ internal static class SelfTest
             Console.WriteLine("_info.ini [Compatibility], by the game's rules");
             InfoIni();
             ScannerExclusions(tmp, managed, core);
-            KeelBootCompatibility();
-            StartupPreparationChecks(tmp);
             Console.WriteLine("Scanner: Anchor Chain plugin classes must be public (exported)");
             ExportedTypes(tmp, managed, core);
             Console.WriteLine("Entry point through the interface");
@@ -103,10 +100,9 @@ internal static class SelfTest
             EuromodChecks(tmp);
             LoadScreenEndChecks();
             EarlyStartChecks();
-            AnchorTimingChecks(tmp);
-            PreparedChecks(tmp, managed, core);
             RequiredItemChecks();
             ReportFactsChecks(tmp);
+            PreparationChecks(tmp, managed, core);
         }
         finally
         {
@@ -115,82 +111,6 @@ internal static class SelfTest
         Console.WriteLine();
         Console.WriteLine($"{checks - failures} of {checks} checks passed" + (failures > 0 ? $", {failures} FAILED" : ""));
         return failures > 0 ? 1 : 0;
-    }
-
-    private static void KeelBootCompatibility()
-    {
-        var boot = typeof(Keel).GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
-        Check(boot?.ReturnType == typeof(void) && boot.GetParameters().Select(parameter => parameter.ParameterType)
-            .SequenceEqual(new[] { typeof(string), typeof(string) }), "the original stub can resolve public static void Boot(string, string)");
-
-        int starts = 0;
-        var reports = new List<string>();
-        void Prepare(Action<string> report) => report("prepared");
-        void OldLoader() => starts++;
-        void NewLoader()
-        {
-            starts++;
-            PreparationDll.RunIfAvailable(reports.Add);
-        }
-
-        OldLoader();
-        NewLoader();
-        Check(starts == 2 && reports.Count == 0, "the old stub can boot both loaders without a preparation callback");
-        PreparationDll.DuringBoot(OldLoader, Prepare);
-        Check(starts == 3 && reports.Count == 0, "the new stub can boot the old loader without requiring it to prepare");
-        PreparationDll.DuringBoot(NewLoader, Prepare);
-        Check(starts == 4 && reports.SequenceEqual(new[] { "prepared" }), "the new loader can use the new stub's callback during Boot");
-        PreparationDll.RunIfAvailable(reports.Add);
-        Check(reports.Count == 1, "the callback is cleared after Boot returns");
-        var failure = new InvalidOperationException("test boot failure");
-        bool propagated = false;
-        try { PreparationDll.DuringBoot(() => throw failure, Prepare); }
-        catch (InvalidOperationException error) when (ReferenceEquals(error, failure)) { propagated = true; }
-        Check(propagated, "a failed loader still reports the boot error to the stub");
-        NewLoader();
-        Check(starts == 5 && reports.Count == 1, "a failed boot clears the callback before the next loader starts");
-    }
-
-    private static void StartupPreparationChecks(string tmp)
-    {
-        string folder = Path.Combine(tmp, "preparation");
-        string nested = Path.Combine(folder, "nested");
-        Directory.CreateDirectory(nested);
-        string first = Path.Combine(folder, "a.Preloader.dll");
-        string second = Path.Combine(nested, "b.PRELOADER.DLL");
-        string broken = Path.Combine(folder, "bad.Preloader.dll");
-        File.WriteAllText(broken, "not a managed DLL");
-        File.WriteAllText(Path.Combine(folder, "AnchorChain.Preloader.dll"), "");
-        File.WriteAllText(Path.Combine(folder, "regular.dll"), "");
-        Build(first, "First", "first");
-        Build(second, "Second", "second");
-        var found = StartupPreparation.Candidates(folder).ToArray();
-        Check(found.SequenceEqual(new[] { first, broken, second }), "startup preparation finds every matching DLL, including nested files");
-        var reports = new List<string>();
-        var log = new BepInEx.Logging.ManualLogSource("Startup preparation self-test");
-        foreach (string dll in found)
-            StartupPreparation.RunFile(dll, folder, new[] { folder }, text => { if (text != null) reports.Add(text); }, log);
-        Check(reports.SequenceEqual(new[] { "first", "second" }), "both startup callbacks run even when an earlier DLL is invalid");
-
-        static void Build(string path, string name, string result)
-        {
-            using var assembly = Mono.Cecil.AssemblyDefinition.CreateAssembly(
-                new Mono.Cecil.AssemblyNameDefinition(name, new Version(1, 0)), name, Mono.Cecil.ModuleKind.Dll);
-            var module = assembly.MainModule;
-            var type = new Mono.Cecil.TypeDefinition("Fixture", "Startup", Mono.Cecil.TypeAttributes.Public, module.TypeSystem.Object);
-            module.Types.Add(type);
-            var method = new Mono.Cecil.MethodDefinition("Prepare", Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.Static, module.TypeSystem.Void);
-            type.Methods.Add(method);
-            method.Parameters.Add(new Mono.Cecil.ParameterDefinition(module.TypeSystem.String));
-            method.Parameters.Add(new Mono.Cecil.ParameterDefinition(new Mono.Cecil.ArrayType(module.TypeSystem.String)));
-            method.Parameters.Add(new Mono.Cecil.ParameterDefinition(module.ImportReference(typeof(Action<string>))));
-            var il = method.Body.GetILProcessor();
-            il.Emit(Mono.Cecil.Cil.OpCodes.Ldarg_2);
-            il.Emit(Mono.Cecil.Cil.OpCodes.Ldstr, result);
-            il.Emit(Mono.Cecil.Cil.OpCodes.Callvirt, module.ImportReference(typeof(Action<string>).GetMethod("Invoke")));
-            il.Emit(Mono.Cecil.Cil.OpCodes.Ret);
-            assembly.Write(path);
-        }
     }
 
     private static void LoadOrderWarnings()
@@ -253,11 +173,12 @@ internal static class SelfTest
         void Acf(long ta) => File.WriteAllText(acf, "\"AppWorkshop\"\n{\n\t\"appid\"\t\t\"1286220\"\n\t\"WorkshopItemsInstalled\"\n\t{\n\t\t\"111\"\n\t\t{\n\t\t\t\"size\"\t\t\"1\"\n\t\t\t\"timeupdated\"\t\t\"" + ta + "\"\n\t\t}\n\t}\n\t\"WorkshopItemDetails\"\n\t{\n\t\t\"222\"\n\t\t{\n\t\t\t\"timeupdated\"\t\t\"5\"\n\t\t}\n\t}\n}\n");
         Acf(1794001000);
         Check(WhatsNew.SteamTimes(ws).TryGetValue(111, out long t1) && t1 == 1794001000 && !WhatsNew.SteamTimes(ws).ContainsKey(222), "Steam's timeupdated is read for installed items only");
-        Check(WhatsNew.NameOf(a) == "Alpha Mod", "the mod's English name from _info.ini");
 
         var fa = new ModFolder { Path = a, Name = "111", SteamId = 111, Enabled = true };
         var fb = new ModFolder { Path = b, Name = "222", SteamId = 222, Enabled = true };
         var fl = new ModFolder { Path = local, Name = "MyLocal", Enabled = true };
+        Check(fa.Title == "Alpha Mod" && fa.Label == "Alpha Mod (Workshop 111)", "the report names the English Workshop package and its item ID");
+        Check(fb.Label == "Workshop 222" && fl.Label == "MyLocal", "unnamed Workshop packages and local folders keep their identifiers");
         PluginEntry Plug(ModFolder f, string guid, string v, PluginState s) => new() { Guid = guid, Name = guid, Folder = f, Version = new Version(v), State = s };
 
         var first = new List<ModFolder> { fa, fb, fl };
@@ -427,7 +348,7 @@ internal static class SelfTest
             $"activity-end\ta\t{ticks + 1}");
         Check(completeUi.Activities.Single().Ended == ticks + 1 && CrashText.ActivityHint(completeUi).Contains("completed"),
             "completed UI work is distinguished from an interrupted callback");
-        Check(CrashText.CrashFileText("x", null, null, "main-menu", null, activeUi.Activities)
+        Check(CrashText.CrashFileText(activeUi, null)
             .Contains("not proof of cause") && CrashText.ActivityHint(activeUi).Contains("my.settings"),
             "an empty native crash record still includes the last settings owner as diagnostic context");
         Check(V("session\tx", "activity\tbroken", "activity-end\tbroken", "activity\ta\t-1\tx\ty\tz").Activities.Count == 0,
@@ -454,9 +375,41 @@ internal static class SelfTest
         }
         finally { Keel.ActivityJournal = previousJournal; }
         var boundActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile))).Activities.Last();
-        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.GameAction)
+        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.Other)
             && boundActivity.Detail == "ActivityOperation.RebuildPage Advanced RefreshSeconds" && boundActivity.Ended > 0,
-            "plugin-bound activities accept a mod-specific enum and params details without repeating the owner");
+            "plugin-bound activities accept a mod-specific enum (kept as Other) and params details without repeating the owner");
+        int linesBeforeBlank = CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count();
+        bool blankThrew = false;
+        try
+        {
+            Keel.ActivityJournal = activityWriter;
+            using (Keel.ForPlugin(new PluginId("  ")).BeginActivity(ActivityKind.UiInput, "x")) { }
+            using (Keel.TrackActivity(new ActivityContext(new PluginId(null), (ActivityKind)99))) { }
+            using (Keel.TrackActivity(null)) { }
+        }
+        catch (Exception) { blankThrew = true; }
+        finally { Keel.ActivityJournal = previousJournal; }
+        Check(!blankThrew && CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count() == linesBeforeBlank,
+            "a blank owner, an unknown kind or no context gives an empty scope: no exception, nothing written");
+        Check(new ActivityContext(new PluginId("x"), (ActivityKind)99).Kind == ActivityKind.Other, "an unknown activity kind is kept as Other");
+
+        string limitDir = Path.Combine(tmp, "activitylimit");
+        Directory.CreateDirectory(limitDir);
+        var limited = new CrashGuard(limitDir, null) { ActivitiesPerSession = 3 };
+        for (int i = 0; i < 10; i++)
+            using (limited.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction, new string('d', 300)))) { }
+        var limitLines = CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile)).ToList();
+        var limitJournal = CrashText.ReadJournal(limitLines);
+        Check(limitJournal.Activities.Count == 3 && limitLines.Count(l => l.StartsWith("activity-limit\t", StringComparison.Ordinal)) == 1,
+            "past the session limit activities write nothing more, and the limit is noted once");
+        Check(limitJournal.Activities[0].Detail.Length == 203, "a long activity detail is cut to 200 characters");
+        var perSecond = new CrashGuard(limitDir, null) { ActivitiesPerSecond = 2 };
+        int before = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count;
+        for (int i = 0; i < 10; i++)
+            using (perSecond.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction))) { }
+        int written = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count - before;
+        Check(written is >= 2 and <= 4, "a burst within one second writes at most the per-second limit");
+        perSecond.Mark("quit", "");
         activityWriter.Mark("done", "");
         var contextRun = new CrashGuard(activityDir, null);
         var contextMod = new PluginEntry { Guid = "my.settings", Name = "Settings", TypeName = "MySettings.Plugin", Dll = "missing.dll" };
@@ -468,7 +421,7 @@ internal static class SelfTest
 
         string concurrentDir = Path.Combine(tmp, "concurrentactivity");
         Directory.CreateDirectory(concurrentDir);
-        var concurrent = new CrashGuard(concurrentDir, null);
+        var concurrent = new CrashGuard(concurrentDir, null) { ActivitiesPerSecond = 1000 };
         System.Threading.Tasks.Parallel.For(0, 64, index =>
         {
             using (concurrent.BeginActivity(new ActivityContext(new PluginId("parallel"), ActivityKind.GameAction, index.ToString()))) { }
@@ -476,6 +429,13 @@ internal static class SelfTest
         var concurrentJournal = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile)));
         Check(concurrentJournal.Activities.Count == 32 && concurrentJournal.Activities.All(item => item.Ended > 0),
             "concurrent callbacks leave complete journal records through the semaphore");
+        var shared = concurrent.BeginActivity(new ActivityContext(new PluginId("shared"), ActivityKind.GameAction));
+        System.Threading.Tasks.Parallel.For(0, 64, _ => shared.Dispose());
+        var sharedLines = CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile));
+        Check(sharedLines.Count(line => line.StartsWith("activity-end\t", StringComparison.Ordinal)) == 65,
+            "concurrent disposal writes one completion per scope");
+        Check(V($"activity\ta\t{ticks}\tx\ty\tz", "activity-end\ta\t-1").Activities.Single().Ended == 0,
+            "a damaged completion timestamp leaves the activity open");
         concurrent.Mark("quit", "");
 
         Check(CrashText.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
@@ -589,63 +549,13 @@ internal static class SelfTest
         Check(ModSetups.ReadSubmods(ModSetups.SetSubmod("; note\n", "euromod.extended-guidance", true))["euromod.extended-guidance"], "what the button writes reads back as on");
     }
 
-    private static void PreparedChecks(string tmp, string managed, string core)
-    {
-        string file = Path.Combine(tmp, "warm.dll");
-        using (var module = Mono.Cecil.ModuleDefinition.CreateModule("Warm", Mono.Cecil.ModuleKind.Dll))
-            module.Write(file);
-        string missing = file + ".missing";
-        var batch = Preflight.Prepared.Start(managed, core, new[] { missing, file }).GetAwaiter().GetResult();
-        Check(batch.For(file) != null && batch.For(missing) == null, "a missing DLL does not discard other prepared checks");
-        var stamp = File.GetLastWriteTimeUtc(file);
-        byte[] bytes = File.ReadAllBytes(file);
-        bytes[^1] ^= 1;
-        File.WriteAllBytes(file, bytes);
-        File.SetLastWriteTimeUtc(file, stamp);
-        Check(batch.For(file) == null, "replacement bytes invalidate the prepared result even at the same length and timestamp");
-    }
-
-    private static void AnchorTimingChecks(string tmp)
-    {
-        var folder = Directory.CreateDirectory(Path.Combine(tmp, "standalone"));
-        Check(!AnchorChainStartup.HasStandaloneLoader(new[] { folder }), "an empty game directory does not supply a loader");
-        var nested = folder.CreateSubdirectory("nested");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "AnchorChain.keel.bin"), Path.Combine(nested.FullName, "AnchorChain.dll"));
-        Check(AnchorChainStartup.HasStandaloneLoader(new[] { folder }), "a standalone loader nested in a live directory is discoverable");
-        int probes = 0;
-        float now = 0;
-        var immediate = AnchorChainStartup.Discover(() => ++probes == 1, () => now);
-        Check(!immediate.Any() && probes == 1, "Anchor Chain discovers the loader before the first yield");
-
-        probes = 0;
-        using var late = AnchorChainStartup.Discover(() => ++probes == 3, () => now).GetEnumerator();
-        Check(late.MoveNext() && late.Current == AnchorChainStartup.Wait.StartupDone && probes == 1,
-              "missing folders in Awake wait for game readiness");
-        now = 180;
-        Check(late.MoveNext() && late.Current == AnchorChainStartup.Wait.RetryFolders && probes == 2,
-              "the discovery deadline starts at readiness even after a long game load");
-        now += AnchorChainStartup.RetrySeconds;
-        Check(!late.MoveNext() && probes == 3, "folder retry starts immediately when discovery succeeds");
-
-        probes = 0;
-        using var missing = AnchorChainStartup.Discover(() => { probes++; return false; }, () => now).GetEnumerator();
-        missing.MoveNext();
-        missing.MoveNext();
-        now += 60;
-        Check(!missing.MoveNext() && probes == 2, "discovery ends at the deadline without a further attempt");
-    }
-
     private static void EarlyStartChecks()
     {
         Console.WriteLine("Start early: a mod that asks for it starts before the load screen ends");
-        Check(EarlyStart.InInfoIni("[Language_en]\nStartEarly=true\n") == null &&
-              EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") == StartupTiming.AnchorChain &&
-              EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n") == StartupTiming.Early,
-              "the legacy start-early flag still works in the Keel section");
-        Check(EarlyStart.InInfoIni("[Keel]\nLoadTiming=Early\n") == StartupTiming.Early &&
-              EarlyStart.InInfoIni("[Keel]\nLoadTiming=AnchorChain\nStartEarly=true\n") == StartupTiming.AnchorChain &&
-              EarlyStart.InInfoIni("[Keel]\nLoadTiming=unknown\n") == null,
-              "explicit timing overrides the legacy flag and invalid timing keeps the default");
+        // Start early (opt-in, rgreat 2026-11-12): _info.ini [Keel] StartEarly=true; a mod that needs a late one waits too.
+        Check(EarlyStart.InInfoIni("[Language_en]\nName=X\n\n[Keel]\nStartEarly=true\n") && !EarlyStart.InInfoIni("[Language_en]\nStartEarly=true\n")
+              && !EarlyStart.InInfoIni("[Keel]\nStartEarly=false\n") && EarlyStart.InInfoIni("[keel]\r\nstartearly = TRUE ; yes\r\n"),
+              "start early: only [Keel] StartEarly=true counts (any case, comments allowed)");
         var eA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true };
         var eB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true };
         eB.Dependencies.Add(new Dependency { Guid = "c" });
@@ -657,34 +567,9 @@ internal static class SelfTest
         var earlySet = EarlyStart.Set(new List<PluginEntry> { eA, eB, eC, eD, eE }, (p, why) => whyLate.Add(p.Guid));
         Check(earlySet.SetEquals(new[] { eA }) && whyLate.Count == 2,
               "start early: A early; B waits (needs C, which waits); D waits (E must load before it)");
-        var earlyAlias = new PluginEntry { Guid = "early", StartEarly = true };
-        earlyAlias.AlsoKnownAs.Add("legacy");
-        var normal = new PluginEntry { Guid = "normal" };
-        normal.Dependencies.Add(new Dependency { Guid = "legacy", Hard = true });
-        var phases = new List<PluginEntry> { earlyAlias, normal };
-        Check(EarlyStart.Set(phases, null).SetEquals(new[] { earlyAlias }),
-            "normal timing is the default and an early plugin can satisfy a later dependency");
-        var transitive = new PluginEntry { Guid = "transitive" };
-        transitive.Dependencies.Add(new Dependency { Guid = "normal", Hard = true });
-        Check(EarlyStart.Eligible(new[] { eC, earlyAlias, normal, transitive }, p => !p.StartEarly).SetEquals(new[] { eC }),
-            "Awake starts only default plugins independent of pending early prerequisites");
-        earlyAlias.State = PluginState.Running;
-        Check(Planner.Replan(phases, new HashSet<string>()).SequenceEqual(new[] { normal }),
-            "the normal phase retains an early dependency that started under an alternate GUID");
-
-        Check(EarlyStart.InInfoIni("[Keel]\nLoadTiming=Early\nBlockingStart=true") == StartupTiming.Blocking,
-              "blocking requests take precedence over ordinary early timing");
-        using (var assembly = Mono.Cecil.AssemblyDefinition.CreateAssembly(
-                   new Mono.Cecil.AssemblyNameDefinition("Screen", new Version(1, 0)), "Screen", Mono.Cecil.ModuleKind.Dll))
-        {
-            var module = assembly.MainModule;
-            var ctor = typeof(AssemblyMetadataAttribute).GetConstructor(new[] { typeof(string), typeof(string) });
-            var flag = new Mono.Cecil.CustomAttribute(module.ImportReference(ctor));
-            flag.ConstructorArguments.Add(new Mono.Cecil.CustomAttributeArgument(module.TypeSystem.String, "Keel.BlockingStart"));
-            flag.ConstructorArguments.Add(new Mono.Cecil.CustomAttributeArgument(module.TypeSystem.String, "true"));
-            assembly.CustomAttributes.Add(flag);
-            Check(EarlyStart.AssemblyTiming(assembly) == StartupTiming.Blocking, "DLL-only blocking timing survives discovery");
-        }
+        Check(EarlyStart.InInfoIni("[Keel]\nBlockingStart=true\n", EarlyStart.BlockingInfoKey) && !EarlyStart.InInfoIni("[Keel]\nStartEarly=true\n", EarlyStart.BlockingInfoKey)
+              && !EarlyStart.InInfoIni("[Keel]\nBlockingStart=true\n"),
+              "blocking start: only [Keel] BlockingStart=true counts for it, and it is not a plain StartEarly");
         var bA = new PluginEntry { Guid = "a", Name = "A", StartEarly = true, BlockingStart = true };
         var bB = new PluginEntry { Guid = "b", Name = "B", StartEarly = true, BlockingStart = true };
         bB.Dependencies.Add(new Dependency { Guid = "c" });
@@ -693,6 +578,14 @@ internal static class SelfTest
         var plainSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null);
         Check(blockSet.SetEquals(new[] { bA }) && plainSet.SetEquals(new[] { bA, bB, bC }),
               "blocking start: A blocks; B needs C, which does not block, so B starts early without holding the game; all three start early");
+        string nowhere = Path.Combine(Path.GetTempPath(), "keel-selftest-nowhere");
+        var diskFolder = new ModFolder { Path = nowhere + Path.DirectorySeparatorChar, Name = "x", Enabled = true };
+        EarlyScan early = EarlyScan.Of(new List<ModFolder> { diskFolder });
+        var gameFolder = new ModFolder { Path = nowhere.ToUpperInvariant(), Name = "x", Enabled = true };
+        var otherFolder = new ModFolder { Path = nowhere + "-other", Name = "y", Enabled = true };
+        Check(early.UseFor(new List<ModFolder> { otherFolder }, _ => { }, new List<SkippedDll>()) == null
+              && early.UseFor(new List<ModFolder> { gameFolder }, _ => { }, new List<SkippedDll>()) != null,
+              "early scan: used again only when the game's list turns on the same folders");
     }
 
     private static void RequiredItemChecks()
@@ -925,7 +818,7 @@ internal static class SelfTest
         File.WriteAllText(shut, "lots\nInput System module state changed to: ShutdownInProgress.\nInput System polling thread exited.\nInput System module state changed to: Shutdown.\n");
         File.WriteAllText(cut, "lots\n[Info : Mod] starting\n");
         Check(CrashText.LogEndedNormally(shut) && !CrashText.LogEndedNormally(cut) && !CrashText.LogEndedNormally(Path.Combine(tmp, "none.log")), "a normal Unity shutdown is told from a log that just stops");
-        Check(CrashText.CrashFileText("2026-11-18 10:00:00", null, null, "Menu", null).Contains("No crash record"), "a crash text without a record says so");
+        Check(CrashText.CrashFileText(new CrashText.Journal { Began = "2026-11-18 10:00:00", Scene = "Menu" }, null).Contains("No crash record"), "a crash text without a record says so");
 
         string dir = Path.Combine(tmp, "packcheck");
         Directory.CreateDirectory(dir);
@@ -951,6 +844,9 @@ internal static class SelfTest
         Check(r.Fatal.Any(x => x.Contains("BadResultPatch") && x.Contains("__result")), "a patch taking __result as int on a float method is caught");
         Check(r.Fatal.Any(x => x.Contains("BadArgumentPatch")), "a patch taking a float argument as int is caught");
         Check(!r.Fatal.Any(x => x.Contains("GoodPatch")), "patches that fit, or take object, are left alone");
+        Check(r.Lookups.Where(x => x.Contains("::SmoothDamp(")).SequenceEqual(
+            new[] { "UnityEngine.Mathf::SmoothDamp(Single, Single, Single, Single, Single)" }),
+            "ref arguments select the matching overload and a missing by-value overload is still reported");
 
         string ini = Path.Combine(tmp, "packoff.ini");
         File.WriteAllText(ini, "Mod1Directory=77,True,77\r\nMod2Directory=88,True,88\r\n");
@@ -969,9 +865,31 @@ internal static class SelfTest
         Check(Runner.MissingKey("MissingFieldException: Field not found: SeaPower.ObjectBase SeaPower.AI._objectToDestroy Due to: Could not find field in class") == "SeaPower.AI::_objectToDestroy",
               "the same message on ONE line (as Unity logs it, with 'Due to: ...' after it) -> SeaPower.AI::_objectToDestroy");
         Check(Runner.MissingKey("NullReferenceException: Object reference not set") == null, "another exception gives no member");
-        var patched = Runner.PatchedMethodsIn("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
-        Check(patched.Count == 1 && patched[0].type == "SeaPower.GameMain" && patched[0].method == "FixedUpdate", "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
-        Check(Runner.PatchedMethodsIn("at SomeMod.Thing.Run ()").Count == 0, "a stack without a patched method gives none");
+        Check(Runner.MissingKey("TypeLoadException: Could not resolve type with token 010000b7 from typeref (expected class 'World' in assembly 'Seapower-Scripts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null')") == "World",
+              "the Better TacMap report's missing-type format identifies World");
+        Check(Runner.MissingKey("TypeLoadException: Could not load type 'SeaPower.Outer+Inner' from assembly 'Seapower-Scripts, Version=0.0.0.0'") == "SeaPower.Outer/Inner",
+              "the alternate missing-type format preserves nested type identity");
+        Check(Runner.MissingKey("TypeLoadException: VTable setup failed") == null, "a type error without a named missing type does not remove patches");
+        Check(Runner.JudgeStartLog(exception: true, onLiveStack: true, inTrace: true) == Runner.StartLog.Errors,
+              "a mod that catches an exception and logs it itself keeps running with errors (no rollback)");
+        Check(Runner.JudgeStartLog(exception: false, onLiveStack: true, inTrace: false) == Runner.StartLog.Errors,
+              "an error logged by game code the starting mod called counts for that mod");
+        Check(Runner.JudgeStartLog(exception: true, onLiveStack: false, inTrace: true) == Runner.StartLog.Aborted,
+              "an exception that escaped the mod's Awake (mod in the trace, not on the live stack) fails the start");
+        Check(Runner.JudgeStartLog(exception: false, onLiveStack: false, inTrace: false) == Runner.StartLog.NotItsOwn
+            && Runner.JudgeStartLog(exception: true, onLiveStack: false, inTrace: false) == Runner.StartLog.NotItsOwn,
+              "a game or Unity error without the mod's code is not blamed on the starting mod");
+        var patched = Runner.InnermostPatchedMethod("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
+        Check(patched == ("SeaPower.GameMain", "FixedUpdate"), "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
+        Check(Runner.InnermostPatchedMethod("DMD<Game::Inner>()\nDMD<Game::Outer>()") == ("Game", "Inner"),
+            "an ambiguous inner frame never falls through to an outer caller");
+        var first = new PluginEntry { Guid = "first" };
+        var sibling = new PluginEntry { Guid = "sibling" };
+        Check(Runner.PatchOwner([first, sibling], sibling.Guid) == sibling
+            && Runner.PatchOwner([first, sibling], "custom") == null
+            && Runner.PatchOwner([first], "custom") == first,
+            "a shared DLL requires a matching Harmony owner ID, while a single-plugin DLL can use a custom ID");
+        Check(Runner.InnermostPatchedMethod("at SomeMod.Thing.Run ()") == null, "a stack without a patched method gives none");
     }
 
     private static string ThisDll => typeof(SelfTest).Assembly.Location;
@@ -1530,3 +1448,10 @@ public static class BadResultPatch { public static void Postfix(ref int __result
 public static class BadArgumentPatch { public static void Prefix(int t) { } }
 [HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "Repeat")]
 public static class GoodPatch { public static void Prefix(float t, object length) { } }
+[HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "SmoothDamp", HarmonyLib.MethodType.Normal,
+    new[] { typeof(float), typeof(float), typeof(float), typeof(float) },
+    new[] { HarmonyLib.ArgumentType.Normal, HarmonyLib.ArgumentType.Normal, HarmonyLib.ArgumentType.Ref, HarmonyLib.ArgumentType.Normal })]
+public static class RefOverloadPatch { public static void Prefix() { } }
+[HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "SmoothDamp", HarmonyLib.MethodType.Normal,
+    new[] { typeof(float), typeof(float), typeof(float), typeof(float), typeof(float) })]
+public static class AbsentValueOverloadPatch { public static void Prefix() { } }

@@ -111,18 +111,21 @@ internal sealed class Preflight : IDisposable
         resolver.AddSearchDirectory(bepInExCore);
     }
 
-    // Only metadata crosses the worker boundary. Recheck the bytes before accepting a result:
-    // Workshop can replace a DLL between discovery and the game's readiness callback.
-    internal class Prepared
+    /// <summary>
+    /// The checks of the DLLs the early scan found, made on a worker while the game shows its splash (agm-114, PR #16), so the
+    /// main thread does not spend a frame per DLL later. Each result keeps a hash of the bytes it read: the Workshop can replace a
+    /// DLL in between, and a changed file is checked again on the main thread.
+    /// </summary>
+    internal sealed class Prepared
     {
         private readonly Dictionary<string, (byte[] Hash, Result Result)> checks = new(StringComparer.OrdinalIgnoreCase);
 
-        internal static Task<Prepared> Start(string managed, string core, string[] files) => Task.Run(() =>
+        internal static Task<Prepared> Start(string managedDir, string bepInExCore, string[] files) => Task.Run(() =>
         {
             var batch = new Prepared();
             try
             {
-                using var reader = new Preflight(managed, core);
+                using var reader = new Preflight(managedDir, bepInExCore);
                 using var sha = SHA256.Create();
                 foreach (string file in files)
                 {
@@ -131,19 +134,34 @@ internal sealed class Preflight : IDisposable
                         byte[] bytes = File.ReadAllBytes(file);
                         batch.checks[Path.GetFullPath(file)] = (sha.ComputeHash(bytes), reader.Check(file, bytes));
                     }
-                    catch (Exception) { } // The regular check will report unreadable or invalid DLLs.
+                    catch (Exception)
+                    {
+                        // the main thread's own check reports an unreadable DLL
+                    }
                 }
             }
-            catch (Exception) { } // Initialization failures also fall back to the regular check.
+            catch (Exception)
+            {
+                // no reader: the main thread checks every DLL as before
+            }
             return batch;
         });
 
+        /// <summary>The worker's result for <paramref name="file"/> when the file is still the same; else null.</summary>
         internal Result For(string file)
         {
-            if (!checks.TryGetValue(Path.GetFullPath(file), out var check)) return null;
-            using var sha = SHA256.Create();
-            using var input = File.OpenRead(file);
-            return sha.ComputeHash(input).SequenceEqual(check.Hash) ? check.Result : null;
+            try
+            {
+                if (!checks.TryGetValue(Path.GetFullPath(file), out var check))
+                    return null;
+                using var sha = SHA256.Create();
+                using FileStream input = File.OpenRead(file);
+                return sha.ComputeHash(input).SequenceEqual(check.Hash) ? check.Result : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
     }
 
@@ -154,6 +172,7 @@ internal sealed class Preflight : IDisposable
         if (byDll.TryGetValue(dll, out Result cached))
             return cached;
         var r = new Result();
+        byDll[dll] = r;
         using var stream = new MemoryStream(bytes ?? File.ReadAllBytes(dll));
         using ModuleDefinition mod = ModuleDefinition.ReadModule(stream, new ReaderParameters { AssemblyResolver = resolver, ReadSymbols = false });
         var classLoad = new SortedSet<string>();
@@ -180,7 +199,7 @@ internal sealed class Preflight : IDisposable
         r.ClassLoad.AddRange(classLoad);
         r.Uses.AddRange(uses.Except(classLoad));
         r.Lookups.AddRange(patches);
-        return byDll[dll] = r;
+        return r;
     }
 
     // A type, method or field of the game's own assemblies (not of the mod, the runtime or BepInEx).
@@ -333,6 +352,20 @@ internal sealed class Preflight : IDisposable
                         break;
                     case CustomAttributeArgument[] list when arg.Type.GetElementType().Name == "Type":
                         spec.Args = list.Select(x => x.Value as TypeReference).ToList();
+                        break;
+                    case CustomAttributeArgument[] modes when arg.Type.GetElementType().FullName == "HarmonyLib.ArgumentType"
+                            && modes.Length == spec.Args?.Count:
+                        for (int i = 0; i < modes.Length; i++)
+                        {
+                            TypeReference type = spec.Args[i];
+                            if (type != null)
+                                spec.Args[i] = (HarmonyLib.ArgumentType)modes[i].Value switch
+                                {
+                                    HarmonyLib.ArgumentType.Ref or HarmonyLib.ArgumentType.Out => new ByReferenceType(type),
+                                    HarmonyLib.ArgumentType.Pointer => new PointerType(type),
+                                    _ => type,
+                                };
+                        }
                         break;
                     case int kind when arg.Type.Name == "MethodType":
                         spec.Kind = (MethodKind)kind;

@@ -18,7 +18,45 @@ internal sealed class ModFolder
     public bool Enabled;
     public int Order;             // position in the game's mod list, 0 = top
 
-    public string Label => SteamId != 0 ? $"Workshop {SteamId}" : Name;
+    private string title;
+    public string Title => title ??= ReadTitle(Path) ?? "";
+    public string Label => SteamId == 0 ? Name
+        : Title.Length == 0 ? $"Workshop {SteamId}" : $"{Title} (Workshop {SteamId})";
+
+    /// <summary>The mod's own name from its _info.ini (<c>Name=</c>, English section first), or null.</summary>
+    public static string ReadTitle(string folder)
+    {
+        try
+        {
+            string ini = System.IO.Path.Combine(folder, "_info.ini");
+            if (!File.Exists(ini))
+                return null;
+            string first = null;
+            bool english = false;
+            foreach (string raw in File.ReadLines(ini))
+            {
+                string line = raw.Trim();
+                if (line.StartsWith("["))
+                {
+                    english = line.Equals("[Language_en]", StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
+                if (!line.StartsWith("Name=", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string value = line.Substring(5).Trim();
+                if (value.Length == 0)
+                    continue;
+                if (english)
+                    return value;
+                first ??= value;
+            }
+            return first;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }
 
 /// <summary>
@@ -59,14 +97,12 @@ internal static class ModFolders
 
     public static string UserSettings => System.IO.Path.Combine(PersistentDataPath, "usersettings.ini");
 
-    public static List<ModFolder> FromDisk() => FromDisk(StreamingAssetsPath, WorkshopRoot, UserSettings);
-
-    internal static List<ModFolder> FromDisk(string streamingAssets, string workshop, string settings)
+    public static List<ModFolder> FromDisk()
     {
         var found = new List<ModFolder>();
         try
         {
-            foreach (string dir in Directory.GetDirectories(streamingAssets))
+            foreach (string dir in Directory.GetDirectories(StreamingAssetsPath))
             {
                 string name = System.IO.Path.GetFileName(dir);
                 if (!GameFolders.Any(g => name.EndsWith(g, StringComparison.Ordinal)))
@@ -79,9 +115,9 @@ internal static class ModFolders
         }
         try
         {
-            if (Directory.Exists(workshop))
+            if (Directory.Exists(WorkshopRoot))
             {
-                foreach (string dir in Directory.GetDirectories(workshop))
+                foreach (string dir in Directory.GetDirectories(WorkshopRoot))
                 {
                     string name = System.IO.Path.GetFileName(dir);
                     if (ulong.TryParse(name, out ulong id))
@@ -95,7 +131,7 @@ internal static class ModFolders
         }
 
         var ordered = new List<ModFolder>();
-        foreach ((string dirName, bool on, ulong id) in ReadLoadOrder(settings))
+        foreach ((string dirName, bool on, ulong id) in ReadLoadOrder())
         {
             ModFolder match = (id != 0 ? found.FirstOrDefault(f => f.SteamId == id) : null)
                               ?? found.FirstOrDefault(f => f.Name == dirName);
@@ -112,12 +148,12 @@ internal static class ModFolders
     }
 
     /// <summary><c>[LoadOrder]</c> of usersettings.ini: <c>ModNDirectory=folder,enabled,steamId</c>.</summary>
-    private static IEnumerable<(string, bool, ulong)> ReadLoadOrder(string settings)
+    private static IEnumerable<(string, bool, ulong)> ReadLoadOrder()
     {
         string[] lines;
         try
         {
-            lines = File.ReadAllLines(settings);
+            lines = File.ReadAllLines(UserSettings);
         }
         catch (Exception)
         {

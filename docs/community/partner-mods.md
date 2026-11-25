@@ -24,6 +24,12 @@ The first official partner mods, and hopefully a lot more to come:
 - **Modern Naval Operations** (SEST Integration Pack): offered to test Keel against its ~200-item collection, invited to the Discord
   - needs: dependency and load-order checks for its collection (Wave 2), changing map shapes such as Arctic sea ice on the
     map layers (Wave 3)
+- **AGM-114's Crimean Tom mods** are available for loader and settings testing.
+  - Enable the [Crimean Tom bundle](https://steamcommunity.com/sharedfiles/filedetails/?id=3838295187) or its two standalone items,
+    [Amphibs](https://steamcommunity.com/sharedfiles/filedetails/?id=3817593811) and [Deck Tweaks](https://steamcommunity.com/sharedfiles/filedetails/?id=3799146422).
+  - Other published items include [Boat Ops](https://steamcommunity.com/sharedfiles/filedetails/?id=3817610390),
+    [UNREP](https://steamcommunity.com/sharedfiles/filedetails/?id=3817593145), [Quickload](https://steamcommunity.com/sharedfiles/filedetails/?id=3799145813)
+    and the shared [Controls & Settings](https://steamcommunity.com/sharedfiles/filedetails/?id=3839698527) library.
 - **One more mod team**: in talks, name follows
 
 - Their needs set the order of Wave 2 and 3; nothing in their mods changes without them.

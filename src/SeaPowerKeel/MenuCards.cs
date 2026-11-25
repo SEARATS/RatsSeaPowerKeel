@@ -24,6 +24,7 @@ internal sealed partial class KeelHost
     private const int CardErrorsBeforeNewsCloses = 3;      // never an error every frame
 
     private bool cardOn, cardConfirmed, cardHidden, cardFailed;
+    private bool summaryCollapsed;
     private float cardSince;
     private long cardSceneTicks;
     private Rect cardHome;                    // GUI units: where the overlay left the card (or where it would be)
@@ -128,9 +129,9 @@ internal sealed partial class KeelHost
         MeasureMenu(screenH);
         var space = new CardSpace
         {
-            X = home.x, H = home.height, NewsUp = newsUp,
+            X = home.x, H = summaryCollapsed ? 24f : home.height, NewsUp = newsUp,
             Bottom = Mathf.Min(home.yMax, screenH * VersionTextTop - 6f),
-            Width = Mathf.Max(120f, PanelRight(screenW) - 2f * home.x),
+            Width = Mathf.Min(home.width, Mathf.Max(120f, PanelRight(screenW) - 2f * home.x)),
         };
         if (!newsUp)
             return space;
@@ -153,7 +154,7 @@ internal sealed partial class KeelHost
             log.LogInfo("Menu cards: What's new splits off the Keel card.");          // a signal for tests (frames of the split)
         }
         float p = splitStart < 0f ? (space.NewsUp && !card ? 1f : 0f) : Mathf.Clamp01((now - splitStart) / SplitSeconds);
-        if (card && space.NewsUp && p < 1f)
+        if (card && !summaryCollapsed && space.NewsUp && p < 1f)
         {
             DrawSplit(p, new Rect(space.X, space.Bottom - space.H, space.Width, space.H), space.Width, space.Bottom, space.NewsH);
             return;
@@ -176,13 +177,15 @@ internal sealed partial class KeelHost
     /// <summary>The overlay sits on its spot: Keel draws the card there from now on, and tells the overlay once it has.</summary>
     private void TakeOverSummary()
     {
-        if (cardOn || cardFailed || !LoadingWindow.SummaryReady || LoadingWindow.GameDrawsSummary || !GameState.MenuUp())
-            return;
+        if (cardOn || cardFailed || !LoadingWindow.Shown || !done || !GameState.MenuUp()) return;
+        if (!LoadingWindow.SummaryReady && !LoadingWindow.OverlayGone) return;
         cardOn = true;
         cardSince = Time.realtimeSinceStartup;
         cardSceneTicks = LoadingWindow.SceneLoadedTicks;
-        cardHome = new Rect(LoadingWindow.SummaryX / guiScale, LoadingWindow.SummaryY / guiScale,
-                            LoadingWindow.SummaryW / guiScale, LoadingWindow.SummaryH / guiScale);
+        // The player can dismiss the native loading window before it publishes a summary position.
+        summaryCollapsed = !LoadingWindow.SummaryReady;
+        cardHome = summaryCollapsed ? DefaultHome() : new Rect(LoadingWindow.SummaryX / guiScale,
+            LoadingWindow.SummaryY / guiScale, LoadingWindow.SummaryW / guiScale, LoadingWindow.SummaryH / guiScale);
         cardTop = cardHome.y;
     }
 
@@ -288,6 +291,17 @@ internal sealed partial class KeelHost
     /// <summary>The Keel card: what Keel did, how long the game took, what to look at (the overlay's summary, drawn by the game).</summary>
     private void DrawSummaryCard(Rect r)
     {
+        if (summaryCollapsed)
+        {
+            // The report button has its own × too (his rule: every card closes with a visible ×); the hotkey still opens the report.
+            cardRect = new Rect(r.x, r.y, Mathf.Min(136f, r.width), r.height);
+            GUI.Box(new Rect(cardRect.x, cardRect.y, cardRect.width - 26f, cardRect.height), "Keel report", buttonStyle);
+            EnsureNewsStyles();
+            var spot = CloseSpot(cardRect);
+            GUI.Label(spot, "×", newsClose);
+            cardCloseRect = new Rect(spot.x - 4, cardRect.y, spot.width + 8, cardRect.height);
+            return;
+        }
         cardRect = r;
         if (!cardOn)
             return;
@@ -475,7 +489,7 @@ internal sealed partial class KeelHost
         GUI.Label(getItRect, "Get it", buttonStyle);
     }
 
-    /// <summary>A click on the Keel card: its × closes it, the credit opens his Steam profile, anywhere else opens the report.
+    /// <summary>A click on the Keel card: its × collapses it to a report button (whose own × closes it), the credit opens his Steam profile, anywhere else opens the report.
     /// Only the left button counts (no right click, his word 2026-11-12).</summary>
     private bool CardClick(Vector2 gui, int button)
     {
@@ -485,9 +499,17 @@ internal sealed partial class KeelHost
             return false;
         if (!FreshClick())
             return true;
+        if (summaryCollapsed)
+        {
+            if (cardCloseRect.Contains(gui))
+                cardHidden = true;          // gone for this game; Ctrl+Shift+K still opens the report
+            else
+                SetReportOpen(true);
+            return true;
+        }
         if (cardCloseRect.Contains(gui))
         {
-            cardHidden = true;
+            summaryCollapsed = true;
             return true;
         }
         if (getItItem != null && getItRect.Contains(gui))
@@ -500,8 +522,7 @@ internal sealed partial class KeelHost
             try { Application.OpenURL(Overlay.Layout.ProfileUrl); } catch (Exception) { /* no browser: nothing to do */ }
             return true;
         }
-        if (!showWindow)
-            ToggleWindow();
+        SetReportOpen(true);
         return true;
     }
 
@@ -517,6 +538,7 @@ internal sealed partial class KeelHost
 
     private float exitBottom = -1f, menuMeasuredAt = -10f, panelRight = -1f, menuMeasuredH = -1f;
     private int menuHits, menuTries;
+    private long menuSceneTicks = -1;
     private Type mainMenuType;
 
     /// <summary>The right edge of the grey menu panel in GUI units, as <see cref="MeasureMenu"/> found it.</summary>
@@ -525,20 +547,23 @@ internal sealed partial class KeelHost
     /// <summary>
     /// The lower edge of the main menu's lowest entry (EXIT) in GUI units into <see cref="exitBottom"/>, and the menu panel's right
     /// edge into <see cref="panelRight"/>: the lowest Button of the game's MainMenuView in the menu column (Noesis, by name),
-    /// measured on a size change (not every frame or second: it is slow). Else the fallback shares.
+    /// measured on a size change or a new scene, then now and then (not every frame or second). Else the fallback shares.
     /// </summary>
     private void MeasureMenu(float screenH)
     {
         float now = Time.realtimeSinceStartup, px = screenH * guiScale;
-        // Not every second: that hitched the game (~90 ms each time, the by-name type lookups). The menu moves only when the screen changes size:
-        // measure on a size change, once more 3 s after the first hit (the menu may still be settling), and retry a few times if nothing is found.
-        if (!Mathf.Approximately(menuMeasuredH, px))
+        // Once a second hitched the game (~90 ms each time, the by-name type lookups, now made once). The menu moves when the screen
+        // changes size or a scene is loaded (a Mods-menu reload builds it again): then measure, once more 3 s after the first hit (it
+        // may still be settling), retry a few times if nothing is found, and after that every 10 s, for an entry a mod adds later.
+        if (!Mathf.Approximately(menuMeasuredH, px) || menuSceneTicks != LoadingWindow.SceneLoadedTicks)
         {
             menuMeasuredH = px;
+            menuSceneTicks = LoadingWindow.SceneLoadedTicks;
             menuHits = menuTries = 0;
             menuMeasuredAt = -10f;
         }
-        if (menuHits >= 2 || menuTries >= 5 || now - menuMeasuredAt < (menuHits == 0 ? 1f : 3f))
+        bool settled = menuHits >= 2 || menuTries >= 5;
+        if (now - menuMeasuredAt < (settled ? 10f : menuHits == 0 ? 1f : 3f))
             return;
         menuMeasuredAt = now;
         menuTries++;

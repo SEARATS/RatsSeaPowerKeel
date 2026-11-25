@@ -29,9 +29,11 @@ internal static class LoadingWindow
     internal static volatile string WaitingFor;
     /// <summary>The window and its summary card are up, so nothing else has to announce problems.</summary>
     internal static volatile bool Shown;
+    /// <summary>A mod draws its own start-up progress (Keel.HandOffStartupWindow): the full window hides, the summary still comes.</summary>
     internal static volatile bool ExternalProgress;
     private static volatile string preparationStatus;
 
+    /// <summary>A preparation DLL's line for the full window (any thread); null clears it.</summary>
     internal static void ReportPreparation(string text) => preparationStatus = text;
     internal static string PreparationStatus => preparationStatus;
 
@@ -69,7 +71,7 @@ internal static class LoadingWindow
             ConfigEntry<float> max = config.Bind("Loading window", "LongestSeconds", 300f,
                 new ConfigDescription("Whatever happens, the full window is done this many seconds after the game process started.", new AcceptableValueRange<float>(30f, 1800f)));
             ConfigEntry<bool> click = config.Bind("Loading window", "ClickHides", true,
-                "A click on the full window hides it. A click on the summary opens Keel's report; the cards on the main menu close with their x. (The window never takes the keyboard focus from the game.)");
+                "A click on the full window hides it. A click on the summary opens Keel's report; its x leaves a small report button on the main menu, which closes with its own x. (The window never takes the keyboard focus from the game.)");
             if (!show.Value)
                 return;
             if (Environment.OSVersion.Platform != PlatformID.Win32NT)

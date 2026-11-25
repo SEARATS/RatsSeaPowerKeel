@@ -31,7 +31,6 @@ internal sealed class CrashGuard
 
     /// <summary>A mod is being kept out in this game because of an earlier crash.</summary>
     public bool HeldActive { get; private set; }
-    internal bool HasHeldPlugins => File.Exists(heldPath);
 
     /// <summary>The report's button: every held mod runs again from the next start.</summary>
     public void ClearHeld()
@@ -85,31 +84,67 @@ internal sealed class CrashGuard
     /// <summary>One step, handed to the operating system at once. Never throws.</summary>
     public void Mark(string kind, string detail)
     {
-        if (journal == null)
-            return;
+        journalGate.Wait();
         try
         {
+            if (journal == null) return;
             byte[] line = Encoding.UTF8.GetBytes(kind + "\t" + detail + Environment.NewLine);
-            journalGate.Wait();
-            try
-            {
-                journal?.Write(line, 0, line.Length);
-                journal?.Flush();
-            }
-            finally { journalGate.Release(); }
+            journal.Write(line, 0, line.Length);
+            journal.Flush();
         }
         catch (Exception)
         {
             journal = null;
         }
+        finally { journalGate.Release(); }
     }
+
+    // The journal is flushed per line and lives for the whole session: a mod that wraps a per-frame call must not grow it
+    // without end. Past the limits a scope still works but writes nothing; the crash report keeps only the last 32 anyway.
+    internal int ActivitiesPerSecond = 20;
+    internal int ActivitiesPerSession = 5000;
+    private const int DetailChars = 200;
+    private long activitySecond;
+    private int activitiesThisSecond, activitiesThisSession;
+    private bool activityLimitNoted;
+    private readonly object activityLock = new();
 
     public IDisposable BeginActivity(ActivityContext context)
     {
-        if (context == null) throw new ArgumentNullException(nameof(context));
+        if (context == null || !TakeActivitySlot())
+            return Keel.EmptyActivity.Instance;
         string token = System.Guid.NewGuid().ToString("N");
-        Mark("activity", $"{token}\t{DateTime.UtcNow.Ticks}\t{Clean(context.Owner.Value)}\t{context.Kind}\t{Clean(context.Detail)}");
+        string detail = context.Detail ?? "";
+        if (detail.Length > DetailChars)
+            detail = detail.Substring(0, DetailChars) + "...";
+        Mark("activity", $"{token}\t{DateTime.UtcNow.Ticks}\t{Clean(context.Owner.Value)}\t{context.Kind}\t{Clean(detail)}");
         return new ActivityScope(this, token);
+    }
+
+    private bool TakeActivitySlot()
+    {
+        long second = DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond;
+        bool take;
+        lock (activityLock)
+        {
+            if (second != activitySecond)
+            {
+                activitySecond = second;
+                activitiesThisSecond = 0;
+            }
+            take = activitiesThisSecond < ActivitiesPerSecond && activitiesThisSession < ActivitiesPerSession;
+            if (take)
+            {
+                activitiesThisSecond++;
+                activitiesThisSession++;
+            }
+            else if (activityLimitNoted)
+                return false;
+            activityLimitNoted |= !take;
+        }
+        if (!take)      // once per session, so the crash report says why the tail may be thin
+            Mark("activity-limit", activitiesThisSession >= ActivitiesPerSession ? "session" : "second");
+        return take;
     }
 
     private static string Clean(string value) => (value ?? "").Replace("\\", "\\\\")
@@ -117,12 +152,11 @@ internal sealed class CrashGuard
 
     private class ActivityScope(CrashGuard owner, string token) : IDisposable
     {
-        private bool ended;
+        private int ended;
         public void Dispose()
         {
-            if (ended) return;
-            ended = true;
-            owner.Mark("activity-end", $"{token}\t{DateTime.UtcNow.Ticks}");
+            if (Interlocked.Exchange(ref ended, 1) == 0)
+                owner.Mark("activity-end", $"{token}\t{DateTime.UtcNow.Ticks}");
         }
     }
 
@@ -160,7 +194,7 @@ internal sealed class CrashGuard
         }
     }
 
-    private static string Stamp(string dll)
+    internal static string Stamp(string dll)
     {
         try
         {
@@ -298,7 +332,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block, Previous.Activities));
+            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous, block));
         }
         catch (Exception)
         {

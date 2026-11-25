@@ -180,7 +180,6 @@ internal sealed class Overlay
     }
 
     private long summaryStartTicks;
-    private bool handedOffFull;
 
     private void OnTick()
     {
@@ -204,28 +203,37 @@ internal sealed class Overlay
 
     // Each stage's step; false when the window is gone or hidden (nothing to paint).
 
+    private bool handedOffFull;
+
     private bool TickFull()
     {
         Progress.Snapshot s = progress.Take(0);
-        if (LoadingWindow.ExternalProgress && !handedOffFull)
+        if (LoadingWindow.ExternalProgress)
+            return TickHandedOff(s);
+        if (s.Done && s.SinceDone > options.LingerSeconds) Begin(Stage.Moving);
+        else if (s.Elapsed > options.MaxSeconds) Begin(s.Done ? Stage.Moving : Stage.Fading);
+        return true;
+    }
+
+    // A mod shows its own progress (agm-114, PR #16): the full window hides at once and comes back as the summary card in its
+    // place, without the glide, when Keel is done.
+    private bool TickHandedOff(Progress.Snapshot s)
+    {
+        if (!handedOffFull)
         {
             handedOffFull = true;
             Native.ShowWindow(hwnd, Native.SW_HIDE);
         }
-        if (handedOffFull && s.Done)
-        {
-            Begin(Stage.Summary);
-            summaryStartTicks = DateTime.UtcNow.Ticks;
-            summary = s;
-            now = SummaryRect();
-            Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top,
-                Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
-            PublishSummary();
+        if (!s.Done)
             return false;
-        }
-        if (s.Done && s.SinceDone > options.LingerSeconds) Begin(Stage.Moving);
-        else if (s.Elapsed > options.MaxSeconds) Begin(s.Done ? Stage.Moving : Stage.Fading);
-        return !handedOffFull;
+        Begin(Stage.Summary);
+        summaryStartTicks = DateTime.UtcNow.Ticks;
+        summary = s;
+        now = SummaryRect();
+        Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top, Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
+        PublishSummary();
+        Native.ShowWindow(hwnd, Native.SW_SHOWNOACTIVATE);
+        return true;
     }
 
     private bool TickMoving(double t)
@@ -240,9 +248,9 @@ internal sealed class Overlay
         return true;
     }
 
+    // Where the card is, in pixels of the game window: the game-drawn card takes over right there.
     private void PublishSummary()
     {
-        // Where the card is, in pixels of the game window: the game-drawn card takes over right there.
         LoadingWindow.SummaryX = now.Left - game.Left; LoadingWindow.SummaryY = now.Top - game.Top;
         LoadingWindow.SummaryW = now.Right - now.Left; LoadingWindow.SummaryH = now.Bottom - now.Top;
         LoadingWindow.SummaryScale = scale;
@@ -396,7 +404,7 @@ internal sealed class Overlay
         IntPtr old = Native.SelectObject(mem, bmp);
         bool squeezed = stage == Stage.Moving && (Now - stageStart) / MoveSeconds < 0.55 && snapDc != IntPtr.Zero;
         if (stage == Stage.Full)
-            Draw(mem, w, h, progress.Take(Layout.Rows), scale, fontText, fontSmall, LoadingWindow.WaitingFor, LoadingWindow.PreparationStatus);
+            Draw(mem, w, h, progress.Take(Layout.Rows), scale, fontText, fontSmall, LoadingWindow.WaitingFor);
         else if (squeezed)          // the full window, squeezed along while it shrinks
         {
             Native.SetStretchBltMode(mem, Native.HALFTONE);
@@ -422,7 +430,7 @@ internal sealed class Overlay
         snapBmp = Native.CreateCompatibleBitmap(dc, snapW, snapH);
         snapOld = Native.SelectObject(snapDc, snapBmp);
         Native.ReleaseDC(hwnd, dc);
-        Draw(snapDc, snapW, snapH, progress.Take(Layout.Rows), scale, fontText, fontSmall, LoadingWindow.WaitingFor, LoadingWindow.PreparationStatus);
+        Draw(snapDc, snapW, snapH, progress.Take(Layout.Rows), scale, fontText, fontSmall, LoadingWindow.WaitingFor);
     }
 
     private void FreeSnapshot()
@@ -448,9 +456,9 @@ internal sealed class Overlay
         public const int Width = 460, Rows = 8, TextPoints = 12, SmallPoints = 10;
         public static int Height(int rows) => 14 + 24 + 22 + 22 + rows * 19 + 8 + 20 + 14;
 
-        public const int SummaryWidth = 400, SummaryHeight = 94, SummaryMargin = 8;
+        public const int SummaryWidth = 300, SummaryHeight = 80, SummaryMargin = 8;
         public const double SummaryBottomShare = 0.05;          // the game's version text below the card
-        public const int Pad = 10, HeaderHeight = 24, FirstLine = 27, LineHeight = 20, CreditWidth = 130;
+        public const int Pad = 10, HeaderHeight = 22, FirstLine = 24, LineHeight = 17, CreditWidth = 130;
         public const string Credit = "Made by Kanalratte";
         public const string ProfileUrl = "https://steamcommunity.com/profiles/76561198169349193";
 
@@ -481,8 +489,7 @@ internal sealed class Overlay
     /// Draws the full window's content into <paramref name="dc"/> (size w x h pixels, at <paramref name="scale"/> x 96 dpi).
     /// <paramref name="waitingFor"/>: what the game waits for the player to do, or null.
     /// </summary>
-    internal static void Draw(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontSmall,
-        string waitingFor, string preparationStatus = null)
+    internal static void Draw(IntPtr dc, int w, int h, Progress.Snapshot s, float scale, IntPtr fontText, IntPtr fontSmall, string waitingFor)
     {
         int S(int v) => (int)Math.Round(v * scale);
         Fill(dc, 0, 0, w, h, Back);
@@ -501,8 +508,10 @@ internal sealed class Overlay
         y += S(22);
 
         int rowH = S(19);
-        if (!string.IsNullOrEmpty(preparationStatus) && s.Recent.Count < Layout.Rows)
-            Put(dc, fontText, Dim, preparationStatus, pad, y, w - 2 * pad, rowH, Native.DT_END_ELLIPSIS);
+        // A preparation DLL's line sits in the top row while the list has not filled it yet.
+        string preparing = LoadingWindow.PreparationStatus;
+        if (!string.IsNullOrEmpty(preparing) && s.Recent.Count < Layout.Rows)
+            Put(dc, fontText, Dim, preparing, pad, y, w - 2 * pad, rowH, Native.DT_END_ELLIPSIS);
         for (int i = 0; i < Layout.Rows; i++)
         {
             int idx = i - (Layout.Rows - s.Recent.Count);

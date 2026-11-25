@@ -71,7 +71,7 @@ internal static class WhatsNew
         string ownFolder = Full(ownDll == null ? null : Path.GetDirectoryName(ownDll));
         foreach (ModFolder f in folders)
         {
-            var m = new SeenMod { Key = KeyOf(f), Name = NameOf(f.Path) ?? f.Label, Stamp = Stamp(f.Path) };
+            var m = new SeenMod { Key = KeyOf(f), Name = f.Title.Length > 0 ? f.Title : f.Label, Stamp = Stamp(f.Path) };
             if (f.SteamId != 0 && steamTimes.TryGetValue(f.SteamId, out long t))
                 m.Updated = t;
             if (ownFolder != null && ownGuid != null && string.Equals(Full(f.Path), ownFolder, StringComparison.OrdinalIgnoreCase))
@@ -83,7 +83,7 @@ internal static class WhatsNew
             if (p.Folder == null || !mods.TryGetValue(KeyOf(p.Folder), out SeenMod m))
                 continue;
             m.Versions[p.Guid] = p.Version.ToString();
-            if (NameOf(p.Folder.Path) == null && m.Name == p.Folder.Label)
+            if (p.Folder.Title.Length == 0 && m.Name == p.Folder.Label)
                 m.Name = p.Display;
         }
         return mods;
@@ -98,41 +98,6 @@ internal static class WhatsNew
     }
 
     public static string KeyOf(ModFolder f) => f.SteamId != 0 ? f.SteamId.ToString(CultureInfo.InvariantCulture) : f.Name;
-
-    /// <summary>The mod's own name from its _info.ini (<c>Name=</c>, English section first), or null.</summary>
-    public static string NameOf(string folder)
-    {
-        try
-        {
-            string ini = Path.Combine(folder ?? "", "_info.ini");
-            if (!File.Exists(ini))
-                return null;
-            string first = null;
-            bool english = false;
-            foreach (string raw in File.ReadAllLines(ini))
-            {
-                string line = raw.Trim();
-                if (line.StartsWith("["))
-                {
-                    english = line.Equals("[Language_en]", StringComparison.OrdinalIgnoreCase);
-                    continue;
-                }
-                if (!line.StartsWith("Name=", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                string value = line.Substring(5).Trim();
-                if (value.Length == 0)
-                    continue;
-                if (english)
-                    return value;
-                first ??= value;
-            }
-            return first;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
 
     private static string Full(string path)
     {

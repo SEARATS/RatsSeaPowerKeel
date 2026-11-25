@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
@@ -24,7 +25,8 @@ internal sealed class Runner
     private readonly Dictionary<string, string> libraryIndex = new(StringComparer.OrdinalIgnoreCase);  // assembly name -> path
     private readonly List<(string[] namespaces, PluginEntry plugin)> owners = new();
     private PluginEntry starting;
-    private readonly List<string> startErrors = new();
+    private Assembly startingAsm;
+    private string startupException;
 
     public string AnchorChainDll;
 
@@ -116,33 +118,45 @@ internal sealed class Runner
     public int TurnOff(PluginEntry p)
     {
         Assembly asm = loaded.TryGetValue(Path.GetFullPath(p.Dll), out Assembly a) ? a : p.Instance?.GetType().Assembly;
-        int removed = 0;
-        if (asm != null)
-        {
-            var harmony = new HarmonyLib.Harmony("dev.sewerlabs.seapowerkeel.turnoff");
-            foreach (MethodBase target in HarmonyLib.Harmony.GetAllPatchedMethods().ToList())
-            {
-                HarmonyLib.Patches info = HarmonyLib.Harmony.GetPatchInfo(target);
-                if (info == null)
-                    continue;
-                foreach (HarmonyLib.Patch patch in AllPatches(info).Where(x => x.PatchMethod?.DeclaringType?.Assembly == asm).ToList())
-                {
-                    try
-                    {
-                        harmony.Unpatch(target, patch.PatchMethod);
-                        removed++;
-                    }
-                    catch (Exception ex)
-                    {
-                        log.LogWarning($"{p.Display}: could not take its patch off {target.DeclaringType?.Name}.{target.Name}: {ex.Message}");
-                    }
-                }
-            }
-        }
+        int removed = asm != null ? RemovePatches(p, PatchesIn(asm)) : 0;
+        StopInstance(p);
+        return removed;
+    }
+
+    private static void StopInstance(PluginEntry p)
+    {
         if (p.Instance is MonoBehaviour behaviour && behaviour != null)
         {
+            behaviour.enabled = false;
             UnityEngine.Object.Destroy(behaviour);
-            Chainloader.PluginInfos.Remove(p.Guid);
+            if (behaviour is BaseUnityPlugin plugin && Chainloader.PluginInfos.TryGetValue(p.Guid, out var info) && info == plugin.Info)
+                Chainloader.PluginInfos.Remove(p.Guid);
+        }
+    }
+
+    private static IEnumerable<(MethodBase target, MethodInfo method)> PatchesIn(Assembly asm) =>
+        (from target in HarmonyLib.Harmony.GetAllPatchedMethods()
+         let info = HarmonyLib.Harmony.GetPatchInfo(target)
+         where info != null
+         from patch in AllPatches(info)
+         where patch.PatchMethod?.DeclaringType?.Assembly == asm
+         select (target, patch.PatchMethod)).Distinct();
+
+    private int RemovePatches(PluginEntry p, IEnumerable<(MethodBase target, MethodInfo method)> patches)
+    {
+        int removed = 0;
+        var harmony = new HarmonyLib.Harmony("dev.sewerlabs.seapowerkeel.turnoff");
+        foreach ((MethodBase target, MethodInfo method) in patches.ToList())
+        {
+            try
+            {
+                harmony.Unpatch(target, method);
+                removed++;
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning($"{p.Display}: could not take its patch off {target.DeclaringType?.Name}.{target.Name}: {ex.Message}");
+            }
         }
         return removed;
     }
@@ -280,15 +294,20 @@ internal sealed class Runner
     public void Prepare(PluginEntry p)
     {
         var watch = Stopwatch.StartNew();
+        Assembly asm = null;
+        HashSet<(MethodBase target, MethodInfo method)> before = null;
+        p.FirstStartupError = null;
         starting = p;
-        startErrors.Clear();
+        startupException = null;
         try
         {
-            Assembly asm = Load(p.Dll);
+            asm = Load(p.Dll);
+            startingAsm = asm;
             Type type = asm.GetType(p.TypeName, throwOnError: true);
             RegisterOwner(p, asm);
             if (p.Kind == PluginKind.AnchorChain)
             {
+                before = PatchesBefore(p, asm);
                 if (AcEntry.FindEntryPoint(type) == null)
                 {
                     p.Stop(PluginState.Failed, $"Entry point not found: {type.FullName} does not implement {AcEntry.InterfaceName}.{AcEntry.MethodName}() (the DLL's copy of Anchor Chain's interface differs?).");
@@ -296,8 +315,8 @@ internal sealed class Runner
                     return;
                 }
                 p.Instance = Activator.CreateInstance(type);
-                if (startErrors.Count > 0)
-                    p.Stop(PluginState.Failed, "Threw while being created: " + startErrors[0]);
+                if (startupException != null)
+                    p.Stop(PluginState.Failed, "Exception while being created: " + startupException);
             }
         }
         catch (Exception ex)
@@ -309,6 +328,9 @@ internal sealed class Runner
         finally
         {
             starting = null;
+            startingAsm = null;
+            if (p.State == PluginState.Failed && before != null)
+                RollBack(p, asm, before);
             p.StartMs += (float)watch.Elapsed.TotalMilliseconds;
         }
     }
@@ -316,13 +338,17 @@ internal sealed class Runner
     public void Start(PluginEntry p)
     {
         var watch = Stopwatch.StartNew();
+        Assembly asm = null;
+        HashSet<(MethodBase target, MethodInfo method)> before = null;
         starting = p;
-        startErrors.Clear();
+        startupException = null;
         try
         {
-            Assembly asm = Load(p.Dll);
+            asm = Load(p.Dll);
+            startingAsm = asm;
             Type type = asm.GetType(p.TypeName, throwOnError: true);
             RegisterOwner(p, asm);
+            before = PatchesBefore(p, asm);
             if (p.Kind == PluginKind.BepInEx)
             {
                 var plugin = (BaseUnityPlugin)host.AddComponent(type);
@@ -335,8 +361,10 @@ internal sealed class Runner
                 p.Instance ??= Activator.CreateInstance(type);
                 AcEntry.Invoke(p.Instance);   // through the interface: explicit implementations work; a missing entry point throws
             }
-            if (startErrors.Count > 0)
-                p.Stop(PluginState.Failed, "Threw while starting: " + startErrors[0]);
+            if (startupException != null)
+                p.Stop(PluginState.Failed, "Exception while starting: " + startupException);
+            else if (p.FirstStartupError != null)
+                p.Stop(PluginState.RunningWithErrors, "Logged an error during startup: " + p.FirstStartupError);
             else
                 p.State = PluginState.Running;
         }
@@ -349,7 +377,32 @@ internal sealed class Runner
         finally
         {
             starting = null;
+            startingAsm = null;
+            if (p.State == PluginState.Failed && before != null)
+                RollBack(p, asm, before);
             p.StartMs += (float)watch.Elapsed.TotalMilliseconds;
+        }
+    }
+
+    // Patches of this DLL that exist before a plugin's code runs. Only a DLL holding several plugins can have any (a sibling
+    // ran first), so only then is every patched method of the game scanned; else the scan waits until a start fails.
+    private HashSet<(MethodBase target, MethodInfo method)> PatchesBefore(PluginEntry p, Assembly asm) =>
+        ownerRegistered.Any(o => o != p && o.AssemblyName == p.AssemblyName) ? PatchesIn(asm).ToHashSet() : new();
+
+    // A failed start takes off the patches the mod added in its constructor and entry point (Awake for a BepInEx plugin).
+    // Patches added later (a BepInEx Start(), a coroutine) are not covered: they run after Keel has judged the start.
+    private void RollBack(PluginEntry p, Assembly asm, HashSet<(MethodBase target, MethodInfo method)> before)
+    {
+        try
+        {
+            int removed = RemovePatches(p, PatchesIn(asm).Where(patch => !before.Contains(patch)));
+            StopInstance(p);
+            p.Reason += $" Keel removed {removed} new Harmony patch(es){(p.Kind == PluginKind.BepInEx ? " and stopped the plugin" : "")}. Restart the game to clear any other setup left by the mod.";
+        }
+        catch (Exception ex)
+        {
+            p.Warnings.Add($"Startup cleanup failed: {ex.Message}. Restart the game before playing.");
+            log.LogWarning($"{p.Display}: {p.Warnings.Last()}");
         }
     }
 
@@ -361,7 +414,7 @@ internal sealed class Runner
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
 
-    // Unity logs exceptions from Awake/Start/Update instead of throwing them at us.
+    // Unity logs exceptions from Awake/Start/Update, and mods can log caught exceptions as errors.
     private bool inLog;
 
     private void OnLog(string message, string stackTrace, LogType type)
@@ -381,18 +434,12 @@ internal sealed class Runner
 
     private void Attribute(string message, string stackTrace, LogType type)
     {
-        if (starting != null)
-        {
-            if (type == LogType.Exception)
-            {
-                startErrors.Add(FirstLine(message));
-                ModError?.Invoke(starting, message, stackTrace);
-            }
+        if (starting != null && StartingLog(message, stackTrace, type))
             return;
-        }
         if (type != LogType.Exception || string.IsNullOrEmpty(stackTrace))
             return;
-        PluginEntry plugin = Find(stackTrace) ?? GuardMissingMember(message, stackTrace);
+        PluginEntry direct = Find(stackTrace);
+        PluginEntry plugin = GuardMissingMember(message, stackTrace, direct) ?? direct;
         if (plugin == null)
             return;
         plugin.LaterErrors++;
@@ -404,15 +451,61 @@ internal sealed class Runner
 
     private readonly HashSet<string> blamed = new();
 
-    /// <summary>Remove the patches that throw a "not found" error (setting <c>RemoveBrokenPatches</c>); off = only name the mod.</summary>
+    /// <summary>Remove patches that use missing game methods, fields or types; off = only name the mod.</summary>
     public static bool GuardPatches = true;
 
+    /// <summary>What a log line written while a plugin starts means for that plugin.</summary>
+    internal enum StartLog { NotItsOwn, Errors, Aborted }
+
     /// <summary>
-    /// The member a "Method not found" / "Field not found" message names, as <c>Namespace.Type::Member</c> (the form of
-    /// <see cref="PluginEntry.MissingUses"/>), or null when the message is not of that kind.
+    /// Only a line with the starting plugin's code on it counts. Its frame still on the live call stack: the mod is running
+    /// and logged the error itself (often a caught optional feature), so it keeps running with errors. An exception whose
+    /// trace shows the mod while the live stack does not: it escaped the mod's Awake/OnEnable and Unity caught it, so the
+    /// start was cut short. Anything else (the game, Unity's renderer, another mod) is not the starting plugin's.
+    /// </summary>
+    internal static StartLog JudgeStartLog(bool exception, bool onLiveStack, bool inTrace) =>
+        onLiveStack ? StartLog.Errors
+        : !inTrace ? StartLog.NotItsOwn
+        : exception ? StartLog.Aborted : StartLog.Errors;
+
+    // True when the line is the starting plugin's and handled; false lets the caller pin it on whichever mod it shows.
+    private bool StartingLog(string message, string stackTrace, LogType type)
+    {
+        PluginEntry traced = Find(stackTrace);
+        bool inTrace = traced != null && traced.AssemblyName == starting.AssemblyName;
+        StartLog verdict = JudgeStartLog(type == LogType.Exception, OnLiveStack(startingAsm), inTrace);
+        if (verdict == StartLog.NotItsOwn)
+            return false;
+        string summary = FirstLine(message);
+        starting.FirstStartupError ??= summary;
+        if (verdict == StartLog.Aborted)
+            startupException ??= summary;
+        ModError?.Invoke(starting, message, stackTrace);
+        return true;
+    }
+
+    // Unity calls log listeners on the main thread inside the logging call, so a mod that logged is still on this stack.
+    private static bool OnLiveStack(Assembly asm)
+    {
+        if (asm == null)
+            return false;
+        foreach (StackFrame frame in new StackTrace(false).GetFrames() ?? Array.Empty<StackFrame>())
+            if (frame.GetMethod()?.DeclaringType?.Assembly == asm)
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// The missing type or <c>Namespace.Type::Member</c> named by a compatibility error, in the form used by
+    /// <see cref="PluginEntry.MissingUses"/>. Null for an error without a recognized missing reference.
     /// </summary>
     internal static string MissingKey(string message)
     {
+        if (message?.StartsWith("TypeLoadException", StringComparison.Ordinal) == true)
+        {
+            var match = Regex.Match(message, @"(?:expected (?:class|valuetype)|Could not load type) '([^']+)' (?:in|from) assembly '");
+            return match.Success ? match.Groups[1].Value.Replace('+', '/') : null;
+        }
         if (message == null || !(message.StartsWith("MissingMethodException") || message.StartsWith("MissingFieldException")))
             return null;
         string sig = NotFound(message);          // e.g. List`1<string> SeaPower.FileManager.GetDirectories(string)
@@ -446,54 +539,45 @@ internal sealed class Runner
     private static IEnumerable<HarmonyLib.Patch> AllPatches(HarmonyLib.Patches info) =>
         info.Prefixes.Concat(info.Postfixes).Concat(info.Transpilers).Concat(info.Finalizers);
 
-    /// <summary>The game methods a stack trace shows as patched ("SeaPower.GameMain.DMD&lt;SeaPower.GameMain::FixedUpdate&gt;"): type name and method name.</summary>
-    internal static List<(string type, string method)> PatchedMethodsIn(string stackTrace)
+    // A DMD frame names a patched method but does not identify its overload.
+    internal static (string type, string method)? InnermostPatchedMethod(string stackTrace)
     {
-        var found = new List<(string, string)>();
-        if (string.IsNullOrEmpty(stackTrace))
-            return found;
-        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(stackTrace, @"DMD<([^>\s]+?)::([^>\s]+?)>"))
-            if (!found.Contains((m.Groups[1].Value, m.Groups[2].Value)))
-                found.Add((m.Groups[1].Value, m.Groups[2].Value));
-        return found;
+        var frame = Regex.Match(stackTrace ?? "", @"DMD<([^>\s]+?)::([^>\s]+?)>");
+        return frame.Success ? (frame.Groups[1].Value, frame.Groups[2].Value) : null;
     }
 
-    /// <summary>
-    /// A "Method not found" / "Field not found" error whose stack holds no mod (a Harmony patch rewrote a game method, so the
-    /// trace shows only the game's own frames). Finds the mods whose DLL uses that member (from the preflight's list of what this
-    /// build lacks); the one whose patch sits on the method the stack shows is the culprit, and Keel takes that patch off again
-    /// so the error stops (a popup on every frame otherwise). The rest of the mod keeps running. When the patch cannot be found,
-    /// the candidates are only named.
-    /// </summary>
-    private PluginEntry GuardMissingMember(string message, string stackTrace)
+    /// <summary>Match a missing game reference against preflight findings and the failing patch. Report ambiguous matches.</summary>
+    private PluginEntry GuardMissingMember(string message, string stackTrace, PluginEntry direct)
     {
         string key = MissingKey(message);
         if (key == null)
             return null;
         List<PluginEntry> candidates = owners.Select(o => o.plugin)
             .Where(p => p.MissingUses.Any(u => u == key || u.StartsWith(key + "(", StringComparison.Ordinal))).ToList();
+        // The mod on the stack narrows it down only when it uses the missing part itself; a mod that merely called into a
+        // patched game method must not shield the one whose patch broke.
+        if (direct != null && candidates.Contains(direct))
+            candidates = new List<PluginEntry> { direct };
         if (candidates.Count == 0)
             return null;
-        string what = NotFound(message);
-        Dictionary<PluginEntry, (string method, int removed)> taken = GuardPatches ? TakeOffPatches(candidates, stackTrace) : new();
-        foreach (KeyValuePair<PluginEntry, (string method, int removed)> t in taken)
+        string what = NotFound(message) ?? key;
+        if (GuardPatches && TakeOffPatches(candidates, stackTrace) is { } recovery)
         {
-            if (blamed.Add(t.Key.Guid + "|" + key + "|guard"))
-                Warn(t.Key, $"The game threw 'not found: {what}'. {t.Key.Display} calls it and this game build does not have it: the mod was made for another game version. " +
-                            $"Its patch on {t.Value.method} caused the error; Keel took {t.Value.removed} patch(es) of the mod off that method so the game can go on. The rest of the mod keeps running (see its warnings).");
+            var (plugin, method, count) = recovery;
+            if (blamed.Add(plugin.Guid + "|" + key + "|guard"))
+                Warn(plugin, $"This game build is missing '{what}'. Keel removed {count} patch(es) installed by {plugin.Display} on {method}. The rest of the mod keeps running.");
+            return plugin;
         }
-        if (taken.Count > 0)
-            return taken.Keys.First();
         if (candidates.Count == 1)
         {
             PluginEntry p = candidates[0];
             if (blamed.Add(p.Guid + "|" + key))
-                Warn(p, $"The game threw 'not found: {what}'. {p.Display} calls it and this game build does not have it: the mod was made for another game version (see its warnings in the report).");
+                Warn(p, $"The game could not find '{what}'. {p.Display} uses it and this game build does not have it: the mod was made for another game version (see its warnings in the report).");
             return p;
         }
         if (blamed.Add("many|" + key))
         {
-            string why = $"The game threw 'not found: {what}'. These mods call it and this game build does not have it: {string.Join(", ", candidates.Select(c => c.Display))}. " +
+            string why = $"The game could not find '{what}'. These mods use it and this game build does not have it: {string.Join(", ", candidates.Select(c => c.Display))}. " +
                          "One of them was made for another game version (Keel could not tell which one from the stack; switching one off at a time finds it).";
             foreach (PluginEntry c in candidates)
                 c.Warnings.Add(why);
@@ -508,42 +592,51 @@ internal sealed class Runner
         log.LogWarning(why);
     }
 
-    // The candidates' patches on the game methods the stack shows come off: per mod, on which method and how many (in the
-    // order they were found).
-    private Dictionary<PluginEntry, (string method, int removed)> TakeOffPatches(List<PluginEntry> candidates, string stackTrace)
+    private (PluginEntry plugin, string method, int count)? TakeOffPatches(List<PluginEntry> candidates, string stackTrace)
     {
-        var where = new Dictionary<PluginEntry, (string method, int removed)>();
+        if (InnermostPatchedMethod(stackTrace) is not { } frame)
+            return null;
         try
         {
-            foreach ((string typeName, string methodName) in PatchedMethodsIn(stackTrace))
+            var type = HarmonyLib.AccessTools.TypeByName(frame.type);
+            if (type == null) return null;
+            var targets = HarmonyLib.AccessTools.GetDeclaredMethods(type).Where(m => m.Name == frame.method)
+                .Select(method => (method, info: HarmonyLib.Harmony.GetPatchInfo(method)))
+                .Where(target => target.info != null).ToList();
+            // A DMD frame names no overload: with several patched overloads Keel cannot tell which one threw, so it only names
+            // the mod (the error then repeats until the player turns the mod off).
+            if (targets.Count != 1) return null;
+
+            var (target, info) = targets[0];
+            var pluginsByAssembly = ownerRegistered.ToLookup(p => p.AssemblyName);
+            var patches = new List<(MethodInfo method, PluginEntry owner)>();
+            foreach (var patch in AllPatches(info))
             {
-                Type type = HarmonyLib.AccessTools.TypeByName(typeName);
-                if (type == null)
-                    continue;
-                foreach (MethodBase original in HarmonyLib.AccessTools.GetDeclaredMethods(type).Where(m => m.Name == methodName).Cast<MethodBase>().ToList())
-                {
-                    HarmonyLib.Patches info = HarmonyLib.Harmony.GetPatchInfo(original);
-                    if (info == null)
-                        continue;
-                    foreach (HarmonyLib.Patch patch in AllPatches(info).ToList())
-                    {
-                        string asm = patch.PatchMethod?.DeclaringType?.Assembly.GetName().Name;
-                        PluginEntry owner = candidates.FirstOrDefault(c => c.AssemblyName == asm);
-                        if (owner == null)
-                            continue;
-                        new HarmonyLib.Harmony("dev.sewerlabs.seapowerkeel.guard").Unpatch(original, patch.PatchMethod);
-                        where.TryGetValue(owner, out var w);
-                        where[owner] = (typeName + "." + methodName, w.removed + 1);
-                    }
-                }
+                var method = patch.PatchMethod;
+                var plugins = pluginsByAssembly[method?.DeclaringType?.Assembly.GetName().Name];
+                var owner = PatchOwner(plugins, patch.owner);
+                if (owner == null && plugins.Any(candidates.Contains)) return null;
+                patches.Add((method, owner));
             }
+            var implicated = patches.Select(p => p.owner).Where(candidates.Contains).Distinct().ToList();
+            if (implicated.Count != 1) return null;
+
+            var plugin = implicated[0];
+            // Harmony removes every registration of a patch method. Preserve methods shared with another owner.
+            var removable = patches.GroupBy(p => p.method).Where(group => group.All(p => p.owner == plugin))
+                .Select(group => ((MethodBase)target, group.Key));
+            int count = RemovePatches(plugin, removable);
+            return count > 0 ? (plugin, $"{frame.type}.{frame.method}", count) : null;
         }
         catch (Exception ex)
         {
             log.LogWarning($"Keel could not take a failing patch off: {ex.GetType().Name}: {ex.Message}");
+            return null;
         }
-        return where;
     }
+
+    internal static PluginEntry PatchOwner(IEnumerable<PluginEntry> plugins, string harmonyId) =>
+        plugins.Count() == 1 ? plugins.First() : plugins.FirstOrDefault(p => p.Guid == harmonyId);
 
     // A message's first line, cut for the report.
     private const int LineLength = 240;

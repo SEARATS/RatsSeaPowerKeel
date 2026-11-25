@@ -146,9 +146,9 @@ internal static class LoadingWindow
     public static bool MissionRunning, OnMenuSubPage;
     public static long SceneLoadedTicks;
     public static string Alert, WaitingFor;
-    public static bool ExternalProgress;
-    public static string PreparationStatus;
     public static bool SummaryReady, GameDrawsSummary, OverlayGone;
     public static int SummaryX, SummaryY, SummaryW, SummaryH;
     public static float SummaryScale;
+    public static bool ExternalProgress;
+    public static string PreparationStatus;
 }

@@ -35,7 +35,7 @@ Unity redraws**, IMGUI included (Keel's own report window and notice are IMGUI f
 - **A summary instead of vanishing.** After Keel's "Done:" plus `SecondsAfterLastMod` the full window shrinks and glides to the bottom left, above
   the game's version text (0.9 s, ease out; the full window is squeezed along with StretchBlt, then the card's own content takes over). The card
   says "Keel 0.1.5 started 19 mods in 40 s", "Game ready after 1:00" (+ skipped), and either the number of mods with problems or the slowest mod;
-  a click on it opens Keel's report (Keel's host reads a flag on the main thread and opens the IMGUI window), its × closes it (the game-drawn card); it stays until then
+  a click on it opens Keel's report (Keel's host reads a flag on the main thread and opens the IMGUI window), its × collapses it to a small Keel report button, which closes with its own ×; it stays until then
   (no fading on its own since 0.5.4).
 - **Opens early.** `KeelHost.Awake` starts it, which runs when the stub does. BepInEx starts plugins in GUID order
   (`dev.sewerlabs.seapowerkeel.stub` < `io.github.seapower_modders.anchorchain_preloader`, as the log shows), so it is there before the
@@ -56,26 +56,6 @@ mod's result (`ReportFormat.Tag`: RUNNING, ERRORS, FAILED, NOT STARTED, SKIPPED,
 preloader's "started" line and the game's `FileManager.OnStart`, `FileManager.CheckFileValidity`, `(C) Triassic Games` and `3D WebView` lines
 for the early steps.
 
-## Startup preparation for mods
-
-A mod can include one or more DLLs ending in `.Preloader.dll` anywhere in
-its mod folder. Keel's BepInEx stub (1.1.0 or later) finds them in enabled
-folders that fit the game version.
-Each DLL needs one public type with a public static
-`void Prepare(string streamingAssets, string[] enabledMods, Action<string> report)`
-method and must be independent of Unity, Sea Power and the mod loaders. Keel
-calls each DLL on a worker when it sets up the loading window. A failed callback
-is logged and Keel continues with the next DLL. Use this for read-only file work
-that can run during the splash. The paths come from the saved mod list. Check
-them against the live game before using the results. Keep Unity and game API
-calls in the normal plugin entry point. The callback can report short status
-text for the loading window.
-
-`Keel.GetStartupTimings()` gives the timestamps of window setup, mod discovery
-and early plugin dispatch in seconds since launch. A mod drawing replacement progress
-inside the game can call `Keel.HandOffStartupWindow()` once its display is
-visible. Keel still draws its own summary on the menu.
-
 ## Testing without the game
 
 `tools/loading-preview` (net8, no game): `dotnet run --project tools/loading-preview -c Release -- <Keel-log.txt> <out folder> [scale]`
@@ -83,53 +63,10 @@ replays a `Keel-log.txt` through the window's model (it reads Keel's lines back 
 0.1.5 have no `STARTING` lines and are no longer filled in) and draws the window into BMP files at chosen seconds;
 `... -- live` opens the real window thread far off every monitor, feeds a few lines and checks it closes itself after "Done".
 
-## Remaining visual checks
+## Not done
 
-- Check the window over the game's borderless window at 4K, its visibility before the preloader,
+- Run in the game. Only the game can show: the window over the game's borderless window at 4K, that it really opens before the preloader,
   and the early phase (0 to 16 s).
 - The preloader's 12.7 s are outside Keel (`tools/anchorchain-fix`); worth a look on its own.
 - Exclusive full screen hides the window; the game's "fullscreen window" mode shows it.
 - A mod that works on after its start returns (Dynamic Campaign Mod) is not named for that work.
-
-## Loader compatibility tests
-
-The offline self-test checks the two-argument boot method, both generations of
-the preparation handoff, and callback cleanup after success or failure.
-
-The live matrix also uses standalone fixtures on the installed game. With
-both stub generations it checks early dependency order, normal plugins that
-depend on early plugins, and an early request deferred behind a normal-timing
-dependency. With the new stub it checks worker-thread preparation, continuation
-after a throwing callback, nested discovery, and exclusion of a disabled folder.
-Both fixture runs draw replacement progress and wait for the in-game Keel summary.
-
-Run the live matrix locally with a current Steam install of Sea Power and
-BepInEx, the [Sea Power CLI](https://github.com/agm-114/crimean-tom/tree/main/docs/seapower-cli),
-and the stub and loader DLLs from a Keel release such as 0.5.4. Close the game
-first. The script builds the current pair and fixtures, tests all four pairings
-and the two startup fixture cases, and restores the original mod list, starter
-files, configuration, plugin cache, and Keel state by SHA-256. It closes only
-test processes from this install, including when launch verification fails.
-
-```powershell
-$test = @{
-    GameDir = $gameDir
-    Cli = $cliExe
-    LegacyStub = $oldKeelStub
-    LegacyLoader = $oldKeelLoader
-}
-./tools/test-loaders.ps1 @test
-```
-
-To include the current Anchor Chain loader in the same local run, add
-`AnchorChainPreloader` from its release zip and
-`AnchorChainLoader` from its installed Workshop package to `$test`.
-This case starts Anchor Chain with its own preloader and needs the current
-game version. The script reports the directory containing the logs.
-Use `-StartupOnly` to rerun just the two integration fixture cases.
-
-`tools/test-loader-cleanup.ps1` accepts the same four required arguments. It
-starts the real game through the CLI, then injects a failed exit status and
-malformed launch JSON in separate runs. Each must close the test process,
-restore original file hashes, and leave no fixture folders or startup recovery
-marker. The scripts refuse to start with a game or recovery marker already present.

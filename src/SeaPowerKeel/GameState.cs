@@ -71,37 +71,6 @@ internal static class GameState
             return null;
         if (fileManager.GetType().GetField("directories", Any)?.GetValue(fileManager) is not IEnumerable dirs)
             return null;
-        return ReadFolders(dirs);
-    }
-
-    // Match the standalone preloader: InstanceExists before Instance, then the public Directories getter.
-    // Under takeover, Keel's selected folder supplies the loader in place of the standalone AnchorChain.dll.
-    internal static List<ModFolder> AnchorChainFolders(string loaderPath)
-    {
-        object manager = ExistingSingleton(T("SeaPower.FileManager"));
-        if (manager?.GetType().GetProperty("Directories", Any)?.GetValue(manager) is not IEnumerable dirs)
-            return null;
-        object[] entries = dirs.Cast<object>().ToArray();
-        var folders = ReadFolders(entries);
-        string path = Path.GetFullPath(loaderPath);
-        if (folders?.Any(f => f.Enabled && Directory.Exists(f.Path) &&
-            path.StartsWith(Path.GetFullPath(f.Path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) == true) return folders;
-        return AnchorChainStartup.HasStandaloneLoader(entries.Select(DirectoryOf)) ? folders ?? new List<ModFolder>() : null;
-    }
-
-    private static readonly object[] silentSingletonProbe = { false };
-
-    private static object ExistingSingleton(Type type)
-    {
-        Type singleton = type?.BaseType;
-        var exists = singleton?.GetMethod("InstanceExists", Any);
-        return exists?.Invoke(null, exists.GetParameters().Length == 0 ? null : silentSingletonProbe) is true
-            ? singleton.GetProperty("Instance", Any)?.GetValue(null) : null;
-    }
-
-    private static List<ModFolder> ReadFolders(IEnumerable dirs)
-    {
         var list = new List<ModFolder>();
         string streaming = Path.GetFullPath(Application.streamingAssetsPath).TrimEnd('\\', '/');
         foreach (object d in dirs)
@@ -115,14 +84,11 @@ internal static class GameState
         return list.Count > 0 ? list : null;
     }
 
-    private static DirectoryInfo DirectoryOf(object entry) =>
-        entry?.GetType().GetProperty("DirectoryInfo", Any)?.GetValue(entry) as DirectoryInfo;
-
     // One entry of the game's list as a mod folder; null for the game's own folders.
     private static ModFolder ModOf(object d, string streaming)
     {
         Type t = d.GetType();
-        if (DirectoryOf(d) is not { } info)
+        if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
             return null;
         // The game lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
         string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
@@ -149,8 +115,8 @@ internal static class GameState
             Type screenType = T("SeaPower.LoadScreen");
             if (unitsType == null || screenType == null)
                 return true;
-            object units = ExistingSingleton(unitsType);
-            object screen = ExistingSingleton(screenType);
+            UnityEngine.Object units = Find(unitsType);
+            UnityEngine.Object screen = Find(screenType);
             if (units == null || screen == null)
                 return false;
             object data = unitsType.GetProperty("UnitData", Any)?.GetValue(units) ?? unitsType.GetField("UnitData", Any)?.GetValue(units);

@@ -1,32 +1,60 @@
 # Changelog
 
-## 0.8.2 - unreleased
+## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
-- Default-timed plugins start in the loader’s Awake call when its mod folder is already visible. A visible standalone Anchor Chain installation also satisfies discovery. Otherwise Keel waits for unit data and the finished loading screen, then retries discovery every half second for up to a minute.
+- **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
+  - why: a mod that replaces the load-screen pictures must run before the first one shows
+  - implies `StartEarly`
+- **`StartEarly` mods start in the game's first frames**, one per frame, next to the game (they no longer hold it up)
+- **The early opt-in is seen in the DLL too**: Keel looks at the plugins of the mod list on disk before the game's first frame
+  - the same scan serves the start when the game's list matches it, so no DLL is read twice
+- **Early start waits only for what it needs**: only the early mods' DLLs are checked before they start; setup look, What's new, pack check and the other mods' check follow
+  - one game-version index serves all three check steps
+- **The main-menu card no longer hitches the game once a second** (rgreat)
+  - the type lookups are made once
+  - the menu is measured on a screen-size change or a new scene, then every 10 s (a mod may add an entry later)
+  - where the game's UI root has no size, the menu view is the frame
+- 3 new self-test checks
+- **Mods can prepare data during the splash** (`[Keel] Prepare=<dll>` in `_info.ini`; agm-114, PR #16)
+  - Keel runs the DLL's `Prepare` on a worker, one mod after another, while the game shows its splash
+  - opt-in by that key only, top of the mod folder only: no file-name rule, no folder walk
+  - the plugin asks `Keel.WhenPrepared(folder)`; a line of its progress shows in the loading window
+  - a preparation the game died in is held until the mod is updated (`Keel-prepare.txt`, `HoldOutCrashers`)
+  - run by Keel, not the stub: the stub stays 1.0.0 and needs no update
+- **The game-version check of the mods on disk runs on a worker during the splash** (agm-114, PR #16)
+  - the main thread no longer spends a frame per DLL; a DLL that changed since is checked again
+- **`Keel.HandOffStartupWindow()`**: a mod that draws its own start-up progress hides Keel's loading window; the summary card still comes
+- 16 new self-test checks
+- **The in-game report groups plugins by mod** (PR #13 by agm-114)
+  - a mod with one DLL: one compact row
+  - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves
+  - a closed pack still shows its issue count
+  - Local or the Workshop id after the mod name; DLL names lined up at the right edge
+- **The text report names each plugin's Workshop pack** (name and id)
+- **Mods can record what they are doing** (`Keel.ForPlugin(...).BeginActivity(...)`, `Keel.TrackActivity(ActivityContext)`)
+  - written to the journal before the operation starts and when it ends, nested scopes included
+  - why: a native crash often leaves an empty stack; the last activity gives the next report some context
+  - never throws (blank owner, unknown kind: an empty scope); at most 20 per second and 5000 per session, details cut at 200 characters
+- **Crash report and watcher show the last activities** apart from the blame
+  - context only: an unfinished activity never holds a mod out
+- **Main-menu card is smaller**, shows up to two changed mods
+  - its × and a dismissed loading window leave a small Keel report button on the main menu; that button has its own ×
+- **For tools**: `Keel.GetUiState()`, `SetReportOpen(bool)`, `GetReport()`
+  - why: a tool can see the report window and not click through it
+  - `GetReport()` builds the text without writing `Keel-report.txt`
+- 18 new self-test checks
+- **A mod start fails only when it really broke** (PR #15 by agm-114): the entry point threw, or an exception escaped a plugin's Awake
+  - a failed start: Keel takes off the Harmony patches the mod added in its constructor and entry point, and stops it
+  - patches a plugin adds later (BepInEx `Start()`, coroutines) stay; restart the game to clear a failed mod fully
+  - a mod that catches its own error and logs it (an optional feature) keeps running, marked with errors
+  - errors logged during a start count for that mod only when its code is on the stack; game and Unity errors blame nobody
+- **Broken patches at runtime** (`RemoveBrokenPatches`) also catch missing game types
+  - a patch comes off only when owner and overload are clear; with several patched overloads Keel only names the mod
+  - a mod that merely called a patched game method no longer hides the mod whose patch broke
+  - mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
+- **The compatibility check reads Harmony's ref, out and pointer argument kinds** when matching overloads (false warning on UNREP's speed patch)
 
-- While the game starts, Keel checks pending DLLs on a worker, including when every mod uses default timing. At dispatch it verifies the file contents and checks any new or changed DLLs synchronously.
-
-## 0.8.1 - unreleased - runtime activity diagnostics and tool interoperability
-
-- Early mods use the same startup sequence as first-screen blockers. Checks for ordinary mods run after the early entry points.
-- Mods and tools can wrap operations in `Keel.TrackActivity(ActivityContext)` with
-  a `PluginId` owner and `ActivityKind` enum; the older string overload adapts to it.
-  The journal records the operation before it starts and its completion afterward,
-  including nested activity. A native crash can therefore leave useful context
-  even when its stack file is empty.
-- The crash report and watcher show that context separately from attribution.
-  A recent or unfinished operation alone never causes a mod to be held out.
-- Adds BCL-only `GetUiState`, `SetReportOpen` and `GetReport` methods so tools can
-  detect the report overlay and avoid sending input through it.
-
-## 0.8.0 - unreleased - start early: the game waits only for blocking mods
-
-- **`BlockingStart=true`** (`_info.ini`, `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")`, rgreat): only such a mod is started right before the game shows its first load screen (the game's call of `LoadScreen.ExecuteLoadScreen`), and the game waits for it; it implies `StartEarly`
-- **`StartEarly`** mods start in the game's first frames, one per frame, next to the game as before (they no longer hold the game up)
-- **Early start no longer waits for what it does not need**: only the early mods' DLLs are checked before they start; the setup look, What's new, the pack check and the check of the other mods follow
-- **The main-menu card no longer hitches the game once a second**: the menu is measured when the screen size changes (and a second time shortly after the first hit), not every second; the type lookups it needs are made once; where the game's UI root has no size, the menu view is the frame
-
-## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
+## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
 - **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0

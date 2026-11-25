@@ -51,13 +51,7 @@ internal static class Planner
     /// </summary>
     public static List<PluginEntry> Replan(List<PluginEntry> all, ISet<string> runningElsewhere)
     {
-        var running = new HashSet<string>(runningElsewhere);
-        foreach (PluginEntry plugin in all.Where(p => p.State is PluginState.Running or PluginState.RunningWithErrors))
-        {
-            running.Add(plugin.Guid);
-            running.UnionWith(plugin.AlsoKnownAs);
-        }
-        Resolve(all, running);
+        Resolve(all, runningElsewhere);
         return Order(all.Where(p => p.State == PluginState.Pending).ToList());
     }
 
@@ -134,7 +128,7 @@ internal static class Planner
         return byGuid;
     }
 
-    internal static Dictionary<PluginEntry, HashSet<PluginEntry>> Prerequisites(List<PluginEntry> plugins)
+    private static Dictionary<PluginEntry, HashSet<PluginEntry>> Prerequisites(List<PluginEntry> plugins)
     {
         Dictionary<string, PluginEntry> byGuid = ByGuid(plugins);
         var after = plugins.ToDictionary(p => p, _ => new HashSet<PluginEntry>());   // p -> must start before p
