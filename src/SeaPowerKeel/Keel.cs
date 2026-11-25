@@ -1628,7 +1628,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private float NameWidth => window.width * 0.30f;
     private float SourceWidth => Mathf.Min(132, window.width * 0.19f);
 
-    private void DrawPack(IGrouping<string, PluginEntry> pack, bool first)
+    private void DrawPack(IGrouping<string, PluginEntry> pack)
     {
         PluginEntry plugin = pack.First();
         ModFolder folder = plugin.Folder;
@@ -1644,7 +1644,7 @@ internal sealed partial class KeelHost : MonoBehaviour
                     singlePlugin ? entry.Display : title);
             return;
         }
-        bool open = expandedPacks.TryGetValue(pack.Key, out bool selected) ? selected : first || problems > 0;
+        bool open = expandedPacks.TryGetValue(pack.Key, out bool selected) ? selected : problems > 0;
         string total = $"{dlls} {(dlls == 1 ? "DLL" : "DLLs")}" + (problems > 0 ? $"  ·  {problems} {(problems == 1 ? "issue" : "issues")}" : "");
         float nameOffset = RowInset + VersionWidth + StatusWidth;
         float titleHeight = nameStyle.CalcHeight(new GUIContent(title), NameWidth);
@@ -1824,11 +1824,9 @@ internal sealed partial class KeelHost : MonoBehaviour
                 NewsRow(n);
             GUILayout.Space(8);
         }
-        bool first = true;
         foreach (var pack in Report.Sorted(Keel.Plugins).GroupBy(p => p.Folder?.Path ?? p.Dll ?? p.Guid, StringComparer.OrdinalIgnoreCase))
         {
-            DrawPack(pack, first);
-            first = false;
+            DrawPack(pack);
             GUILayout.Space(3);
         }
         if (Keel.Plugins.Count == 0)

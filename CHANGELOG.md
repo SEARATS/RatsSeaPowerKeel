@@ -1,11 +1,16 @@
 # Changelog
 
-## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
+## 0.8.1 - unreleased - the report groups plugins by mod
 
-- The in-game report groups plugins by mod. Single-DLL mods use compact rows.
-  Multi-DLL packs expand to show their plugins and keep the issue count visible
-  when collapsed. Local or Workshop appears after the mod name, and DLL names
-  align at the right edge. The text report includes Workshop pack names and IDs.
+- **The in-game report groups plugins by mod** (PR #13 by agm-114)
+  - a mod with one DLL: one compact row
+  - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves
+  - a closed pack still shows its issue count
+  - Local or the Workshop id after the mod name; DLL names lined up at the right edge
+- **The text report names each plugin's Workshop pack** (name and id)
+
+## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
+
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
 - **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0
   - a DLL listed under `flat =` in a mod's `keel.ini` is still left out; the partner-build note for older packages stays
