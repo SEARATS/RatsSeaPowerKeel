@@ -18,7 +18,7 @@ namespace AnchorChain;
 /// <list type="bullet">
 /// <item>Switch to Keel: subscribes to Keel's Workshop item, waits for Steam to download it, puts Keel's stub into
 /// BepInEx\plugins and its takeover patcher into BepInEx\patchers (recorded in keel-setup.txt, so Keel's setup can undo it),
-/// switches Keel on in the game's mod list and offers a restart.</item>
+/// then switches Keel on at the top of the game's mod list and offers a restart. A step that fails takes the others back.</item>
 /// <item>Not now: nothing changes; the box comes again at the next start.</item>
 /// <item>Don't show this again: the box's middle button, used as a tick. Ticked, the box stays away until ShowSwitchOffer is
 /// set back in Anchor Chain's config file.</item>
@@ -36,6 +36,7 @@ internal sealed class KeelBridge : MonoBehaviour
 	private const string ManifestName = "keel-setup.txt";
 	private const string Header = "MESSAGE  ·  Anchor Chain";
 	private const float DownloadSeconds = 300f;
+	private const float BrokenSeconds = 15f;     // installed per Steam but no stub this long: a damaged copy, not a slow one
 	private const string ConfigName = "io.github.seapower_modders.anchorchain.cfg";
 	private const string TickOff = "[ ] Don't show this again";
 	private const string TickOn = "[x] Don't show this again";
@@ -214,20 +215,71 @@ internal sealed class KeelBridge : MonoBehaviour
 
 	// ---- the switch ----
 
+	private enum Download { NotStarted, Running, Done, Broken }
+
 	private void Switch() => StartCoroutine(SwitchSteps());
 
+	// Download, install, switch on, offer the restart. Each step that fails says why and leaves the game as it was before the click.
 	private IEnumerator SwitchSteps()
 	{
 		Log.LogInfo("Switch to Keel: getting it from the Workshop.");
 		cancelled = false;
-		Show("Getting R.A.T.S. Keel from the Steam Workshop ...", "Cancel", () => { cancelled = true; Log.LogInfo("Switch cancelled while downloading."); });
+		subscribedNow = false;
+		Show("Getting R.A.T.S. Keel from the Steam Workshop ...", "Cancel", CancelDownload);
 
 		string? folder = null;
-		string? failure = null;
+		yield return GetKeel(path => folder = path);
+		if (cancelled || folder == null) { yield break; }
+
+		Log.LogInfo($"Keel is on disk: {folder}");
+		var placed = new Placed();
 		try {
-			folder = Installed();
-			if (folder == null) {
+			// Files first, the mod list last: the game only loads Keel once its stub is there, so a half switch never lists it.
+			Install(folder, placed);
+			SwitchOn(folder);
+		}
+		catch (Exception e) {
+			Log.LogError($"Keel could not be installed: {e}");
+			placed.Undo();
+			Show($"R.A.T.S. Keel is downloaded but could not be installed: {Reason(e)}.\n\n" +
+			     "• Nothing was changed: Anchor Chain keeps working\n" +
+			     "• Close the game and run KeelSetup.exe from Keel's Workshop folder instead",
+			     "Open the Workshop page", OpenPage, "Close");
+			yield break;
+		}
+		Log.LogInfo("Keel is installed and switched on; offering the restart.");
+		Show("R.A.T.S. Keel is installed and switched on.\n\n" +
+		     "• Restart: the game closes and starts again with Keel\n" +
+		     "• Later: Keel takes over the next time you start the game",
+		     "Restart", () => StartCoroutine(Restart(folder)), "Later", () => Log.LogInfo("Restart later."));
+	}
+
+	private bool subscribedNow;     // this click subscribed to Keel, so a cancel takes the subscription back
+
+	private void CancelDownload()
+	{
+		cancelled = true;
+		Log.LogInfo("Switch cancelled while downloading.");
+		if (!subscribedNow) { return; }
+		try {
+			Unsubscribe();
+		}
+		catch (Exception e) {
+			Log.LogWarning($"Could not take the Keel subscription back: {e.Message}");
+		}
+	}
+
+	/// <summary>Waits for Steam to have Keel complete; hands over its folder, or null after telling the player why not.</summary>
+	private IEnumerator GetKeel(Action<string> found)
+	{
+		string? failure = null;
+		Download state = Download.NotStarted;
+		string folder = "";
+		try {
+			state = State(out folder);
+			if (state == Download.NotStarted) {
 				Subscribe();
+				subscribedNow = true;
 			}
 		}
 		catch (Exception e) {
@@ -235,59 +287,58 @@ internal sealed class KeelBridge : MonoBehaviour
 		}
 
 		float until = Time.realtimeSinceStartup + DownloadSeconds;
-		while (folder == null && failure == null && !cancelled && Time.realtimeSinceStartup < until) {
+		float brokenSince = -1f;
+		while (failure == null && !cancelled && state != Download.Done && Time.realtimeSinceStartup < until) {
 			yield return new WaitForSecondsRealtime(0.5f);
 			try {
-				folder = Installed();
-				if (folder == null) { SetText($"Getting R.A.T.S. Keel from the Steam Workshop ... {Progress()}"); }
+				state = State(out folder);
+				if (state == Download.Running) { SetText($"Getting R.A.T.S. Keel from the Steam Workshop ... {Progress()}"); }
+				// Steam calls the item installed once its files are written: a folder without the stub a while later is a broken copy.
+				if (state != Download.Broken) { brokenSince = -1f; }
+				else if (brokenSince < 0f) { brokenSince = Time.realtimeSinceStartup; }
+				else if (Time.realtimeSinceStartup - brokenSince > BrokenSeconds) {
+					failure = $"its Workshop folder has no {StubName}; Steam's copy looks damaged";
+				}
 			}
 			catch (Exception e) {
 				failure = e.Message;
 			}
 		}
 		if (cancelled) { yield break; }
-		if (folder == null) {
-			Log.LogWarning($"Keel was not downloaded: {failure ?? "Steam took too long"}.");
-			Show("Steam did not finish downloading R.A.T.S. Keel" + (failure != null ? $" ({failure})" : "") + ".\n\n" +
-			     "• Subscribe to it on its Workshop page, then run KeelSetup.exe from its folder\n" +
-			     "• Anchor Chain keeps working meanwhile",
-			     "Open the Workshop page", () => Application.OpenURL($"steam://url/CommunityFilePage/{KeelItem}"), "Close");
+		if (state == Download.Done) {
+			found(folder);
 			yield break;
 		}
-
-		Log.LogInfo($"Keel is on disk: {folder}");
-		try {
-			SwitchOn(folder);   // first: if the game's list cannot take it, nothing is copied yet
-			Install(folder);
-		}
-		catch (Exception e) {
-			Log.LogError($"Keel could not be installed: {e}");
-			Show($"R.A.T.S. Keel is downloaded but could not be installed ({e.Message}).\n\n" +
-			     "• Run KeelSetup.exe from Keel's Workshop folder instead\n" +
-			     "• Anchor Chain keeps working meanwhile",
-			     "Open the Workshop page", () => Application.OpenURL($"steam://url/CommunityFilePage/{KeelItem}"), "Close");
-			yield break;
-		}
-		Log.LogInfo("Keel is installed and switched on; offering the restart.");
-		Show("R.A.T.S. Keel is installed and switched on.\n\n" +
-		     "• Restart: the game closes and starts again with Keel\n" +
-		     "• Later: Keel takes over the next time you start the game",
-		     "Restart", () => Restart(folder), "Later", () => Log.LogInfo("Restart later."));
+		string why = failure ?? (state == Download.NotStarted
+			? "Steam did not start the download (is Steam offline?)"
+			: $"Steam was still downloading it after {DownloadSeconds / 60f:0} minutes");
+		Log.LogWarning($"Keel was not downloaded: {why}.");
+		Show($"R.A.T.S. Keel could not be downloaded: {why}.\n\n" +
+		     "• Anchor Chain keeps working meanwhile\n" +
+		     "• Keel stays subscribed: once Steam has it, close the game and run KeelSetup.exe from its Workshop folder\n" +
+		     "• Don't want it? Unsubscribe on its Workshop page",
+		     "Open the Workshop page", OpenPage, "Close");
 	}
 
-	/// <summary>Keel's Workshop folder once Steam has it complete, else null.</summary>
+	private static void OpenPage() => Application.OpenURL($"steam://url/CommunityFilePage/{KeelItem}");
+
+	/// <summary>Where Steam is with Keel's item; the folder when it is complete.</summary>
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static string? Installed()
+	private static Download State(out string folder)
 	{
+		folder = "";
 		var item = new PublishedFileId_t(KeelItem);
 		var state = (EItemState)SteamUGC.GetItemState(item);
-		if (!state.HasFlag(EItemState.k_EItemStateSubscribed) || !state.HasFlag(EItemState.k_EItemStateInstalled) ||
-		    state.HasFlag(EItemState.k_EItemStateDownloading) || state.HasFlag(EItemState.k_EItemStateDownloadPending) ||
-		    state.HasFlag(EItemState.k_EItemStateNeedsUpdate)) {
-			return null;
+		if (!state.HasFlag(EItemState.k_EItemStateSubscribed)) { return Download.NotStarted; }
+		if (state.HasFlag(EItemState.k_EItemStateDownloading) || state.HasFlag(EItemState.k_EItemStateDownloadPending)) { return Download.Running; }
+		if (!state.HasFlag(EItemState.k_EItemStateInstalled) || state.HasFlag(EItemState.k_EItemStateNeedsUpdate)) {
+			SteamUGC.DownloadItem(item, true);   // subscribed but neither there nor coming: ask once more (Steam ignores repeats)
+			return Download.Running;
 		}
-		if (!SteamUGC.GetItemInstallInfo(item, out _, out string path, 1024u, out _) || !Directory.Exists(path)) { return null; }
-		return File.Exists(Path.Combine(path, StubFolder, StubName)) ? path : null;
+		if (!SteamUGC.GetItemInstallInfo(item, out _, out string path, 1024u, out _) || !Directory.Exists(path)) { return Download.Broken; }
+		if (!File.Exists(Path.Combine(path, StubFolder, StubName))) { return Download.Broken; }
+		folder = path;
+		return Download.Done;
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
@@ -301,6 +352,13 @@ internal sealed class KeelBridge : MonoBehaviour
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static void Unsubscribe()
+	{
+		SteamUGC.UnsubscribeItem(new PublishedFileId_t(KeelItem));
+		Log.LogInfo("Keel subscription taken back.");
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static string Progress()
 	{
 		return SteamUGC.GetItemDownloadInfo(new PublishedFileId_t(KeelItem), out ulong done, out ulong total) && total > 0
@@ -308,63 +366,161 @@ internal sealed class KeelBridge : MonoBehaviour
 			: "";
 	}
 
-	/// <summary>What KeelSetup.exe does when BepInEx is there already: Keel's stub and takeover patcher, recorded for its Restore.</summary>
-	private static void Install(string keelFolder)
+	/// <summary>The player's words for a failed install step; the full exception stays in the log.</summary>
+	private static string Reason(Exception e) => e switch {
+		UnauthorizedAccessException => "Windows did not let the game write into its BepInEx folder",
+		IOException => "a file in the BepInEx folder is in use or could not be written",
+		_ => e.Message,
+	};
+
+	// ---- install, undone on failure ----
+
+	/// <summary>What one install placed, so a failed switch can take it back.</summary>
+	private sealed class Placed
 	{
-		string game = Paths.GameRootPath;
-		string manifest = Path.Combine(game, ManifestName);
-		List<string> lines = File.Exists(manifest) ? File.ReadAllLines(manifest).Where(l => l.Length > 0).ToList() : new List<string>();
+		internal readonly List<string> Created = new();
+		internal readonly List<(string File, string Backup)> Replaced = new();
+		internal string? Manifest;
+		internal string[]? ManifestBefore;     // null: the file was not there
+
+		internal void Undo()
+		{
+			foreach (string file in Created) { Try(() => File.Delete(file)); }
+			foreach ((string file, string backup) in Replaced) { Try(() => File.Copy(backup, file, true)); }
+			if (Manifest != null) {
+				Try(() => {
+					if (ManifestBefore == null) { File.Delete(Manifest); }
+					else { File.WriteAllLines(Manifest, ManifestBefore); }
+				});
+			}
+			Log.LogInfo("The half install was taken back.");
+		}
+
+		private static void Try(Action step)
+		{
+			try {
+				step();
+			}
+			catch (Exception e) {
+				Log.LogWarning($"Could not take a step back: {e.Message}");
+			}
+		}
+	}
+
+	/// <summary>What KeelSetup.exe does when BepInEx is there already: Keel's stub and takeover patcher, recorded for its Restore.</summary>
+	private static void Install(string keelFolder, Placed placed)
+	{
+		string manifest = Path.Combine(Paths.GameRootPath, ManifestName);
+		placed.Manifest = manifest;
+		placed.ManifestBefore = File.Exists(manifest) ? File.ReadAllLines(manifest) : null;
+		List<string> lines = placed.ManifestBefore?.Where(l => l.Length > 0).ToList() ?? new List<string>();
 		void Note(string entry)
 		{
 			if (!lines.Contains(entry)) { lines.Add(entry); }
-			File.WriteAllLines(manifest, lines);     // after every step: an interrupted install can still be undone
+			File.WriteAllLines(manifest, lines);     // after every step: an interrupted install can still be undone by KeelSetup
 		}
 
 		Directory.CreateDirectory(Paths.PluginPath);
-		string stub = Path.Combine(Paths.PluginPath, StubName);
-		if (!File.Exists(stub)) { Note("created\t" + @"BepInEx\plugins\" + StubName); }
-		File.Copy(Path.Combine(keelFolder, StubFolder, StubName), stub, true);
+		Place(Path.Combine(keelFolder, StubFolder, StubName), Path.Combine(Paths.PluginPath, StubName), @"BepInEx\plugins\", Note, placed);
 
 		string patcherSource = Path.Combine(keelFolder, PatcherName);
 		if (File.Exists(patcherSource)) {
 			Directory.CreateDirectory(Paths.PatcherPluginPath);
-			string patcher = Path.Combine(Paths.PatcherPluginPath, PatcherName);
-			if (!File.Exists(patcher)) { Note("created\t" + @"BepInEx\patchers\" + PatcherName); }
-			File.Copy(patcherSource, patcher, true);
+			Place(patcherSource, Path.Combine(Paths.PatcherPluginPath, PatcherName), @"BepInEx\patchers\", Note, placed);
 		}
 		Log.LogInfo("Keel's stub and takeover patcher are in BepInEx (recorded in keel-setup.txt).");
 	}
 
-	/// <summary>Keel switched on in the game's mod list and the list saved, the way the Mods menu does it.</summary>
+	// A file already there with the same bytes is left alone: BepInEx holds a loaded patcher open, and copying over it would fail.
+	private static void Place(string source, string target, string folderName, Action<string> note, Placed placed)
+	{
+		if (File.Exists(target)) {
+			if (File.ReadAllBytes(target).SequenceEqual(File.ReadAllBytes(source))) { return; }
+			string backup = Path.Combine(Path.GetTempPath(), $"AnchorChain-{Guid.NewGuid():N}-{Path.GetFileName(target)}");
+			File.Copy(target, backup);
+			placed.Replaced.Add((target, backup));
+			File.Copy(source, target, true);
+			return;
+		}
+		note("created\t" + folderName + Path.GetFileName(target));
+		placed.Created.Add(target);
+		File.Copy(source, target);
+	}
+
+	/// <summary>Keel switched on in the game's mod list, at its top, and the list saved the way the Mods menu does it.</summary>
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void SwitchOn(string keelFolder)
 	{
 		FileManager files = Singleton<FileManager>.Instance;
 		TrulyObservableCollection<SearchDirectory> list = files.Directories;
 		SearchDirectory? keel = list.FirstOrDefault(d => d.steamId.m_PublishedFileId == KeelItem);
-		if (keel == null) {
+		bool added = keel == null;
+		int wasAt = added ? -1 : list.IndexOf(keel!);
+		bool wasOn = keel?.IsChecked ?? false;
+		// The top: the game wants an item above every mod that requires it (its Mods menu marks the others red), and Keel holds no
+		// game data, so being first changes nothing else. Only members every build since 0.8.7 has.
+		if (added) {
 			keel = new SearchDirectory(new DirectoryInfo(keelFolder), isActive: true, isEditable: true, new PublishedFileId_t(KeelItem));
-			// Last among the mods, ahead of the game's own base layer, which the game always lists last (Keel holds no game
-			// data, so its place does not matter). Only members every build since 0.8.7 has.
-			list.Insert(Math.Max(0, list.Count - 1), keel);
+			list.Insert(0, keel);
 		}
-		keel.IsChecked = true;
-		files.SaveDirectories(list);
-		Log.LogInfo("Keel is switched on in the game's mod list.");
+		else if (wasAt > 0) {
+			list.Move(wasAt, 0);
+		}
+		keel!.IsChecked = true;
+		try {
+			files.SaveDirectories(list);
+			// The game writes this same list back when it closes, so what is saved now stays. Checked on disk all the same.
+			if (!SavedOn()) { throw new InvalidOperationException("the game's mod list did not keep Keel"); }
+		}
+		catch (Exception) {
+			// Put the game's own list back too: it is written again at exit, and a Keel left on there would load without its stub.
+			keel.IsChecked = wasOn;
+			if (added) { list.Remove(keel); }
+			else if (wasAt > 0) { list.Move(0, wasAt); }
+			files.SaveDirectories(list);
+			throw;
+		}
+		Log.LogInfo("Keel is switched on at the top of the game's mod list.");
 	}
 
-	private void Restart(string keelFolder)
+	/// <summary>Does usersettings.ini list Keel, switched on?</summary>
+	private static bool SavedOn()
+	{
+		string settings = Path.Combine(Application.persistentDataPath, "usersettings.ini");
+		return File.Exists(settings) && File.ReadAllLines(settings).Any(l =>
+			l.TrimStart().StartsWith("Mod", StringComparison.Ordinal) && l.Contains(",True," + KeelItem));
+	}
+
+	// Keel's watcher waits for the game to close, then starts it again. The game only quits once the watcher is seen running.
+	private IEnumerator Restart(string keelFolder)
 	{
 		string watcher = Path.Combine(keelFolder, WatcherName);
+		Process? started = null;
+		string? failure = null;
 		try {
+			if (!File.Exists(watcher)) { throw new FileNotFoundException($"{WatcherName} is not in Keel's folder"); }
 			Process self = Process.GetCurrentProcess();
 			string exe = self.MainModule?.FileName ?? "";
-			Process.Start(new ProcessStartInfo(watcher, $"--relaunch {self.Id} \"{exe}\"") { UseShellExecute = false, CreateNoWindow = true })?.Dispose();
+			started = Process.Start(new ProcessStartInfo(watcher, $"--relaunch {self.Id} \"{exe}\"") { UseShellExecute = false, CreateNoWindow = true });
+			if (started == null) { throw new InvalidOperationException($"{WatcherName} did not start"); }
 		}
 		catch (Exception e) {
-			Log.LogWarning($"Could not restart the game by itself: {e.Message}");
+			failure = e.Message;
+		}
+		if (failure == null) {
+			yield return new WaitForSecondsRealtime(1f);
+			try {
+				if (started!.HasExited) { failure = $"{WatcherName} stopped at once"; }
+			}
+			catch (Exception e) {
+				failure = e.Message;
+			}
+		}
+		started?.Dispose();
+		if (failure != null) {
+			Log.LogWarning($"Could not restart the game by itself: {failure}");
 			Show("The game could not restart by itself.\n\n• Close it and start it again: Keel takes over then", "OK", () => { });
-			return;
+			yield break;
 		}
 		Log.LogInfo("Restarting the game for Keel.");
 		Application.Quit();

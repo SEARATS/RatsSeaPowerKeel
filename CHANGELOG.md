@@ -1,5 +1,25 @@
 # Changelog
 
+## Anchor Chain 1.3 - unreleased - the switch to Keel
+
+Not released; pull request #5. Goes out through Anchor Chain's own Workshop item, not Keel's. Run 2 in the test VM (2026-11-18): offer, Not now, Switch, restart and Keel taking over all green on 0.9.3 public and beta; the fixes of 2026-11-25 are built and compat-checked, not run in the game yet.
+
+- **Anchor Chain offers the switch**: on the main menu a game message box says Anchor Chain continues as Keel; Switch or Not now
+- **Switch does it all from the game**: subscribes to Keel, installs its stub and takeover the way KeelSetup does (Restore undoes it), switches it on in the mod list, restarts the game
+- **Not now changes nothing**: Anchor Chain keeps loading the mods; the box asks again at the next start
+- **Don't show this again**: the box's middle button is a tick; ticked, the offer stays away, and `ShowSwitchOffer` in `BepInEx\config\io.github.seapower_modders.anchorchain.cfg` brings it back. Run in the test VM on 2026-11-21 (0.9.3 public, 3 starts): tick, untick, closing with the ×, no offer at the next start, offer back after setting it to `true`, all green
+- **Builds from the installed game**: `anchor-chain/` no longer needs a `Dll` folder of game files
+
+### Fixes from the review (2026-11-25)
+
+- **Keel goes to the top of the mod list**: it sat second to last, below the mods that need it, so the Mods menu showed red dependency warnings (tester report, 2026-11-19); a Keel already listed lower is moved up
+- **Files first, mod list last**: a failed install takes back what it placed and leaves Keel off, instead of a Keel switched on without its stub
+- **The saved mod list is checked on disk** after the switch; a list that did not keep Keel counts as a failed install
+- **Cancel takes the subscription back**; after a failed download Keel stays subscribed and the box says how to finish or undo it
+- **Clearer download messages**: Steam offline, still downloading, and a damaged Workshop copy are told apart instead of one "Steam took too long" after 5 minutes
+- **A patcher already in place is not copied over** when it is the same file (BepInEx holds it open); install errors are told in plain words, the details go to the log
+- **Restart quits the game only once Keel's watcher runs**; else the box says to restart by hand
+
 ## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
 - **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
@@ -50,24 +70,12 @@
 
 ### KeelSetup downloads BepInEx
 
-### KeelSetup downloads BepInEx
-
 Run in the test VM on 2026-11-18 (fake game folders, no game start): download, network off, offline zip, wrong zip refused, game with BepInEx, Restore; all green.
 
 - **Keel ships no BepInEx any more**: KeelSetup.exe downloads the official BepInEx 5.4.23.2 from its GitHub release only when the game has none
 - **Checked before anything is unpacked**: a download whose hash is not the pinned one is refused, nothing is installed
 - **No internet on that PC**: put `BepInEx_win_x64_5.4.23.2.zip` from BepInEx's GitHub page next to KeelSetup.exe; the setup checks and uses it
 - **Smaller package, fewer program files** for virus scanners to guess at
-
-### Anchor Chain 1.3: the switch to Keel
-
-Not released; a pull request. Run 2 in the test VM (2026-11-18): offer, Not now, Switch, restart and Keel taking over all green on 0.9.3 public and beta. Goes out through Anchor Chain's own Workshop item, not Keel's.
-
-- **Anchor Chain offers the switch**: on the main menu a game message box says Anchor Chain continues as Keel; Switch or Not now
-- **Switch does it all from the game**: subscribes to Keel, switches it on in the mod list, installs its stub and takeover the way KeelSetup does (Restore undoes it), restarts the game
-- **Not now changes nothing**: Anchor Chain keeps loading the mods; the box asks again at the next start
-- **Don't show this again**: the box's middle button is a tick; ticked, the offer stays away, and `ShowSwitchOffer` in `BepInEx\config\io.github.seapower_modders.anchorchain.cfg` brings it back. Run in the test VM on 2026-11-21 (0.9.3 public, 3 starts): tick, untick, closing with the ×, no offer at the next start, offer back after setting it to `true`, all green
-- **Builds from the installed game**: `anchor-chain/` no longer needs a `Dll` folder of game files
 
 ## 0.6.0 - 2026-11-18 - Keel carries on Anchor Chain, fixes from 183 player reports
 
