@@ -1,7 +1,20 @@
 # Changelog
 
-## 0.8.1 - unreleased - the report groups plugins by mod
+## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod
 
+- **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
+  - why: a mod that replaces the load-screen pictures must run before the first one shows
+  - implies `StartEarly`
+- **`StartEarly` mods start in the game's first frames**, one per frame, next to the game (they no longer hold it up)
+- **The early opt-in is seen in the DLL too**: Keel looks at the plugins of the mod list on disk before the game's first frame
+  - the same scan serves the start when the game's list matches it, so no DLL is read twice
+- **Early start waits only for what it needs**: only the early mods' DLLs are checked before they start; setup look, What's new, pack check and the other mods' check follow
+  - one game-version index serves all three check steps
+- **The main-menu card no longer hitches the game once a second** (rgreat)
+  - the type lookups are made once
+  - the menu is measured on a screen-size change or a new scene, then every 10 s (a mod may add an entry later)
+  - where the game's UI root has no size, the menu view is the frame
+- 3 new self-test checks
 - **The in-game report groups plugins by mod** (PR #13 by agm-114)
   - a mod with one DLL: one compact row
   - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves
