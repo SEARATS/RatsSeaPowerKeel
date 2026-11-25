@@ -21,6 +21,9 @@ This file is the plan and lives here on GitHub. It is discussed in Discord: one 
 - [ ] Contributors listed in Keel's README credits and in its report window
 - [ ] Log lines name their mod: a warning or error in the game's log shows which mod wrote it (from the call's stack), and a
   "Method not found" names the mod whose DLL uses that member (Keel already checks every DLL against the running build)
+- [ ] Mod notices: a mod tells its players what to adapt after an update ("settings reset, pick your crew again"), from a
+  `keel-notices.txt` in its folder or a call at run time; the game draws it as a card next to What's new (info or amber),
+  once per mod version, it stays until its x is clicked, and the report window keeps every notice
 
 ## Mods we start with
 
