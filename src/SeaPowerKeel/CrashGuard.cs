@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace SeaPowerKeel;
 
@@ -21,6 +22,7 @@ internal sealed class CrashGuard
     private readonly string heldPath;
     private readonly string playerPrev;
     private FileStream journal;
+    private readonly SemaphoreSlim journalGate = new(1, 1);
 
     public CrashText.Journal Previous { get; }
 
@@ -82,10 +84,10 @@ internal sealed class CrashGuard
     /// <summary>One step, handed to the operating system at once. Never throws.</summary>
     public void Mark(string kind, string detail)
     {
-        if (journal == null)
-            return;
+        journalGate.Wait();
         try
         {
+            if (journal == null) return;
             byte[] line = Encoding.UTF8.GetBytes(kind + "\t" + detail + Environment.NewLine);
             journal.Write(line, 0, line.Length);
             journal.Flush();
@@ -93,6 +95,68 @@ internal sealed class CrashGuard
         catch (Exception)
         {
             journal = null;
+        }
+        finally { journalGate.Release(); }
+    }
+
+    // The journal is flushed per line and lives for the whole session: a mod that wraps a per-frame call must not grow it
+    // without end. Past the limits a scope still works but writes nothing; the crash report keeps only the last 32 anyway.
+    internal int ActivitiesPerSecond = 20;
+    internal int ActivitiesPerSession = 5000;
+    private const int DetailChars = 200;
+    private long activitySecond;
+    private int activitiesThisSecond, activitiesThisSession;
+    private bool activityLimitNoted;
+    private readonly object activityLock = new();
+
+    public IDisposable BeginActivity(ActivityContext context)
+    {
+        if (context == null || !TakeActivitySlot())
+            return Keel.EmptyActivity.Instance;
+        string token = System.Guid.NewGuid().ToString("N");
+        string detail = context.Detail ?? "";
+        if (detail.Length > DetailChars)
+            detail = detail.Substring(0, DetailChars) + "...";
+        Mark("activity", $"{token}\t{DateTime.UtcNow.Ticks}\t{Clean(context.Owner.Value)}\t{context.Kind}\t{Clean(detail)}");
+        return new ActivityScope(this, token);
+    }
+
+    private bool TakeActivitySlot()
+    {
+        long second = DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond;
+        bool take;
+        lock (activityLock)
+        {
+            if (second != activitySecond)
+            {
+                activitySecond = second;
+                activitiesThisSecond = 0;
+            }
+            take = activitiesThisSecond < ActivitiesPerSecond && activitiesThisSession < ActivitiesPerSession;
+            if (take)
+            {
+                activitiesThisSecond++;
+                activitiesThisSession++;
+            }
+            else if (activityLimitNoted)
+                return false;
+            activityLimitNoted |= !take;
+        }
+        if (!take)      // once per session, so the crash report says why the tail may be thin
+            Mark("activity-limit", activitiesThisSession >= ActivitiesPerSession ? "session" : "second");
+        return take;
+    }
+
+    private static string Clean(string value) => (value ?? "").Replace("\\", "\\\\")
+        .Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
+
+    private class ActivityScope(CrashGuard owner, string token) : IDisposable
+    {
+        private int ended;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref ended, 1) == 0)
+                owner.Mark("activity-end", $"{token}\t{DateTime.UtcNow.Ticks}");
         }
     }
 
@@ -214,7 +278,7 @@ internal sealed class CrashGuard
             loading = $" It was loading {Path.GetFileName(packFile)} from mod folder {packFolder} just before.";
         }
         string detail = CrashText.CrashLine(block);
-        note($"The last game did not end normally{where}, and Keel cannot tell for certain which mod did it{(detail != null ? $" ({detail})" : "")}.{loading} Details: {KeelNames.CrashFile}.");
+        note($"The last game did not end normally{where}, and Keel cannot tell for certain which mod did it{(detail != null ? $" ({detail})" : "")}.{loading}{CrashText.ActivityHint(Previous)} Details: {KeelNames.CrashFile}.");
         return null;
     }
 
@@ -268,7 +332,7 @@ internal sealed class CrashGuard
     {
         try
         {
-            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous.Began, Previous.Step, Previous.Guid, Previous.Scene, block));
+            File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous, block));
         }
         catch (Exception)
         {

@@ -166,7 +166,7 @@ internal static class Watcher
     /// </summary>
     private static void WriteCrashFile(CrashText.Journal journal, string dir, string stack) =>
         TryWrite(Path.Combine(dir, KeelNames.CrashFile),
-                 CrashText.CrashFileText(journal.Began, journal.Step, journal.Guid, journal.Scene, string.IsNullOrWhiteSpace(stack) ? null : stack));
+                 CrashText.CrashFileText(journal, string.IsNullOrWhiteSpace(stack) ? null : stack));
 
     private static bool Ask(string text, string name, string detail, string dir, bool isPack, out bool keepOff)
     {
@@ -282,10 +282,10 @@ internal static class Watcher
             return $"The game was loading {Path.GetFileName(file)} from {name} just before it crashed, so this mod is the most likely cause.";
         }
         if (block == null)
-            return "Keel found no crash record for this game: the game may have frozen and been ended, or been closed from outside. No mod is to blame from what Keel can see." + KeepsHappening;
+            return "Keel found no crash record for this game: the game may have frozen and been ended, or been closed from outside. No mod is to blame from what Keel can see." + CrashText.ActivityHint(journal) + KeepsHappening;
         if (CrashText.InObjectSearch(block))
             return "The game crashed inside Unity's object search. That happens when the game's object list is already damaged, so the code that called the search is not the cause and no mod is held." + KeepsHappening;
-        return "Keel couldn't tell which mod caused this. It may be the game itself, or a mod's models or files." + KeepsHappening;
+        return "Keel couldn't tell which mod caused this. It may be the game itself, or a mod's models or files." + CrashText.ActivityHint(journal) + KeepsHappening;
     }
 
     // Steam counts this process as part of the game until it ends, so the start comes from a detached shell a few seconds later.

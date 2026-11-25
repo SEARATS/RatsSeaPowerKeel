@@ -12,6 +12,7 @@ using SeaPowerKeel;
 // Mono.Cecil without running them, so a copy of this DLL in a temp folder is a mod folder. Nothing of the game is started.
 internal static class SelfTest
 {
+    private enum ActivityOperation { RebuildPage }
     private static int failures, checks;
 
     // Shapes of a load-screen postfix (the Alternative mods use the first).
@@ -325,6 +326,10 @@ internal static class SelfTest
 
     private static void CrashGuardChecks(string tmp)
     {
+        var ui = new KeelUiState("test", true, false, null);
+        Check(ui.StartupComplete && !ui.ReportOpen && ui.Version == "test"
+            && typeof(Keel).GetMethod("GetUiState").ReturnType == typeof(KeelUiState),
+            "tooling UI state has a concrete typed contract");
         CrashText.Journal V(params string[] lines) => CrashText.ReadJournal(lines);
         Check(!V().Unclean, "no journal: nothing to say");
         Check(!V("session\tx", "start\ta", "done\t", "quit\t").Unclean, "a normal quit is clean");
@@ -332,6 +337,105 @@ internal static class SelfTest
         Check(during.Unclean && during.Step == "start" && during.Guid == "b", "ended while starting b: names b");
         CrashText.Journal after = V("session\tx", "start\tb", "done\t", "scene\tmission");
         Check(after.Unclean && after.Guid == null && after.Scene == "mission", "ended after start-up: no mod from the journal, the scene is known");
+
+        long ticks = DateTime.UtcNow.Ticks;
+        var activeUi = V("session\tx", "done\t", $"activity\touter\t{ticks}\tbridge\tclick\tcontrol=7",
+            $"activity\tinner\t{ticks}\tmy.settings\tsettings rebuild\tDynamic page");
+        Check(activeUi.Guid == null && activeUi.Activities.Count == 2 && activeUi.Activities.All(item => item.Ended == 0),
+            "nested UI activities retain both owners without turning context into startup blame");
+        var completeUi = V("session\tx", "done\t", $"activity\ta\t{ticks}\tmy.settings\tsettings rebuild\tDynamic page",
+            $"activity-end\ta\t{ticks + 1}");
+        Check(completeUi.Activities.Single().Ended == ticks + 1 && CrashText.ActivityHint(completeUi).Contains("completed"),
+            "completed UI work is distinguished from an interrupted callback");
+        Check(CrashText.CrashFileText(activeUi, null)
+            .Contains("not proof of cause") && CrashText.ActivityHint(activeUi).Contains("my.settings"),
+            "an empty native crash record still includes the last settings owner as diagnostic context");
+        Check(V("session\tx", "activity\tbroken", "activity-end\tbroken", "activity\ta\t-1\tx\ty\tz").Activities.Count == 0,
+            "incomplete or malformed activity lines do not break crash reports");
+        var bounded = CrashText.ReadJournal(new[] { "session\tx" }.Concat(Enumerable.Range(0, 40)
+            .Select(index => $"activity\t{index}\t{ticks}\tx\tclick\t{index}")));
+        Check(bounded.Activities.Count == 32 && bounded.Activities[0].Detail == "8", "reports retain a bounded tail of runtime activity");
+        string activityDir = Path.Combine(tmp, "activitycontext");
+        Directory.CreateDirectory(activityDir);
+        var activityWriter = new CrashGuard(activityDir, null);
+        using (activityWriter.BeginActivity(new ActivityContext(new PluginId("my.settings"), ActivityKind.SettingsRebuild, "Dynamic\tpage\r\nquit\t"))) { }
+        var writtenActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)));
+        Check(writtenActivity.Unclean && writtenActivity.Activities.Single().Ended > 0
+            && writtenActivity.Activities[0].Detail == "Dynamic\\tpage\\r\\nquit\\t", "activity details preserve visible control-character escapes without injecting records");
+        var activityContext = new ActivityContext(new PluginId("my.settings"), ActivityKind.SettingsEdit, "Advanced", "RefreshSeconds");
+        Check(activityContext.Owner.Value == "my.settings" && activityContext.Kind == ActivityKind.SettingsEdit
+            && activityContext.Detail == "Advanced RefreshSeconds", "typed activity contexts join params details without losing their owner or operation");
+        var previousJournal = Keel.ActivityJournal;
+        try
+        {
+            Keel.ActivityJournal = activityWriter;
+            var plugin = Keel.ForPlugin(new PluginId("bound.plugin"));
+            using (plugin.BeginActivity(ActivityOperation.RebuildPage, "Advanced", "RefreshSeconds")) { }
+        }
+        finally { Keel.ActivityJournal = previousJournal; }
+        var boundActivity = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile))).Activities.Last();
+        Check(boundActivity.Guid == "bound.plugin" && boundActivity.Operation == nameof(ActivityKind.Other)
+            && boundActivity.Detail == "ActivityOperation.RebuildPage Advanced RefreshSeconds" && boundActivity.Ended > 0,
+            "plugin-bound activities accept a mod-specific enum (kept as Other) and params details without repeating the owner");
+        int linesBeforeBlank = CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count();
+        bool blankThrew = false;
+        try
+        {
+            Keel.ActivityJournal = activityWriter;
+            using (Keel.ForPlugin(new PluginId("  ")).BeginActivity(ActivityKind.UiInput, "x")) { }
+            using (Keel.TrackActivity(new ActivityContext(new PluginId(null), (ActivityKind)99))) { }
+            using (Keel.TrackActivity(null)) { }
+        }
+        catch (Exception) { blankThrew = true; }
+        finally { Keel.ActivityJournal = previousJournal; }
+        Check(!blankThrew && CrashText.ReadLines(Path.Combine(activityDir, KeelNames.JournalFile)).Count() == linesBeforeBlank,
+            "a blank owner, an unknown kind or no context gives an empty scope: no exception, nothing written");
+        Check(new ActivityContext(new PluginId("x"), (ActivityKind)99).Kind == ActivityKind.Other, "an unknown activity kind is kept as Other");
+
+        string limitDir = Path.Combine(tmp, "activitylimit");
+        Directory.CreateDirectory(limitDir);
+        var limited = new CrashGuard(limitDir, null) { ActivitiesPerSession = 3 };
+        for (int i = 0; i < 10; i++)
+            using (limited.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction, new string('d', 300)))) { }
+        var limitLines = CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile)).ToList();
+        var limitJournal = CrashText.ReadJournal(limitLines);
+        Check(limitJournal.Activities.Count == 3 && limitLines.Count(l => l.StartsWith("activity-limit\t", StringComparison.Ordinal)) == 1,
+            "past the session limit activities write nothing more, and the limit is noted once");
+        Check(limitJournal.Activities[0].Detail.Length == 203, "a long activity detail is cut to 200 characters");
+        var perSecond = new CrashGuard(limitDir, null) { ActivitiesPerSecond = 2 };
+        int before = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count;
+        for (int i = 0; i < 10; i++)
+            using (perSecond.BeginActivity(new ActivityContext(new PluginId("busy"), ActivityKind.GameAction))) { }
+        int written = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(limitDir, KeelNames.JournalFile))).Activities.Count - before;
+        Check(written is >= 2 and <= 4, "a burst within one second writes at most the per-second limit");
+        perSecond.Mark("quit", "");
+        activityWriter.Mark("done", "");
+        var contextRun = new CrashGuard(activityDir, null);
+        var contextMod = new PluginEntry { Guid = "my.settings", Name = "Settings", TypeName = "MySettings.Plugin", Dll = "missing.dll" };
+        var contextNotes = new List<string>();
+        contextRun.Apply(new[] { contextMod }, true, contextNotes.Add);
+        Check(contextMod.State == PluginState.Pending && !contextRun.HeldActive
+            && contextNotes.Single().Contains("Last recorded activity"), "runtime breadcrumbs alone never hold or blame a mod");
+        contextRun.Mark("quit", "");
+
+        string concurrentDir = Path.Combine(tmp, "concurrentactivity");
+        Directory.CreateDirectory(concurrentDir);
+        var concurrent = new CrashGuard(concurrentDir, null) { ActivitiesPerSecond = 1000 };
+        System.Threading.Tasks.Parallel.For(0, 64, index =>
+        {
+            using (concurrent.BeginActivity(new ActivityContext(new PluginId("parallel"), ActivityKind.GameAction, index.ToString()))) { }
+        });
+        var concurrentJournal = CrashText.ReadJournal(CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile)));
+        Check(concurrentJournal.Activities.Count == 32 && concurrentJournal.Activities.All(item => item.Ended > 0),
+            "concurrent callbacks leave complete journal records through the semaphore");
+        var shared = concurrent.BeginActivity(new ActivityContext(new PluginId("shared"), ActivityKind.GameAction));
+        System.Threading.Tasks.Parallel.For(0, 64, _ => shared.Dispose());
+        var sharedLines = CrashText.ReadLines(Path.Combine(concurrentDir, KeelNames.JournalFile));
+        Check(sharedLines.Count(line => line.StartsWith("activity-end\t", StringComparison.Ordinal)) == 65,
+            "concurrent disposal writes one completion per scope");
+        Check(V($"activity\ta\t{ticks}\tx\ty\tz", "activity-end\ta\t-1").Activities.Single().Ended == 0,
+            "a damaged completion timestamp leaves the activity open");
+        concurrent.Mark("quit", "");
 
         Check(CrashText.CrashBlock("all fine\nno problem") == null, "a log without a crash gives no crash block");
         var a = new PluginEntry { Guid = "a", TypeName = "AlphaMod.Plugin", Order = 0 };
@@ -713,7 +817,7 @@ internal static class SelfTest
         File.WriteAllText(shut, "lots\nInput System module state changed to: ShutdownInProgress.\nInput System polling thread exited.\nInput System module state changed to: Shutdown.\n");
         File.WriteAllText(cut, "lots\n[Info : Mod] starting\n");
         Check(CrashText.LogEndedNormally(shut) && !CrashText.LogEndedNormally(cut) && !CrashText.LogEndedNormally(Path.Combine(tmp, "none.log")), "a normal Unity shutdown is told from a log that just stops");
-        Check(CrashText.CrashFileText("2026-11-18 10:00:00", null, null, "Menu", null).Contains("No crash record"), "a crash text without a record says so");
+        Check(CrashText.CrashFileText(new CrashText.Journal { Began = "2026-11-18 10:00:00", Scene = "Menu" }, null).Contains("No crash record"), "a crash text without a record says so");
 
         string dir = Path.Combine(tmp, "packcheck");
         Directory.CreateDirectory(dir);

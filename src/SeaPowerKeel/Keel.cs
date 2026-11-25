@@ -26,6 +26,27 @@ public static class Keel
     public static readonly string Version = typeof(Keel).Assembly.GetName().Version.ToString(3);
 
     internal static readonly List<PluginEntry> Plugins = new();
+    internal static CrashGuard ActivityJournal;
+
+    public static PluginActivity ForPlugin(PluginId owner) => new(owner);
+
+    /// <summary>Optional mod diagnostics: records an operation before native code can crash. Dispose after it finishes.</summary>
+    public static IDisposable TrackActivity(ActivityContext context) =>
+        context == null || context.Owner.IsEmpty ? EmptyActivity.Instance
+            : ActivityJournal?.BeginActivity(context) ?? EmptyActivity.Instance;
+
+    internal sealed class EmptyActivity : IDisposable
+    {
+        internal static readonly EmptyActivity Instance = new();
+        public void Dispose() { }
+    }
+
+    /// <summary>For tools: Keel's UI state as plain values, without Unity or Keel's internal UI types.</summary>
+    public static KeelUiState GetUiState() => new(Version, KeelHost.Current?.StartupComplete ?? false,
+        KeelHost.Current?.ReportOpen ?? false, Loading.LoadingWindow.WaitingFor);
+
+    public static void SetReportOpen(bool open) => KeelHost.Current?.SetReportOpen(open);
+    public static string GetReport() => KeelHost.Current?.ReadReport() ?? "";
 
     private static ManualLogSource log;
     /// <summary>Keel's one log source; every part of Keel writes through it.</summary>
@@ -53,6 +74,27 @@ public static class Keel
 
 internal sealed partial class KeelHost : MonoBehaviour
 {
+    internal static KeelHost Current;
+    internal bool StartupComplete => done;
+    internal bool ReportOpen => showWindow;
+
+    // Sets the state outright: ToggleWindow drops a second call in the same frame (its hotkey guard), so a tool's open/close would be lost.
+    internal void SetReportOpen(bool open)
+    {
+        if (showWindow == open)
+            return;
+        showWindow = open;
+        noticeUntil = 0;
+        if (open && done)
+            WriteReport();
+    }
+
+    // A tool may ask every frame: build the text, never write the file for it.
+    internal string ReadReport()
+    {
+        try { return ReportText(); }
+        catch (Exception ex) { return $"Keel could not build the report: {ex.Message}"; }
+    }
     internal static string PendingStubVersion, PendingPath;
     public string StubVersion = PendingStubVersion;
     public string OwnPath = PendingPath;
@@ -93,6 +135,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private void Awake()
     {
+        Current = this;
         log = Keel.Log;
         var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
         BindSettings(config);
@@ -162,6 +205,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             crash = new CrashGuard(Paths.BepInExRootPath, Path.Combine(Path.GetDirectoryName(Application.consoleLogPath) ?? "", "Player-prev.log"));
+            Keel.ActivityJournal = crash;
         }
         catch (Exception ex)
         {
@@ -1057,15 +1101,20 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         try
         {
-            string text = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
-            if (news is { Count: > 0 })
-                text += Environment.NewLine + "WHAT'S NEW SINCE THE LAST START" + Environment.NewLine + WhatsNew.Text(news).Replace("\n", Environment.NewLine);
-            File.WriteAllText(reportPath, text);
+            File.WriteAllText(reportPath, ReportText());
         }
         catch (Exception ex)
         {
             log.LogWarning($"Cannot write {reportPath}: {ex.Message}");
         }
+    }
+
+    private string ReportText()
+    {
+        string text = Report.Text(Keel.Plugins, Header(), notes, skippedDlls);
+        if (news is { Count: > 0 })
+            text += Environment.NewLine + "WHAT'S NEW SINCE THE LAST START" + Environment.NewLine + WhatsNew.Text(news).Replace("\n", Environment.NewLine);
+        return text;
     }
 
     private void ToggleWindow()
@@ -1179,7 +1228,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (Loading.LoadingWindow.ReportRequested)      // a click on the loading window's summary
         {
             Loading.LoadingWindow.ReportRequested = false;
-            ToggleWindow();
+            SetReportOpen(true);
         }
         if (Time.unscaledTime > nextFlush)
         {
@@ -1437,7 +1486,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     // His layout 2026-11-12: the card is a glance (one line per mod), the report window shows two lines per mod and a click on a
     // mod opens all its notes there.
-    private const int NewsMods = 5, ReportNewsLines = 2;
+    private const int NewsMods = 2, ReportNewsLines = 2;
     private readonly HashSet<NewsItem> newsOpen = new();                      // mods opened in the report window
     private readonly Dictionary<NewsItem, Rect> newsRowRects = new();         // their rows, in the scroll view's content
     private Rect newsScrollRect;                                              // the scroll view, in the window
@@ -1457,8 +1506,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             return true;
         }
         scroll = Vector2.zero;          // What's new is the first section of the list
-        if (!showWindow)
-            ToggleWindow();
+        SetReportOpen(true);
         return true;
     }
 

@@ -128,6 +128,38 @@ Players can switch to `Strict` (any missing use or patch target keeps the DLL ou
 
 ## Errors
 
+Keel 0.8.1 adds optional runtime diagnostic scopes:
+
+```csharp
+var plugin = Keel.ForPlugin(new PluginId("your.plugin.guid"));
+using (plugin.BeginActivity(ActivityKind.SettingsRebuild, "Advanced page", "Refresh interval"))
+{
+    RebuildPage();
+}
+```
+
+- `PluginActivity` binds the owner once; `BeginActivity` takes an `ActivityKind` (or your own enum, recorded as `Other`
+  with its name first in the detail) and any number of detail strings
+- `Keel.TrackActivity(ActivityContext)` is the same for lower-level callers
+- Never throws: a blank plugin id, an unknown kind or a `null` context gives a scope that writes nothing
+- The journal line is flushed before the operation starts and again when the scope is disposed; nested scopes keep both owners
+- Tabs, line breaks and backslashes in details are written escaped (`\t`, `\r`, `\n`, `\\`), so a detail cannot fake a record
+- Details are cut at 200 characters
+- **Meant for rare operations** (a settings page rebuild, a menu action, a scene change), not per-frame code:
+  - Keel writes at most 20 activities per second and 5000 per game session; past that a scope writes nothing
+  - the crash report shows only the last 32 anyway
+- If native code ends the game without a usable stack, the watcher and the next start's report show the last activity
+  - context only, not proof of cause: it never holds a mod out by itself
+- No player-entered values, credentials or other private data in a detail
+- Keel absent or older: find the method by reflection and use a no-op scope
+
+For tools (call on the game's main thread):
+
+- `Keel.GetUiState()` returns a `KeelUiState`: `Version`, `StartupComplete`, `ReportOpen`, `WaitingFor`
+- `Keel.SetReportOpen(bool)` opens or closes the report window (several calls in one frame all count)
+- `Keel.GetReport()` returns the report text, without writing `Keel-report.txt`
+- Keep inspection available, block UI-changing actions while startup is incomplete or the report is open
+
 Keel starts plugins one at a time. One that throws while starting is marked `FAILED` and the next one starts. Exceptions
 your mod throws later (from `Update`, Harmony patches ...) are counted against it by its namespaces in the stack trace and
 shown in the report (Ctrl+Shift+K, `BepInEx\Keel-report.txt`), and the log gets a line naming your mod with the stack

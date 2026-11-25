@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod
+## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics
 
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
@@ -21,6 +21,18 @@
   - a closed pack still shows its issue count
   - Local or the Workshop id after the mod name; DLL names lined up at the right edge
 - **The text report names each plugin's Workshop pack** (name and id)
+- **Mods can record what they are doing** (`Keel.ForPlugin(...).BeginActivity(...)`, `Keel.TrackActivity(ActivityContext)`)
+  - written to the journal before the operation starts and when it ends, nested scopes included
+  - why: a native crash often leaves an empty stack; the last activity gives the next report some context
+  - never throws (blank owner, unknown kind: an empty scope); at most 20 per second and 5000 per session, details cut at 200 characters
+- **Crash report and watcher show the last activities** apart from the blame
+  - context only: an unfinished activity never holds a mod out
+- **Main-menu card is smaller**, shows up to two changed mods
+  - its × and a dismissed loading window leave a small Keel report button on the main menu; that button has its own ×
+- **For tools**: `Keel.GetUiState()`, `SetReportOpen(bool)`, `GetReport()`
+  - why: a tool can see the report window and not click through it
+  - `GetReport()` builds the text without writing `Keel-report.txt`
+- 18 new self-test checks
 
 ## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 

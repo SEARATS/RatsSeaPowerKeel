@@ -23,6 +23,14 @@ internal static class CrashText
         public string Guid;
         public string Scene;
         public string Began;
+        public readonly List<Activity> Activities = new();
+    }
+
+    public class Activity
+    {
+        public string Token, Guid, Operation, Detail;
+        public long Started, Ended;
+        public string Status => Ended == 0 ? "not completed" : "completed";
     }
 
     private static readonly string[] CrashMarkers =
@@ -59,6 +67,20 @@ internal static class CrashText
                 case "done": v.Step = null; v.Guid = null; break;
                 case "scene": v.Scene = detail; break;
                 case "quit": quit = true; break;
+                case "activity":
+                    string[] fields = detail.Split('\t');
+                    if (fields.Length != 5 || !long.TryParse(fields[1], out long started)
+                        || started < DateTime.MinValue.Ticks || started > DateTime.MaxValue.Ticks) break;
+                    v.Activities.Add(new Activity { Token = fields[0], Started = started, Guid = fields[2], Operation = fields[3], Detail = fields[4] });
+                    if (v.Activities.Count > 32) v.Activities.RemoveAt(0);
+                    break;
+                case "activity-end":
+                    string[] ending = detail.Split('\t');
+                    if (ending.Length == 2 && long.TryParse(ending[1], out long ended)
+                        && ended > 0 && ended <= DateTime.MaxValue.Ticks
+                        && v.Activities.LastOrDefault(activity => activity.Token == ending[0]) is { } activity)
+                        activity.Ended = ended;
+                    break;
             }
         }
         v.Unclean = any && !quit;
@@ -164,10 +186,26 @@ internal static class CrashText
     }
 
     /// <summary>Keel-crash.txt: what the session left, written for the session that just ended (by Keel at the next start, or by the watcher).</summary>
-    public static string CrashFileText(string began, string step, string guid, string scene, string block) =>
-        $"The game session started {began ?? "?"} did not end normally.\n" +
-        $"Keel was {(guid != null ? $"at the '{step}' step of {guid}" : "not loading or starting a mod")}; last scene: {scene ?? "none"}.\n\n" +
-        (block ?? NoRecord) + "\n";
+    public static string CrashFileText(Journal journal, string block) =>
+        $"The game session started {journal.Began ?? "?"} did not end normally.\n" +
+        $"Keel was {(journal.Guid != null ? $"at the '{journal.Step}' step of {journal.Guid}" : "not loading or starting a mod")}; last scene: {journal.Scene ?? "none"}.\n\n" +
+        (block ?? NoRecord) + "\n" + ActivityText(journal.Activities);
+
+    private static string ActivityText(List<Activity> activities)
+    {
+        if (activities.Count == 0) return "";
+        return "\nRecorded mod activity (diagnostic context, not proof of cause; no mod is held from this alone):\n" +
+            string.Join("\n", activities.Select(activity => $"{new DateTime(activity.Started, DateTimeKind.Utc):O} " +
+                $"{activity.Guid}: {activity.Operation} {activity.Detail} ({activity.Status})")) + "\n";
+    }
+
+    public static string ActivityHint(Journal journal)
+    {
+        var last = journal.Activities.LastOrDefault();
+        return last == null ? "" : $" Last recorded activity: {last.Guid}, {last.Operation}" +
+            $"{(string.IsNullOrEmpty(last.Detail) ? "" : " (" + last.Detail + ")")}, " +
+            $"{last.Status}. This is context, not proof of cause.";
+    }
 
     public const string NoRecord = "No crash record: the crash catcher wrote nothing and the game's log shows no crash. The game may have frozen and been ended, or been closed from outside.";
 
