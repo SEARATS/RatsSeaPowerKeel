@@ -517,6 +517,7 @@ internal sealed partial class KeelHost
 
     private float exitBottom = -1f, menuMeasuredAt = -10f, panelRight = -1f, menuMeasuredH = -1f;
     private int menuHits, menuTries;
+    private long menuSceneTicks = -1;
     private Type mainMenuType;
 
     /// <summary>The right edge of the grey menu panel in GUI units, as <see cref="MeasureMenu"/> found it.</summary>
@@ -525,20 +526,23 @@ internal sealed partial class KeelHost
     /// <summary>
     /// The lower edge of the main menu's lowest entry (EXIT) in GUI units into <see cref="exitBottom"/>, and the menu panel's right
     /// edge into <see cref="panelRight"/>: the lowest Button of the game's MainMenuView in the menu column (Noesis, by name),
-    /// measured on a size change (not every frame or second: it is slow). Else the fallback shares.
+    /// measured on a size change or a new scene, then now and then (not every frame or second). Else the fallback shares.
     /// </summary>
     private void MeasureMenu(float screenH)
     {
         float now = Time.realtimeSinceStartup, px = screenH * guiScale;
-        // Not every second: that hitched the game (~90 ms each time, the by-name type lookups). The menu moves only when the screen changes size:
-        // measure on a size change, once more 3 s after the first hit (the menu may still be settling), and retry a few times if nothing is found.
-        if (!Mathf.Approximately(menuMeasuredH, px))
+        // Once a second hitched the game (~90 ms each time, the by-name type lookups, now made once). The menu moves when the screen
+        // changes size or a scene is loaded (a Mods-menu reload builds it again): then measure, once more 3 s after the first hit (it
+        // may still be settling), retry a few times if nothing is found, and after that every 10 s, for an entry a mod adds later.
+        if (!Mathf.Approximately(menuMeasuredH, px) || menuSceneTicks != LoadingWindow.SceneLoadedTicks)
         {
             menuMeasuredH = px;
+            menuSceneTicks = LoadingWindow.SceneLoadedTicks;
             menuHits = menuTries = 0;
             menuMeasuredAt = -10f;
         }
-        if (menuHits >= 2 || menuTries >= 5 || now - menuMeasuredAt < (menuHits == 0 ? 1f : 3f))
+        bool settled = menuHits >= 2 || menuTries >= 5;
+        if (now - menuMeasuredAt < (settled ? 10f : menuHits == 0 ? 1f : 3f))
             return;
         menuMeasuredAt = now;
         menuTries++;

@@ -297,19 +297,12 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private IEnumerator Run()
     {
-        listed = EarlyModList(out bool blockingAsked);
-        if (blockingAsked)
-        {
-            // A mod asked for a blocking start (BlockingStart): it starts right before the game's first load screen (see
-            // LoadScreenGate), or earlier when Keel's own steps get there first.
-            blockingDone = false;
-            string why = LoadScreenGate.Install(RunBlockingNow, Warn);
-            if (why != null)
-            {
-                blockingDone = true;
-                Warn($"A mod asked for a blocking start, but Keel cannot hook the load screen ({why}): it starts early, without holding the game.");
-            }
-        }
+        // Before the game's first frame: the mod list from disk and its plugins, so a mod that asks to start early, in its
+        // _info.ini or in its DLL, is known before the game shows its first load screen (rgreat's PR #9 review: a DLL-only
+        // BlockingStart was found only after the game's own list, ~8 s later, when the load screen was already up).
+        listed = EarlyModList(out EarlyScan scan);
+        if (listed != null && scan.Plugins.Any(p => p.BlockingStart && p.State == PluginState.Pending))
+            HoldFirstLoadScreen();
         // One frame first: every plugin in BepInEx\plugins (Anchor Chain's preloader too) has had its Awake by then.
         yield return null;
 
@@ -323,8 +316,10 @@ internal sealed partial class KeelHost : MonoBehaviour
         List<ModFolder> enabled = folders.Where(f => f.Enabled).ToList();
 
         // 2. Find the plugins (metadata only, no mod code runs): before the wait, so mods that ask to start early are known.
+        // The early scan is used when it saw the same folders (the usual case), so no DLL is read twice.
         var watch = Stopwatch.StartNew();
-        Keel.Plugins.AddRange(Scanner.Scan(enabled, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory));
+        Keel.Plugins.AddRange(scan?.UseFor(enabled, Warn, skippedDlls)
+                              ?? Scanner.Scan(enabled, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory));
         log.LogInfo($"Found {Keel.Plugins.Count} plugin(s) in {Keel.Plugins.Select(p => p.Dll).Distinct().Count()} DLL(s) ({watch.ElapsedMilliseconds} ms).");
         Window?.Found(Keel.Plugins.Count);
         foreach (SkippedDll d in skippedDlls)
@@ -359,26 +354,40 @@ internal sealed partial class KeelHost : MonoBehaviour
     }
 
     // A mod that asked to start early (rgreat 2026-11-12: "could be a bit earlier", he replaces the load-screen pictures) does not
-    // wait for the game's own list, which comes about 8 s after Keel: Keel reads the same list from usersettings.ini at once, so
-    // early mods start before the first load-screen picture. Everything else still waits for the load screen. Null: no mod asked.
-    private List<ModFolder> EarlyModList(out bool blocking)
+    // wait for the game's own list, which comes about 8 s after Keel: Keel reads the same list from usersettings.ini at once and
+    // looks at its plugins, so early mods start before the first load-screen picture. Everything else still waits for the load
+    // screen. Null: no mod asked (the scan is kept in <paramref name="scan"/> for step 2); scan is null when there is no list.
+    private List<ModFolder> EarlyModList(out EarlyScan scan)
     {
-        blocking = false;
+        scan = null;
         List<ModFolder> disk;
         try
         {
             disk = ModFolders.FromDisk();
+            scan = EarlyScan.Of(disk.Where(f => f.Enabled).ToList(), Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
         }
         catch (Exception ex)
         {
             log.LogWarning($"Could not read the mod list from usersettings.ini early: {ex.Message}");
+            scan = null;
             return null;
         }
-        if (!disk.Any(f => f.Enabled && EarlyStart.FolderAsks(f.Path)))
+        if (!scan.Plugins.Any(p => p.StartEarly && p.State == PluginState.Pending))
             return null;
-        blocking = disk.Any(f => f.Enabled && EarlyStart.FolderBlocks(f.Path));
         log.LogInfo("A mod asked to start early: Keel takes the mod list from usersettings.ini now instead of waiting for the game's.");
         return disk;
+    }
+
+    // A mod asked for a blocking start (BlockingStart): it starts right before the game's first load screen (see LoadScreenGate),
+    // or earlier when Keel's own steps get there first.
+    private void HoldFirstLoadScreen()
+    {
+        blockingDone = false;
+        string why = LoadScreenGate.Install(RunBlockingNow, Warn);
+        if (why == null)
+            return;
+        blockingDone = true;
+        Warn($"A mod asked for a blocking start, but Keel cannot hook the load screen ({why}): it starts early, without holding the game.");
     }
 
     private List<ModFolder> listed;      // what WaitForModList found
@@ -497,7 +506,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (pass.Early && blockSet.Count == 0)
             blockingDone = true;
         if (!pass.Early || blockSet.Count > 0)
-            yield return Check(blockSet == null ? null : p => blockSet.Contains(p));
+            yield return Check(blockSet == null ? null : p => blockSet.Contains(p), keep: pass.Early);
         if (!pass.Reload)
             log.LogInfo($"Game-version check done ({watch.ElapsedMilliseconds} ms, frames included).");
         watch.Restart();
@@ -600,7 +609,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         var parallel = new HashSet<PluginEntry>(earlySet.Except(blockSet));
         if (parallel.Count > 0)
         {
-            yield return Check(p => parallel.Contains(p));
+            yield return Check(p => parallel.Contains(p), keep: true);
             sequence.Replan = () => replanAll().Where(parallel.Contains).ToList();
             foreach (PluginEntry _ in sequence.Run(replanAll().Where(parallel.Contains).ToList()))
                 yield return null;
@@ -902,25 +911,31 @@ internal sealed partial class KeelHost : MonoBehaviour
         return System.IO.File.Exists(path) ? path : null;
     }
 
-    private IEnumerator Check(Func<PluginEntry, bool> only = null)
+    // An early start checks in up to three steps (blocking mods, early mods, the rest): one Preflight, and so one index of the
+    // game's type names, serves them all instead of one built on the main thread per step. Kept until a step passes keep: false.
+    private Preflight keptPreflight;
+    private readonly Dictionary<string, Preflight.Result> keptResults = new(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
             yield break;
-        Preflight preflight;
+        Preflight preflight = keptPreflight;
         try
         {
-            preflight = new Preflight(Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+            preflight ??= new Preflight(Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
         }
         catch (Exception ex)
         {
             Warn($"Game version check unavailable: {ex.Message}");
             yield break;
         }
-        using (preflight)
+        keptPreflight = keep ? preflight : null;
+        try
         {
             List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending && (only == null || only(p))).GroupBy(p => p.Dll).ToList();
-            var results = new Dictionary<string, Preflight.Result>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, Preflight.Result> results = keptResults;
             foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
                 try
@@ -941,8 +956,16 @@ internal sealed partial class KeelHost : MonoBehaviour
                 foreach (PluginEntry p in dll)
                     Preflight.Judge(p, r, matching, mode == "Strict", InfoVersion.MismatchInFolder(p.Folder?.Path, Application.version));
             }
-            if (preflight.IndexMs > 0)
-                log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");
+        }
+        finally
+        {
+            if (!keep)
+            {
+                if (preflight.IndexMs > 0)
+                    log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");
+                preflight.Dispose();
+                keptResults.Clear();
+            }
         }
     }
 

@@ -337,3 +337,47 @@ internal sealed class Manifest
         return forFlat && !forGlobe ? "Flat map" : null;
     }
 }
+
+/// <summary>
+/// The scan Keel makes from the disk's mod list before the game's first frame, to see whether a mod asks to start early.
+/// When the game's own list later turns on the same folders in the same order, the scan is used as it is (each DLL is read once);
+/// its warnings and left-out DLLs are passed on only then, so nothing is reported twice.
+/// </summary>
+internal sealed class EarlyScan
+{
+    public List<PluginEntry> Plugins;
+    private List<ModFolder> folders;
+    private readonly List<string> warnings = new();
+    private readonly List<SkippedDll> skipped = new();
+
+    public static EarlyScan Of(List<ModFolder> enabled, params string[] searchDirs)
+    {
+        var scan = new EarlyScan { folders = enabled };
+        scan.Plugins = Scanner.Scan(enabled, scan.warnings.Add, scan.skipped, searchDirs);
+        return scan;
+    }
+
+    /// <summary>The plugins for <paramref name="enabled"/>, bound to its folders; null when the scan saw other folders.</summary>
+    public List<PluginEntry> UseFor(List<ModFolder> enabled, Action<string> warn, List<SkippedDll> skippedOut)
+    {
+        if (enabled.Count != folders.Count || enabled.Where((f, i) => !SamePath(f.Path, folders[i].Path)).Any())
+            return null;
+        // The game's list has its own folder objects: the plugins point at those from now on.
+        foreach (PluginEntry p in Plugins)
+            p.Folder = Rebind(p.Folder, enabled);
+        foreach (SkippedDll d in skipped)
+            d.Folder = Rebind(d.Folder, enabled);
+        warnings.ForEach(warn);
+        skippedOut.AddRange(skipped);
+        return Plugins;
+    }
+
+    private ModFolder Rebind(ModFolder f, List<ModFolder> enabled)
+    {
+        int i = f == null ? -1 : folders.IndexOf(f);
+        return i < 0 ? f : enabled[i];
+    }
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals((a ?? "").TrimEnd('\\', '/'), (b ?? "").TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+}

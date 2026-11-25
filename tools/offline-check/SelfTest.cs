@@ -472,6 +472,14 @@ internal static class SelfTest
         var plainSet = EarlyStart.Set(new List<PluginEntry> { bA, bB, bC }, null);
         Check(blockSet.SetEquals(new[] { bA }) && plainSet.SetEquals(new[] { bA, bB, bC }),
               "blocking start: A blocks; B needs C, which does not block, so B starts early without holding the game; all three start early");
+        string nowhere = Path.Combine(Path.GetTempPath(), "keel-selftest-nowhere");
+        var diskFolder = new ModFolder { Path = nowhere + Path.DirectorySeparatorChar, Name = "x", Enabled = true };
+        EarlyScan early = EarlyScan.Of(new List<ModFolder> { diskFolder });
+        var gameFolder = new ModFolder { Path = nowhere.ToUpperInvariant(), Name = "x", Enabled = true };
+        var otherFolder = new ModFolder { Path = nowhere + "-other", Name = "y", Enabled = true };
+        Check(early.UseFor(new List<ModFolder> { otherFolder }, _ => { }, new List<SkippedDll>()) == null
+              && early.UseFor(new List<ModFolder> { gameFolder }, _ => { }, new List<SkippedDll>()) != null,
+              "early scan: used again only when the game's list turns on the same folders");
     }
 
     private static void RequiredItemChecks()
