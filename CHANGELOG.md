@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics
+## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
@@ -33,6 +33,16 @@
   - why: a tool can see the report window and not click through it
   - `GetReport()` builds the text without writing `Keel-report.txt`
 - 18 new self-test checks
+- **A mod start fails only when it really broke** (PR #15 by agm-114): the entry point threw, or an exception escaped a plugin's Awake
+  - a failed start: Keel takes off the Harmony patches the mod added in its constructor and entry point, and stops it
+  - patches a plugin adds later (BepInEx `Start()`, coroutines) stay; restart the game to clear a failed mod fully
+  - a mod that catches its own error and logs it (an optional feature) keeps running, marked with errors
+  - errors logged during a start count for that mod only when its code is on the stack; game and Unity errors blame nobody
+- **Broken patches at runtime** (`RemoveBrokenPatches`) also catch missing game types
+  - a patch comes off only when owner and overload are clear; with several patched overloads Keel only names the mod
+  - a mod that merely called a patched game method no longer hides the mod whose patch broke
+  - mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
+- **The compatibility check reads Harmony's ref, out and pointer argument kinds** when matching overloads (false warning on UNREP's speed patch)
 
 ## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 

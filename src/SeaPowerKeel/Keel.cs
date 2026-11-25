@@ -174,8 +174,8 @@ internal sealed partial class KeelHost : MonoBehaviour
             "lacks) is not loaded; other missing parts are a warning. Strict: any missing part keeps the DLL from loading. Off: no check.",
             new AcceptableValueList<string>("Standard", "Strict", "Off")));
         Runner.GuardPatches = config.Bind(Takeover.ConfigSection, "RemoveBrokenPatches", true,
-            "When the game throws 'Method not found' / 'Field not found' because a mod's Harmony patch uses something this game build lacks, Keel takes that mod's patch off the failing " +
-            "game method again, names the mod in the report and keeps the game going (instead of the same error popup on every frame). Off: Keel only names the mod.").Value;
+            "When a mod's Harmony patch throws a missing-method, missing-field or missing-type exception for something this game build lacks, Keel removes that mod's patch " +
+            "from the failing method when ownership is unambiguous, names the mod in the report and lets the game continue. Off: Keel only names the mod.").Value;
         holdCrashers = config.Bind(Takeover.ConfigSection, "HoldOutCrashers", true,
             "When the game dies while Keel is loading or starting a mod, or a crash report shows a mod's code on its stack, Keel names that mod at the next start and keeps it out until the mod " +
             @"is updated (the list is BepInEx\Keel-held.txt). Off: Keel only names the mod.");
@@ -515,7 +515,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         // Unity hands exceptions to BepInEx without saying which mod threw; Keel adds a line that does, with the stack trace,
         // to LogOutput.log and Keel-log.txt alike.
         runner.ModError = (p, message, stack) =>
-            log.LogError($"The exception above came from {p.Display} {p.Version} ({p.Guid}, {p.Folder.Label}): {message}{Environment.NewLine}{stack}");
+            log.LogError($"The error above came from {p.Display} {p.Version} ({p.Guid}, {p.Folder.Label}): {message}{Environment.NewLine}{stack}");
         return runner;
     }
 

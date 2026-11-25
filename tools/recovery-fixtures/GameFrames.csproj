@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>KeelGameFramesFixture</AssemblyName>
+    <GameDir Condition="'$(GameDir)' == ''">E:\Games\steamapps\common\Sea Power</GameDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="GameFrames.cs" />
+    <Compile Include="TestProbe.cs" />
+    <ProjectReference Include="../../src/SeaPowerKeel/SeaPowerKeel.csproj" />
+    <Reference Include="BepInEx" HintPath="$(GameDir)/BepInEx/core/BepInEx.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(GameDir)/BepInEx/core/0Harmony.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(GameDir)/Sea Power_Data/Managed/UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(GameDir)/Sea Power_Data/Managed/UnityEngine.CoreModule.dll" Private="false" />
+  </ItemGroup>
+</Project>

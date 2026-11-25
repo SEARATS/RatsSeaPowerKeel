@@ -843,6 +843,9 @@ internal static class SelfTest
         Check(r.Fatal.Any(x => x.Contains("BadResultPatch") && x.Contains("__result")), "a patch taking __result as int on a float method is caught");
         Check(r.Fatal.Any(x => x.Contains("BadArgumentPatch")), "a patch taking a float argument as int is caught");
         Check(!r.Fatal.Any(x => x.Contains("GoodPatch")), "patches that fit, or take object, are left alone");
+        Check(r.Lookups.Where(x => x.Contains("::SmoothDamp(")).SequenceEqual(
+            new[] { "UnityEngine.Mathf::SmoothDamp(Single, Single, Single, Single, Single)" }),
+            "ref arguments select the matching overload and a missing by-value overload is still reported");
 
         string ini = Path.Combine(tmp, "packoff.ini");
         File.WriteAllText(ini, "Mod1Directory=77,True,77\r\nMod2Directory=88,True,88\r\n");
@@ -861,9 +864,31 @@ internal static class SelfTest
         Check(Runner.MissingKey("MissingFieldException: Field not found: SeaPower.ObjectBase SeaPower.AI._objectToDestroy Due to: Could not find field in class") == "SeaPower.AI::_objectToDestroy",
               "the same message on ONE line (as Unity logs it, with 'Due to: ...' after it) -> SeaPower.AI::_objectToDestroy");
         Check(Runner.MissingKey("NullReferenceException: Object reference not set") == null, "another exception gives no member");
-        var patched = Runner.PatchedMethodsIn("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
-        Check(patched.Count == 1 && patched[0].type == "SeaPower.GameMain" && patched[0].method == "FixedUpdate", "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
-        Check(Runner.PatchedMethodsIn("at SomeMod.Thing.Run ()").Count == 0, "a stack without a patched method gives none");
+        Check(Runner.MissingKey("TypeLoadException: Could not resolve type with token 010000b7 from typeref (expected class 'World' in assembly 'Seapower-Scripts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null')") == "World",
+              "the Better TacMap report's missing-type format identifies World");
+        Check(Runner.MissingKey("TypeLoadException: Could not load type 'SeaPower.Outer+Inner' from assembly 'Seapower-Scripts, Version=0.0.0.0'") == "SeaPower.Outer/Inner",
+              "the alternate missing-type format preserves nested type identity");
+        Check(Runner.MissingKey("TypeLoadException: VTable setup failed") == null, "a type error without a named missing type does not remove patches");
+        Check(Runner.JudgeStartLog(exception: true, onLiveStack: true, inTrace: true) == Runner.StartLog.Errors,
+              "a mod that catches an exception and logs it itself keeps running with errors (no rollback)");
+        Check(Runner.JudgeStartLog(exception: false, onLiveStack: true, inTrace: false) == Runner.StartLog.Errors,
+              "an error logged by game code the starting mod called counts for that mod");
+        Check(Runner.JudgeStartLog(exception: true, onLiveStack: false, inTrace: true) == Runner.StartLog.Aborted,
+              "an exception that escaped the mod's Awake (mod in the trace, not on the live stack) fails the start");
+        Check(Runner.JudgeStartLog(exception: false, onLiveStack: false, inTrace: false) == Runner.StartLog.NotItsOwn
+            && Runner.JudgeStartLog(exception: true, onLiveStack: false, inTrace: false) == Runner.StartLog.NotItsOwn,
+              "a game or Unity error without the mod's code is not blamed on the starting mod");
+        var patched = Runner.InnermostPatchedMethod("(wrapper dynamic-method) SeaPower.GameMain.DMD<SeaPower.GameMain::FixedUpdate>(SeaPower.GameMain)\nUnityEngine.DebugLogHandler:LogException(Exception, Object)");
+        Check(patched == ("SeaPower.GameMain", "FixedUpdate"), "the stack's DMD<SeaPower.GameMain::FixedUpdate> gives the patched game method");
+        Check(Runner.InnermostPatchedMethod("DMD<Game::Inner>()\nDMD<Game::Outer>()") == ("Game", "Inner"),
+            "an ambiguous inner frame never falls through to an outer caller");
+        var first = new PluginEntry { Guid = "first" };
+        var sibling = new PluginEntry { Guid = "sibling" };
+        Check(Runner.PatchOwner([first, sibling], sibling.Guid) == sibling
+            && Runner.PatchOwner([first, sibling], "custom") == null
+            && Runner.PatchOwner([first], "custom") == first,
+            "a shared DLL requires a matching Harmony owner ID, while a single-plugin DLL can use a custom ID");
+        Check(Runner.InnermostPatchedMethod("at SomeMod.Thing.Run ()") == null, "a stack without a patched method gives none");
     }
 
     private static string ThisDll => typeof(SelfTest).Assembly.Location;
@@ -1422,3 +1447,10 @@ public static class BadResultPatch { public static void Postfix(ref int __result
 public static class BadArgumentPatch { public static void Prefix(int t) { } }
 [HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "Repeat")]
 public static class GoodPatch { public static void Prefix(float t, object length) { } }
+[HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "SmoothDamp", HarmonyLib.MethodType.Normal,
+    new[] { typeof(float), typeof(float), typeof(float), typeof(float) },
+    new[] { HarmonyLib.ArgumentType.Normal, HarmonyLib.ArgumentType.Normal, HarmonyLib.ArgumentType.Ref, HarmonyLib.ArgumentType.Normal })]
+public static class RefOverloadPatch { public static void Prefix() { } }
+[HarmonyLib.HarmonyPatch("UnityEngine.Mathf", "SmoothDamp", HarmonyLib.MethodType.Normal,
+    new[] { typeof(float), typeof(float), typeof(float), typeof(float), typeof(float) })]
+public static class AbsentValueOverloadPatch { public static void Prefix() { } }
