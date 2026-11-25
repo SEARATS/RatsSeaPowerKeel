@@ -293,8 +293,13 @@ internal sealed partial class KeelHost
     {
         if (summaryCollapsed)
         {
-            cardRect = new Rect(r.x, r.y, Mathf.Min(112f, r.width), r.height);
-            GUI.Box(cardRect, "Keel report", buttonStyle);
+            // The report button has its own × too (his rule: every card closes with a visible ×); the hotkey still opens the report.
+            cardRect = new Rect(r.x, r.y, Mathf.Min(136f, r.width), r.height);
+            GUI.Box(new Rect(cardRect.x, cardRect.y, cardRect.width - 26f, cardRect.height), "Keel report", buttonStyle);
+            EnsureNewsStyles();
+            var spot = CloseSpot(cardRect);
+            GUI.Label(spot, "×", newsClose);
+            cardCloseRect = new Rect(spot.x - 4, cardRect.y, spot.width + 8, cardRect.height);
             return;
         }
         cardRect = r;
@@ -484,7 +489,7 @@ internal sealed partial class KeelHost
         GUI.Label(getItRect, "Get it", buttonStyle);
     }
 
-    /// <summary>A click on the Keel card: its × collapses it to a report button, the credit opens his Steam profile, anywhere else opens the report.
+    /// <summary>A click on the Keel card: its × collapses it to a report button (whose own × closes it), the credit opens his Steam profile, anywhere else opens the report.
     /// Only the left button counts (no right click, his word 2026-11-12).</summary>
     private bool CardClick(Vector2 gui, int button)
     {
@@ -496,7 +501,10 @@ internal sealed partial class KeelHost
             return true;
         if (summaryCollapsed)
         {
-            SetReportOpen(true);
+            if (cardCloseRect.Contains(gui))
+                cardHidden = true;          // gone for this game; Ctrl+Shift+K still opens the report
+            else
+                SetReportOpen(true);
             return true;
         }
         if (cardCloseRect.Contains(gui))

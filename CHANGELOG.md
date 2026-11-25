@@ -9,7 +9,7 @@
 - **Crash report and watcher show the last activities** apart from the blame
   - context only: an unfinished activity never holds a mod out
 - **Main-menu card is smaller**, shows up to two changed mods
-  - its × and a dismissed loading window leave a small Keel report button on the main menu
+  - its × and a dismissed loading window leave a small Keel report button on the main menu; that button has its own ×
 - **For tools**: `Keel.GetUiState()`, `SetReportOpen(bool)`, `GetReport()`
   - why: a tool can see the report window and not click through it
   - `GetReport()` builds the text without writing `Keel-report.txt`
