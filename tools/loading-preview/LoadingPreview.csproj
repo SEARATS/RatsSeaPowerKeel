@@ -13,6 +13,7 @@
   <ItemGroup>
     <Compile Include="..\..\src\SeaPowerKeel\KeelPalette.cs" Link="KeelPalette.cs" />
     <Compile Include="..\..\src\SeaPowerKeel\Loading\Progress.cs" Link="Progress.cs" />
+    <Compile Include="..\..\src\SeaPowerKeel\ReportFormat.cs" Link="ReportFormat.cs" />
     <Compile Include="..\..\src\SeaPowerKeel\Loading\Native.cs" Link="Native.cs" />
     <Compile Include="..\..\src\SeaPowerKeel\Loading\Overlay.cs" Link="Overlay.cs" />
   </ItemGroup>

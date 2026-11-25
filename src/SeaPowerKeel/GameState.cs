@@ -16,10 +16,8 @@ internal static class GameState
 {
     private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
-    /// <summary>The 3D globe build (public beta from 26 Oct 2026, the default from 11 Nov) has the map display state; 0.8.7 does not.</summary>
-    public static readonly bool Globe = Type.GetType("SeapowerUI.MapDisplayState, Seapower-Scripts") != null;
-
-    public static string BuildName => Globe ? "3D globe map" : "flat map (0.8.7)";
+    /// <summary>The game build Keel runs on: the 3D globe map, the game's current main version. No other build is supported.</summary>
+    public static string BuildName => "3D globe map";
 
     private static Type T(string name) => Type.GetType(name + ", Seapower-Scripts");
 
@@ -30,7 +28,7 @@ internal static class GameState
     private static readonly Dictionary<Type, UnityEngine.Object> found = new();
     private static readonly Dictionary<Type, float> missedAt = new();
 
-    private static UnityEngine.Object Find(Type type)
+    internal static UnityEngine.Object Find(Type type)
     {
         if (type == null)
             return null;
@@ -77,28 +75,33 @@ internal static class GameState
         string streaming = Path.GetFullPath(Application.streamingAssetsPath).TrimEnd('\\', '/');
         foreach (object d in dirs)
         {
-            if (d == null)
+            ModFolder folder = d == null ? null : ModOf(d, streaming);
+            if (folder == null)
                 continue;
-            Type t = d.GetType();
-            if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
-                continue;
-            // The globe build lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
-            // 0.8.7 has no kinds.
-            string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
-            if (kind != null && kind != "Mod")
-                continue;
-            string full = info.FullName.TrimEnd('\\', '/');
-            if (string.Equals(full, streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user")
-                continue;
-            ulong steamId = 0;
-            object id = t.GetField("steamId", Any)?.GetValue(d);
-            if (id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u)
-                steamId = u;
-            bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
-            list.Add(new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on, Order = list.Count });
+            folder.Order = list.Count;
+            list.Add(folder);
         }
         return list.Count > 0 ? list : null;
     }
+
+    // One entry of the game's list as a mod folder; null for the game's own folders.
+    private static ModFolder ModOf(object d, string streaming)
+    {
+        Type t = d.GetType();
+        if (t.GetProperty("DirectoryInfo", Any)?.GetValue(d) is not DirectoryInfo info)
+            return null;
+        // The game lists its base data, the user layer and runtime mounts (missions, overlays) too: no mods.
+        string kind = t.GetProperty("Kind", Any)?.GetValue(d)?.ToString();
+        if ((kind != null && kind != "Mod") || IsGameOwn(info, streaming))
+            return null;
+        object id = t.GetField("steamId", Any)?.GetValue(d);
+        ulong steamId = id?.GetType().GetField("m_PublishedFileId", Any)?.GetValue(id) is ulong u ? u : 0;
+        bool on = t.GetProperty("IsChecked", Any)?.GetValue(d) is bool b && b;
+        return new ModFolder { Path = info.FullName, Name = info.Name, SteamId = steamId, Enabled = on };
+    }
+
+    private static bool IsGameOwn(DirectoryInfo info, string streaming) =>
+        string.Equals(info.FullName.TrimEnd('\\', '/'), streaming, StringComparison.OrdinalIgnoreCase) || info.Name == "original" || info.Name == "user";
 
     /// <summary>
     /// Start-up done: the unit data is loaded and the start-up load screen says "Done". Mods started in the middle of it
@@ -208,13 +211,11 @@ internal static class GameState
     /// </summary>
     public static bool AnchorChainRunning(Func<Assembly, bool> ours) => OtherLoader(ours) != null;
 
-    private const string AlpineGuid = "alpine.seapower.modloader";
-
     private static bool AlpineActive()
     {
         try
         {
-            return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(AlpineGuid);
+            return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(KeelNames.AlpineGuid);
         }
         catch (TypeInitializationException)
         {

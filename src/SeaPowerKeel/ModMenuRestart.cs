@@ -9,7 +9,7 @@ namespace SeaPowerKeel;
 /// A Restart button in the game's own "reload" dialog (Mods menu, Apply). The game only reloads its data there: a code mod switched on
 /// or off does not start or stop until the game is started again. The dialog's message box has a middle button the game leaves unused;
 /// Keel fills it, and marks the game's own Reload so Keel follows the new mod list after it (KeelHost.HotLoad). Restart saves the mod list the way the game's own button does, then quits and starts the game again through
-/// KeelWatcher. The dialog is the same on both game builds (0.8.7 and the 3D globe build); everything is looked up by name, so a build
+/// KeelWatcher. Everything is looked up by name, so a build
 /// without it only loses the button.
 /// </summary>
 internal static class ModMenuRestart
@@ -72,7 +72,7 @@ internal static class ModMenuRestart
         }
         catch (Exception ex)
         {
-            BepInEx.Logging.Logger.CreateLogSource(Keel.Name).LogWarning($"No Restart button in the Mods menu: {ex.Message}");
+            Keel.Log.LogWarning($"No Restart button in the Mods menu: {ex.Message}");
         }
     }
 
@@ -96,17 +96,15 @@ internal static class ModMenuRestart
         {
             // What the game's own button saves first: the mod list, so the next start reads it.
             object directories = Traverse.Create(menu).Property("Directories").GetValue();
-            Type manager = AccessTools.TypeByName("SeaPower.FileManager");
-            Type singleton = AccessTools.TypeByName("SeaPower.Singleton`1")?.MakeGenericType(manager);
-            object files = singleton?.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            object files = Reflected.Singleton("SeaPower.FileManager");
             if (files == null || directories == null)
                 throw new InvalidOperationException("the game's file manager was not found");
-            AccessTools.Method(manager, "SaveDirectories").Invoke(files, new[] { directories });
+            AccessTools.Method(files.GetType(), "SaveDirectories").Invoke(files, new[] { directories });
         }
         catch (Exception ex)
         {
             // A restart now would lose the change: the player still has the game's own Reload.
-            BepInEx.Logging.Logger.CreateLogSource(Keel.Name).LogWarning($"Restart from the Mods menu: the mod list could not be saved ({ex.InnerException?.Message ?? ex.Message}), so the game keeps running. Use Reload only, then restart the game yourself.");
+            Keel.Log.LogWarning($"Restart from the Mods menu: the mod list could not be saved ({ex.InnerException?.Message ?? ex.Message}), so the game keeps running. Use Reload only, then restart the game yourself.");
             return;
         }
         Restart?.Invoke();

@@ -28,13 +28,6 @@ internal static class AcEntry
         MethodInfo entry = FindEntryPoint(mod.GetType());
         if (entry == null)
             throw new MissingMethodException($"{mod.GetType().FullName} has no {InterfaceName}.{MethodName}(): the entry point cannot be found.");
-        try
-        {
-            entry.Invoke(mod, null);
-        }
-        catch (TargetInvocationException t) when (t.InnerException != null)
-        {
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(t.InnerException).Throw();
-        }
+        Reflected.Invoke(entry, mod, null);
     }
 }

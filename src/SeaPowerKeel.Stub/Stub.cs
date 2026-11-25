@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
@@ -15,8 +14,8 @@ namespace SeaPowerKeel.Stub;
 [BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.0.0")]
 public class Stub : BaseUnityPlugin
 {
-    public const string Guid = "dev.sewerlabs.seapowerkeel.stub";
-    private const string LoaderFile = "SeaPowerKeel.dll";
+    public const string Guid = KeelNames.StubGuid;
+    private const string LoaderFile = KeelNames.LoaderFile;
     private const string LoaderType = "SeaPowerKeel.Keel";
 
     private void Awake()

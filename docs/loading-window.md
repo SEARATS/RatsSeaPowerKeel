@@ -40,22 +40,27 @@ Unity redraws**, IMGUI included (Keel's own report window and notice are IMGUI f
 - **Opens early.** `KeelHost.Awake` starts it, which runs when the stub does. BepInEx starts plugins in GUID order
   (`dev.sewerlabs.seapowerkeel.stub` < `io.github.seapower_modders.anchorchain_preloader`, as the log shows), so it is there before the
   12.7 s preloader.
-- **Reads log lines only.** `Loading/LoadingWindow.cs` adds a BepInEx log listener; `Loading/Progress.cs` turns the lines into a phase, a list
-  of mods and a count. Nothing in the game or in any other mod is touched, so a mod that logs oddly cannot break it (a bad line is ignored).
+- **Told by Keel, listening to the rest.** Keel hands its steps and each mod's result to `Loading/Progress.cs` as calls (`KeelHost.Say`,
+  `LogResult`), next to the log line it writes: nothing of Keel's wording is parsed back. The states' tags live once, in `ReportFormat.cs`
+  (until 0.6.1 the window parsed Keel's log text and waited for `RUNNING WITH ERRORS`, which Keel no longer wrote). Anchor Chain's preloader
+  and the game itself are heard through a BepInEx log listener (`Loading/LoadingWindow.cs`). Nothing in the game or in any other mod is
+  touched, so a mod that logs oddly cannot break it.
 - **Names the slow mod while it is slow.** Keel now logs `STARTING i/n: name version (folder)` before each start (`Sequencer.Starting`);
   `i/n` counts the mods still waiting when the start phase began. The window shows "Starting 17/19: VopSound 1.96.29  8 s" and the bar
   fills exactly. The line is in `Keel-log.txt` too, so a log shows which mod was running when the game stood still. (A mod that goes on
   working after its start returns, like Dynamic Campaign Mod's patching, delays the *next* step: the window then names the next mod.)
 - **Ends by itself.** When the game draws the card (hand-over), or on its × there; the full window also ends after the longest time (300 s from the process start).
 
-Lines it understands: Keel's `RUNNING / RUNNING WITH ERRORS / NOT STARTED / SKIPPED: name version (folder)`, `STARTING i/n: name`,
-`Found N plugin(s)`, `N of M mod folders are on`, `The game's mod list is there`, `Start-up load screen done`, `Done:`; Anchor Chain's preloader's
-"started" line; the game's `FileManager.OnStart`, `FileManager.CheckFileValidity`, `(C) Triassic Games` and `3D WebView` lines for the early steps.
+What it gets: from Keel, its start, the mod list, the load screen's end, the folders that are on, the plugins found, each `Starting`, each
+mod's result (`ReportFormat.Tag`: RUNNING, ERRORS, FAILED, NOT STARTED, SKIPPED, OTHER LOADER) and `Done`; from the logs, Anchor Chain's
+preloader's "started" line and the game's `FileManager.OnStart`, `FileManager.CheckFileValidity`, `(C) Triassic Games` and `3D WebView` lines
+for the early steps.
 
 ## Testing without the game
 
 `tools/loading-preview` (net8, no game): `dotnet run --project tools/loading-preview -c Release -- <Keel-log.txt> <out folder> [scale]`
-replays a log through the window's model (adding the `STARTING` lines older logs lack) and draws the window into BMP files at chosen seconds;
+replays a `Keel-log.txt` through the window's model (it reads Keel's lines back into the same calls Keel makes in the game; logs older than
+0.1.5 have no `STARTING` lines and are no longer filled in) and draws the window into BMP files at chosen seconds;
 `... -- live` opens the real window thread far off every monitor, feeds a few lines and checks it closes itself after "Done".
 
 ## Not done

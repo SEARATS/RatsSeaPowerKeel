@@ -1,6 +1,54 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 - unreleased - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
+
+- **The shared mod skeleton (`shared/`) is no longer in this repository**: Keel never used it; the R.A.T.S. mods get it from a library of their own
+- **Only the game's current main version is supported**: the code paths for Sea Power 0.8.7 (flat map) are gone, `_info.ini` declares 0.9.0 up to, not including, 0.10.0
+  - a DLL listed under `flat =` in a mod's `keel.ini` is still left out; the partner-build note for older packages stays
+- **A mod can name the Workshop items it needs** (`_info.ini`, `[Keel]`, `Requires=<Workshop id>, <plugin id>, <name>`; for any mod and any item)
+  - the card at the main menu names the missing item on its last line, with a **Get it** button that opens the item's Workshop page; the report window has the button in the mod's row
+  - an item that is installed but switched off in the mod list is switched on at the start when a mod that is on needs it
+  - why: Steam gives a new required item to new subscribers only, so players who already had a mod found it stopped after an update
+  - 9 new self-test checks
+
+## 0.7.0 - 2026-11-20 - loading window counts errors again, no warning for flat-map builds, Anchor Chain 1.2.0 FindFile
+
+- **No more warning for our flat-map builds on the globe** (Keel reports #13, #16)
+  - R.A.T.S. mods ship two builds side by side (`X.dll` for the globe, `XFlat.dll` for the flat map); the one for the other map lacks game parts by design and stands down by itself
+  - Players read the warning as "R.A.T.S. mod broken"
+  - Now: when a DLL's partner build in the same folder lacks nothing, the report shows a short note instead of a warning, and the card stays green
+  - Both builds lacking parts, or no partner in the folder: still a warning, as before
+- **The game-version check runs over all DLLs first, then decides** (needed for the partner check); 6 new self-test checks
+- **README: one Linux (Steam Proton) section** with every step in order (BepInEx, starter file, launch option, Anchor Chain); a player asked, the steps were spread over two places
+- **The loading window counts mods with errors again**
+  - It read Keel's log lines back and waited for words Keel no longer wrote (`RUNNING WITH ERRORS`, `LEFT TO ANCHOR CHAIN`)
+  - A mod that started with errors was not counted at all: neither counted as running nor as a problem, so the summary card could say "No problems" while a mod threw errors
+  - Now Keel hands each result to the window directly; the state words are defined once, for the report, the window and the crash window
+- **Anchor Chain 1.2.0's `FindFile` no longer reported as broken**
+  - Keel ships Anchor Chain 1.1.0, whose `FindFile` searches a folder list Keel fills; 1.2.0 (a subscribed copy) reads the game's list itself
+  - Keel took the newer shape for a fault and said mods using `FindFile` would find nothing; now it sets up both shapes
+  - The self-test now primes the real shipped library, so a library of another shape fails there
+- **The `NOT STARTED` log line uses " - " like every other result line** (it had a typographic dash)
+- **The crash window uses the same "closed normally" test as Keel at the next start** (it now also looks for a crash in Player.log)
+- **Changed (internal):** one load pipeline for start-up and the Mods menu reload (a failed load during a reload is now logged like at start-up)
+- **Changed (internal):** the game's `_info.ini` version rule as data in `InfoVersion.cs`, a file without Keel dependencies (for Flotilla)
+- **Changed (internal):** the offline check judges DLLs with the same verdict and wording as the game
+- **Changed (internal):** Keel's file names and ids in one file (`KeelNames.cs`) for the loader, stub, patcher, KeelSetup and KeelWatcher
+- **Changed (internal):** keyboard and mouse read through one device reader; the report's buttons register their spot once
+- **Changed (internal):** the summary card's layout shared by the loading window and the game-drawn card
+- **Changed (internal):** one dialog kit for KeelSetup, the crash window and the send window
+- **Changed (internal):** long functions split (start-up, preflight lookups, crash guard, menu cards, overlay, report window, patch guard, watcher); dead code and unused fades removed
+- **Changed (internal):** self-test topics apart; a hand-over check that always passed now checks what it says
+
+## 0.6.1 - 2026-11-19 - Hotfix: Restore brings the other loader back; KeelSetup downloads BepInEx
+
+### Restore brings the other loader back
+
+- **Fixed: after Restore no mod started** when Keel had taken over from Anchor Chain or Alpine: Keel's takeover entry stayed in BepInEx's plugin cache, so BepInEx kept skipping the other loader; Restore now removes that cache file (found in the test VM, 2026-11-18)
+- **Restore leaves no Keel file behind**: it also removes the old patcher copy (`SeaPowerKeel.Patcher.dll.old`) Keel keeps when it updates its patcher
+- **Run in the test VM** (2026-11-19, 2 starts): Keel took over Anchor Chain, Restore removed its files and the cache entry, the next start ran Anchor Chain 1.3 with all mods and no error
+
+### KeelSetup downloads BepInEx
 
 ### KeelSetup downloads BepInEx
 
@@ -137,7 +185,7 @@ missions, a game ended from outside, the start after it, Restore; every row gree
 - Send report was run in the game on 0.9.0: the report window's button, the send window, report #2 arrived on the board with no user name in any file.
 - A mod switched off and then on again in the same game is not started a second time: its code from the first start is still loaded (Topo said "already loaded, skipping"), so the report says it starts again after a restart.
 - Fix: the Mods menu hook is installed once the main menu is up. In `Awake` it ran the menu's static constructor before the game's UI existed and crashed the game at start-up (found in the test).
-- Run in the game on build 26103404 on 2026-11-11 (docs/test-2026-11-11-reload.md): the dialog, Reload with a mod switched on and one off, and Restart. The off-and-on-again rule and Restart were run again on game 0.9.0 the same day.
+- Run in the game on build 26103404 on 2026-11-11: the dialog, Reload with a mod switched on and one off, and Restart. The off-and-on-again rule and Restart were run again on game 0.9.0 the same day.
 - **README: Linux (Steam Proton).** Switch Anchor Chain off in the game's Mods menu *and* unsubscribe from it on Steam, as a player reported; switched off in the Mods menu alone, Anchor Chain still loads its mods and Keel steps aside. Not run on Linux by us.
 
 ## 0.3.1 - 2026-11-09
@@ -187,7 +235,7 @@ Run in the game on the globe beta (build 261107) on 2026-11-09: the loading summ
 - Version 0.1.5; one DLL for both game builds as before (`modtool compat` clean).
 - **Docs:** README and Workshop description now say that the game must be restarted after Keel or any mod is switched on or off, and what the "switched off in the game's mod list" log line means.
 
-## 0.1.4 – 2026-11-08
+## 0.1.4 - 2026-11-08
 
 - **Euromod and other big Anchor Chain mods.** Run in the game on globe beta 261107 with Euromod's Expansion Pack: 25 mods started and a mission ran. The Sonar Audio Loader can search other mods' folders again (`AnchorChainLoader.FindFile`). 0.8.7 was checked offline only.
 - **Keel reads `_info.ini` too.** The `[Compatibility]` section (Exact, Approximate, GreaterThan, LessThan, Exclude), judged by the game's own rules, is a backup for what the DLL check cannot see, such as a transpiler that no longer matches. A mod that says it does not fit gets a warning in the report; `GameVersionCheck = Strict` leaves it out. An unreadable statement is ignored. Checked offline, not yet run in the game.
@@ -216,29 +264,29 @@ Compared with Anchor Chain's loader (released 1.1.0 DLL and the current source),
   interface needed and fills the folder list.
 - `tools/offline-check --selftest` (71 checks) and `--inicheck`.
 
-## 0.1.3 – 2026-11-08
+## 0.1.3 - 2026-11-08
 
 - The by-name check now reaches **internal classes**. A mod cannot write `typeof(X)` for a class the game keeps internal, so it looks the class up by name; those lookups had no reference Keel could see. Keel now reads the literal name in `AccessTools.TypeByName("Ns.X")`, `Type.GetType("Ns.X, Assembly")` and `Assembly.GetType("Ns.X")`, checks that the type exists in the game's assemblies, and follows the Type into later `AccessTools.Method/Field/PropertyGetter/...(thatType, "Name")` calls (through a local variable, a static field, or directly nested). Also `AccessTools.Method("Ns.X:Name")` and `[HarmonyPatch("Ns.X", "Name")]`. Only names in the game's own namespaces are judged; `System.*` and other mods' names are left alone.
 - The index of the game's type names (about 28,000 types in 183 assemblies) is built only when a mod does such a lookup: 60-70 ms on the dev PC, logged as "Index of the game's type names ... ms".
 - The warning is now worded "Looks up N type(s)/method(s) by name that this game build lacks" (it also covers plain reflection lookups, not only Harmony patches); `Strict` still keeps such a mod out.
 - Still not checked: a Type held only on the evaluation stack (the compiler does that for back-to-back uses without a null check), names built at run time, `TargetMethod()`, and whether a transpiler matches its target's IL. Run offline against a test mod (11 planted misses found, valid and non-game names not flagged) and the installed Workshop mods; not yet run in the game.
 
-## 0.1.2 – 2026-11-08
+## 0.1.2 - 2026-11-08
 
 - The game-version check now also looks at **Harmony patch targets**. A patch names its target as a string, so a method that this game build renamed or removed passed the old check and only failed when the patch was applied. Keel now reads `[HarmonyPatch(typeof(X), "Name", ...)]` (class and method level merged, getters/setters/constructors, argument types) and `AccessTools.Method/DeclaredMethod/Field/DeclaredField/PropertyGetter/PropertySetter(typeof(X), "Name")` with literal names, and looks each target up in the game's assemblies. A missing target is a warning in the report ("Patches N method(s) this game build lacks"), and keeps the DLL out under `GameVersionCheck = Strict`. Not checked: targets built at run time, `TargetMethod()`, `"Type:Method"` strings, and whether a transpiler's code still matches the target's IL. Checked offline with a test mod (5 planted missing targets found, existing ones not flagged) and over the installed Workshop mods; not yet run in the game.
 
-## 0.1.1 – 2026-11-08
+## 0.1.1 - 2026-11-08
 
 - Anchor Chain mods no longer need the Anchor Chain Workshop item: Keel ships Anchor Chain's library (MIT, `lib\AnchorChain.keel.bin`) and uses it when no Anchor Chain folder is on. Mods that use Anchor Chain's ACConfig still need Anchor Chain. Run in the game on globe beta 261107 on 2026-11-08 with no AnchorChain.dll on the machine: 7 plugins started (Sensor Views, Radio, Topo, Shot Director). On 0.8.7 that path was not run: there Anchor Chain's own item is the tested way.
 
-## 0.1.0 – 2026-11-07 (not released; run in the game on 0.8.7)
+## 0.1.0 - 2026-11-07 (not released; run in the game on 0.8.7)
 
 Fixed after the run on the 3D globe beta 261107 (2026-11-08):
 - Ctrl+Shift+K did not reach the report window on the globe build: the key is now also read from the keyboard (Input System,
   else the old Input class), counted once per press.
 - A mod logging the same line every frame (IdentifyExpanded on that beta) grew Keel-log.txt by ~1 MB a minute: repeats are
   counted ("the line above repeated N more times"), about 20 times less.
-- The report window has a solid background (the menu showed through) – not yet seen in the game.
+- The report window has a solid background (the menu showed through) - not yet seen in the game.
 
 Fixed after the first run in the game (2026-11-07):
 - The scanner could not read `[BepInDependency]` (Cecil needs BepInEx.dll for the enum argument) and dropped the whole DLL;
