@@ -10,7 +10,7 @@
 - R.A.T.S. Keel: the mod loader for Sea Power. Replaces Anchor Chain and Alpine's Mod Loader.
 - Subscribe, run KeelSetup.exe, switch Keel on, restart once.
 - Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459
-- Source and docs: https://github.com/struckl/SeaPowerKeel
+- Source and docs: https://github.com/SEARATS/RatsSeaPowerKeel
 - Bugs, ideas, questions: https://hub.sewerlabs.dev/s/keel
 
 ## 2. keel-when-a-mod-breaks.mp4
