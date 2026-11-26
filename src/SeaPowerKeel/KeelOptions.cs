@@ -133,13 +133,22 @@ internal static class KeelOptions
         rows.Check("Answer the game's version question for me (code mods)", question.Value != CompatDialog.Ask, on =>
         {
             question.Value = !on ? CompatDialog.Ask : wider?.IsChecked == true ? CompatDialog.Skip : CompatDialog.Auto;
-            if (wider != null)
-                wider.IsEnabled = on;
+            Open(wider, on);
         }, "Keel clicks Ignore when the game asks about mods made for another game version, and checks their DLLs against this build itself.");
         wider = rows.Check("also when data mods are on the list", question.Value == CompatDialog.Skip,
             on => question.Value = on ? CompatDialog.Skip : CompatDialog.Auto,
             "Data mods (units, sounds, missions) Keel cannot check; the report still names them.", indent: 28);
-        wider.IsEnabled = question.Value != CompatDialog.Ask;
+        Open(wider, question.Value != CompatDialog.Ask);
+    }
+
+    // The game's check box style has no disabled look, and the rows set their own text colour: a closed box is dimmed by hand
+    // (test round 2026-11-26: it took no clicks but looked open).
+    private static void Open(CheckBox box, bool open)
+    {
+        if (box == null)
+            return;
+        box.IsEnabled = open;
+        box.Opacity = open ? 1f : 0.4f;
     }
 
     private static string Auto(float v) => v <= 0f ? "auto" : v.ToString("0.00");
