@@ -43,6 +43,9 @@
   - a mod that merely called a patched game method no longer hides the mod whose patch broke
   - mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
 - **The compatibility check reads Harmony's ref, out and pointer argument kinds** when matching overloads (false warning on UNREP's speed patch)
+- **Restart keeps the Linux launch options** (issue #4): under Proton, Keel's restart now starts the game inside Wine instead of through the steam link
+  - why: the steam link started it without `WINEDLLOVERRIDES`, so BepInEx and Keel did not load after a restart
+  - on Windows a Steam install still restarts through Steam
 
 ## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
