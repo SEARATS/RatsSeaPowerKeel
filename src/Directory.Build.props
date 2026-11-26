@@ -19,6 +19,10 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))=/_/</PathMap>
+    <!--No git facts in the build: the SDK would write the remote's address and the commit into the PDB (SourceLink) and the
+        DLL's version text, so a clone with another remote or a fork would never match the release.-->
+    <EnableSourceLink>false</EnableSourceLink>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
   </PropertyGroup>
 
   <ItemGroup>
