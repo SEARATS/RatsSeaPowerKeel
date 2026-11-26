@@ -108,6 +108,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private string takeoverInstall;            // "installed", "updated", "current" or why not
     private bool restartForTakeover;            // the patcher arrived this start while another loader runs: one restart finishes it
     private ConfigEntry<string> versionCheck;
+    private ConfigEntry<string> versionQuestion;
     private ConfigEntry<string> disabled;
     private ConfigEntry<string> hotkey;
     private ConfigEntry<bool> notice;
@@ -142,7 +143,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         InstallTakeover();
         // As early as possible: a crash in the game's own start-up load is caught too, and the files it opens are on the list.
         InstallCrashCatchers();
-        string compat = CompatDialog.Install();
+        string compat = CompatDialog.Install(versionQuestion.Value);
         if (compat != null)
             log.LogInfo($"Game version dialog stays the game's own: {compat}");
         string loadEnd = LoadScreenEnd.Install();
@@ -173,6 +174,11 @@ internal sealed partial class KeelHost : MonoBehaviour
             "Standard: a DLL that would stop missions from loading on this game build (a type of it is built on something this build " +
             "lacks) is not loaded; other missing parts are a warning. Strict: any missing part keeps the DLL from loading. Off: no check.",
             new AcceptableValueList<string>("Standard", "Strict", "Off")));
+        versionQuestion = config.Bind(Takeover.ConfigSection, "VersionQuestion", CompatDialog.Auto, new ConfigDescription(
+            "The game's question at start-up about mods whose _info.ini names another game version. Auto: Keel answers Ignore when every " +
+            "listed mod is a code mod (Keel checks its DLLs against this game build and leaves out what does not fit); with a data mod on the " +
+            "list the game asks. Skip: Keel always answers Ignore and lists the mods in its report. Ask: the game always asks.",
+            new AcceptableValueList<string>(CompatDialog.Auto, CompatDialog.Skip, CompatDialog.Ask)));
         Runner.GuardPatches = config.Bind(Takeover.ConfigSection, "RemoveBrokenPatches", true,
             "When a mod's Harmony patch throws a missing-method, missing-field or missing-type exception for something this game build lacks, Keel removes that mod's patch " +
             "from the failing method when ownership is unambiguous, names the mod in the report and lets the game continue. Off: Keel only names the mod.").Value;
@@ -669,6 +675,8 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         crash?.Mark("done", "");
         done = true;
+        if (CompatDialog.SkipNote != null)
+            notes.Add(CompatDialog.SkipNote);
         UpdateLoadOrderWarnings();
         log.LogInfo($"Started {pass.Started} plugin(s) in {pass.Ms} ms, one per frame.");
         Window?.StartedIn(pass.Ms);

@@ -50,7 +50,7 @@ Full detail: [docs/features.md](docs/features.md). How it works and where it dif
 
 ## Settings
 
-- The ones players change most: `Loading.GameVersionCheck` (`Standard`), `Loading.TakeOver` (`true`), `WhatsNew.Show` (`true`), `Loading window.Show` (`true`), `Report.Hotkey` (`Ctrl+Shift+K`).
+- The ones players change most: `Loading.GameVersionCheck` (`Standard`), `Loading.VersionQuestion` (`Auto`), `Loading.TakeOver` (`true`), `WhatsNew.Show` (`true`), `Loading window.Show` (`true`), `Report.Hotkey` (`Ctrl+Shift+K`).
 - All settings with defaults: [docs/settings.md](docs/settings.md); the file is `BepInEx\config\dev.sewerlabs.seapowerkeel.cfg`, made on the first start.
 
 ## For mod authors

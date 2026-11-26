@@ -16,6 +16,8 @@ namespace SeaPowerKeel;
 /// waits for a click, Keel's loading window says so instead of counting the seconds since the last message.
 /// Hooked on the message box's Message setter, a plain class with no UI statics, so it is safe from Awake on every build; a build
 /// without the dialog never sets that text.
+/// The setting VersionQuestion can skip the question (a player wish 2026-11-26: most mods never update the line, and Keel
+/// checks every DLL against the running build anyway). Skipping is the game's own Ignore: Ignore only closes the box and logs a warning.
 /// </summary>
 internal static class CompatDialog
 {
@@ -24,9 +26,16 @@ internal static class CompatDialog
     private static Type commandType;
     private const BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
-    /// <summary>Null when hooked, else why not.</summary>
-    public static string Install()
+    public const string Ask = "Ask", Auto = "Auto", Skip = "Skip";
+    private static string mode = Auto;
+
+    /// <summary>What Keel answered for the player at this start, for the report; null when the game asked (or had nothing to ask).</summary>
+    public static string SkipNote { get; private set; }
+
+    /// <summary>Null when hooked, else why not. <paramref name="question"/>: the VersionQuestion setting.</summary>
+    public static string Install(string question)
     {
+        mode = question;
         try
         {
             Type boxType = AccessTools.TypeByName("SeapowerUI.ViewModels.MessageBoxViewModel");
@@ -44,6 +53,11 @@ internal static class CompatDialog
                 if (setter != null)
                     harmony.Patch(setter, prefix: new HarmonyMethod(typeof(CompatDialog).GetMethod(nameof(CommandPrefix), Any)));
             }
+            MethodInfo check = AccessTools.Method(AccessTools.TypeByName("SeaPower.FileManager"), "CheckCompatibility");
+            if (check != null)
+                harmony.Patch(check, prefix: new HarmonyMethod(typeof(CompatDialog).GetMethod(nameof(CheckPrefix), Any)));
+            else if (mode != Ask)
+                Keel.Log.LogInfo("The game's version question cannot be skipped in this build: it is asked as before.");
             return null;
         }
         catch (Exception ex)
@@ -51,6 +65,46 @@ internal static class CompatDialog
             return $"{ex.GetType().Name}: {ex.Message}";
         }
     }
+
+    // Before the game builds its question: Keel answers Ignore itself when the setting says so. Auto skips it only when every listed
+    // mod has DLLs, which Keel checks against this build next; a data mod (units, sounds, missions) Keel cannot check, so the game asks.
+    private static bool CheckPrefix(object __instance, ref IEnumerator __result)
+    {
+        try
+        {
+            if (mode == Ask)
+                return true;
+            (List<string> code, List<string> data) = Listed(__instance);
+            if (code.Count + data.Count == 0 || (mode == Auto && data.Count > 0))
+                return true;
+            SkipNote = SkipText(code, data);
+            Keel.Log.LogInfo($"The game's mod version question was skipped (VersionQuestion = {mode}), as if Ignore was clicked. {SkipNote}");
+            __result = Answered();
+            return false;
+        }
+        catch (Exception)
+        {
+            return true;    // the game asks as before
+        }
+    }
+
+    // The game's coroutine after Ignore: nothing left to do but one frame.
+    private static IEnumerator Answered()
+    {
+        yield return null;
+    }
+
+    private static string SkipText(List<string> code, List<string> data)
+    {
+        var sb = new StringBuilder($"Keel answered the game's version question with Ignore (VersionQuestion = {mode}).");
+        if (code.Count > 0)
+            sb.Append(" Code mods made for another game version, checked by Keel: ").Append(Names(code)).Append('.');
+        if (data.Count > 0)
+            sb.Append(" Data mods made for another game version, which Keel cannot check: ").Append(Names(data)).Append('.');
+        return sb.ToString();
+    }
+
+    private static string Names(List<string> lines) => string.Join("; ", lines.Select(l => l.Replace("  •  ", "").Replace("  -  ", ", ")));
 
     private static void MessagePrefix(object __instance, ref string value)
     {
@@ -152,21 +206,10 @@ internal static class CompatDialog
     /// <summary>The new text from the game's own list (the same test the game uses), or null.</summary>
     private static string Rewrite(string first)
     {
-        Type managerType = AccessTools.TypeByName("SeaPower.FileManager");
-        UnityEngine.Object manager = GameState.Find(managerType);
+        UnityEngine.Object manager = GameState.Find(AccessTools.TypeByName("SeaPower.FileManager"));
         if (manager == null)
             return null;
-        object list = managerType.GetProperty("Directories", Any)?.GetValue(manager) ?? managerType.GetField("directories", Any)?.GetValue(manager);
-        if (!(list is IEnumerable dirs))
-            return null;
-        var code = new List<string>();
-        var data = new List<string>();
-        foreach (object d in dirs)
-        {
-            (string line, bool hasCode) = MismatchLine(d);
-            if (line != null)
-                (hasCode ? code : data).Add(line);
-        }
+        (List<string> code, List<string> data) = Listed(manager);
         if (code.Count + data.Count == 0)
             return null;
         var sb = new StringBuilder(first).Append("\n");
@@ -176,6 +219,23 @@ internal static class CompatDialog
             sb.Append("\nData mods  (units, sounds, pictures, missions)\n").Append(string.Join("\n", data)).Append("\n");
         sb.Append("\nIgnore keeps them on; the other button switches them off and reloads.");
         return sb.ToString();
+    }
+
+    // The game's own list of switched-on mods made for another version (the same test the game uses), split into code and data mods.
+    private static (List<string> code, List<string> data) Listed(object manager)
+    {
+        var code = new List<string>();
+        var data = new List<string>();
+        Type t = manager.GetType();
+        object list = t.GetProperty("Directories", Any)?.GetValue(manager) ?? t.GetField("directories", Any)?.GetValue(manager);
+        if (list is IEnumerable dirs)
+            foreach (object d in dirs)
+            {
+                (string line, bool hasCode) = MismatchLine(d);
+                if (line != null)
+                    (hasCode ? code : data).Add(line);
+            }
+        return (code, data);
     }
 
     // One of the game's mod folders: its list line when it is switched on and does not match this game version, else null.

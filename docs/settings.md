@@ -7,6 +7,7 @@
 | `Loading.AnchorChainMods` | `true` | Start Anchor Chain mods (Keel runs them itself) |
 | `Loading.TakeOver` | `true` | While Keel is on, other mod loaders do not start ([Takeover](how-it-works.md#takeover)); `false`: an installed other loader starts its mods and Keel leaves those to it |
 | `Loading.GameVersionCheck` | `Standard` | `Standard`: leave out DLLs that would stop missions from loading, warn about the rest; `Strict`: leave out any DLL with a missing part (also a missing Harmony patch target or by-name lookup); `Off` |
+| `Loading.VersionQuestion` | `Auto` | The game's start-up question about mods made for another game version. `Auto`: Keel answers Ignore when every listed mod is a code mod (Keel checks those DLLs next); with a data mod on the list the game asks. `Skip`: always Ignore, the mods are listed in Keel's report. `Ask`: the game always asks |
 | `Loading.RemoveBrokenPatches` | `true` | For missing methods, fields or types, remove the mod's patches from the innermost failing method when the preflight findings and stack identify one owner and target; `false`: only name the mod. Other patches stay installed. |
 | `Loading.HoldOutCrashers` | `true` | Keep out a mod that took the game down, until it is updated; `false`: Keel only names it |
 | `Loading.DisabledPlugins` | empty | Plugin ids Keel does not start although their folder is on |

@@ -2,6 +2,13 @@
 
 ## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
+- **The game's version question no longer stops every start** (new setting `Loading.VersionQuestion`, default `Auto`)
+  - why: most mods never update their `_info.ini` version line, so players clicked Ignore at every start
+  - `Auto`: Keel answers Ignore when every listed mod is a code mod; Keel checks those DLLs against the running build and leaves out what does not fit
+  - a data mod on the list (units, sounds, missions): the game still asks, Keel cannot check those
+  - `Skip`: always Ignore; `Ask`: the game always asks, as before
+  - the report names the mods Keel answered for
+  - a Workshop item whose metadata misses the game version still gets no updates from the game: only its author can fix that
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
   - implies `StartEarly`
