@@ -30,6 +30,7 @@ Mods made for [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/
 - Journals every step, so after a crash the next start names the mod whose code was running and keeps it out until it is updated.
 - `KeelWatcher.exe` shows a window the moment the game dies, naming the mod.
 - *Save logs* and *Send report* pack your logs for a bug report; *Send report* replaces your Windows user name first.
+- *Send report* tells you when the crash is a known one: fixed in a newer version, or already being looked at ([docs/crash-json.md](docs/crash-json.md)).
 - A timestamped log of the game, BepInEx and every mod (`BepInEx\Keel-log.txt`).
 - What's new card in the main menu after a start where mods changed, with the authors' change notes.
 - Loading window while the game starts: the mod being started and how long it took ([docs/loading-window.md](docs/loading-window.md)).

@@ -48,6 +48,9 @@ Everything Keel does, in full. The short list is in the [README](../README.md).
   - shows the file list and asks *Send logs to the R.A.T.S. developer?*, with room for a short note
   - sends only on *Send*, to the R.A.T.S. feedback board, where only the developer can open it
   - gives you a report number to mention in a post; no account needed
+  - shows the board's answer under the number: a known problem and the version that fixes it, or a new one
+  - before you send, says when the mod the crash is pinned on has a fix in a newer version ("please update"); you can still send
+- Every crash also leaves `BepInEx\Keel-crash.json`: the same crash as fields (exception or native module, frames, the mod), no paths or user names ([crash-json.md](crash-json.md))
 - `BepInEx\Keel-log.txt` has every log line of the game, BepInEx and all mods with the time of day and the seconds since the game started.
   - An exception gets a line saying which mod it came from, with its stack trace
   - BepInEx's own log has no times and is overwritten at every start; Keel keeps the last sessions too (`Keel-log.1.txt`, `.2.txt`, ...)

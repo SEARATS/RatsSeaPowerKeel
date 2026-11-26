@@ -43,6 +43,16 @@
   - a mod that merely called a patched game method no longer hides the mod whose patch broke
   - mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
 - **The compatibility check reads Harmony's ref, out and pointer argument kinds** when matching overloads (false warning on UNREP's speed patch)
+- **Every crash leaves `BepInEx\Keel-crash.json`** next to `Keel-crash.txt`, and *Save logs* / *Send report* pack it
+  - the crash as fields: exception or native module and code, managed frames, the mod it is pinned on, Keel's step, the scene
+  - why: the feedback board groups reports by these fields instead of guessing from log text
+  - no paths, no arguments, no user names ([docs/crash-json.md](docs/crash-json.md))
+- **Send report shows the board's answer** under the report number: a known problem and the version that fixes it, or a new one
+- **Send report says first when a fix is out**: "Known problem, fixed in <mod> <version>: please update"
+  - only when the crash is pinned on a mod and the board lists a fix newer than the installed version; sending stays possible
+  - only the mod's name goes out for that; offline or slow (4 s) means no hint
+- `Keel-mods.txt` (the watcher's list) carries each mod's version
+- 12 new self-test checks
 
 ## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 
