@@ -291,10 +291,20 @@ internal static class Watcher
     // Steam counts this process as part of the game until it ends, so the start comes from a detached shell a few seconds later.
     private const int RestartDelaySeconds = 4;
 
-    private static void Restart(string exe)
+    private static void Restart(string exe) =>
+        Process.Start(new ProcessStartInfo("cmd.exe", GameStart.Command(exe, OnWine(), RestartDelaySeconds)) { UseShellExecute = false, CreateNoWindow = true })?.Dispose();
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string module);
+    [DllImport("kernel32.dll", CharSet = CharSet.Ansi)] private static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+    // Wine's ntdll exports wine_get_version and Windows' ntdll does not: the usual way to tell Wine (and so Proton) apart.
+    private static bool OnWine()
     {
-        bool steam = exe.IndexOf(@"\steamapps\common\", StringComparison.OrdinalIgnoreCase) >= 0 || exe.IndexOf("/steamapps/common/", StringComparison.OrdinalIgnoreCase) >= 0;
-        string start = steam ? "start \"\" steam://rungameid/" + KeelNames.SteamAppId : $"start \"\" /d \"{Path.GetDirectoryName(exe)}\" \"{exe}\"";
-        Process.Start(new ProcessStartInfo("cmd.exe", $"/c timeout /t {RestartDelaySeconds} /nobreak >nul & " + start) { UseShellExecute = false, CreateNoWindow = true })?.Dispose();
+        try
+        {
+            IntPtr ntdll = GetModuleHandle("ntdll.dll");
+            return ntdll != IntPtr.Zero && GetProcAddress(ntdll, "wine_get_version") != IntPtr.Zero;
+        }
+        catch { return false; }
     }
 }

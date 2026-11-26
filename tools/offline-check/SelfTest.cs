@@ -101,6 +101,7 @@ internal static class SelfTest
             LoadScreenEndChecks();
             EarlyStartChecks();
             RequiredItemChecks();
+            GameStartChecks();
             ReportFactsChecks(tmp);
         }
         finally
@@ -585,6 +586,20 @@ internal static class SelfTest
         Check(early.UseFor(new List<ModFolder> { otherFolder }, _ => { }, new List<SkippedDll>()) == null
               && early.UseFor(new List<ModFolder> { gameFolder }, _ => { }, new List<SkippedDll>()) != null,
               "early scan: used again only when the game's list turns on the same folders");
+    }
+
+    private static void GameStartChecks()
+    {
+        Console.WriteLine("Game start: KeelWatcher's restart goes through Steam on Windows and stays inside Wine on Linux (issue #4)");
+        string win = GameStart.Command(@"E:\Games\steamapps\common\Sea Power\Sea Power.exe", false, 4);
+        Check(win.Contains(GameStart.SteamLink + "1286220") && win.StartsWith("/c timeout /t 4 "),
+              "game start: a Steam install on Windows starts through the steam link, so Steam's launch options apply");
+        string wine = GameStart.Command(@"Z:\home\p\.steam\steam\steamapps\common\Sea Power\Sea Power.exe", true, 4);
+        Check(!wine.Contains(GameStart.SteamLink) && wine.Contains(@"""Z:\home\p\.steam\steam\steamapps\common\Sea Power\Sea Power.exe"""),
+              "game start: a Steam install under Wine starts the exe directly, so it keeps the launch options (WINEDLLOVERRIDES)");
+        string own = GameStart.Command(@"D:\SeaPower\Sea Power.exe", false, 4);
+        Check(!own.Contains(GameStart.SteamLink) && own.Contains(@"/d ""D:\SeaPower"" ""D:\SeaPower\Sea Power.exe"""),
+              "game start: an install outside Steam starts its exe from its own folder");
     }
 
     private static void RequiredItemChecks()
