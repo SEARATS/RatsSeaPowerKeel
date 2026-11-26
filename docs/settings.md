@@ -1,6 +1,6 @@
 # R.A.T.S. Keel: settings
 
-`BepInEx\config\dev.sewerlabs.seapowerkeel.cfg` (made on the first start):
+`BepInEx\config\dev.sewerlabs.seapowerkeel.cfg` (made on the first start). The ones players change most are also on Keel's tab in the game's Options menu (*R.A.T.S. Keel*); most apply at the next start.
 
 | Setting | Default | What |
 |---|---|---|

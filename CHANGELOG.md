@@ -2,6 +2,9 @@
 
 ## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
+- **Keel has its own tab in the game's Options menu** (R.A.T.S. Keel)
+  - the settings players change: version question, game version check, broken patches, crashers, What's new, notices, report size, loading window, log
+  - most apply at the next start (Keel reads them while the game starts); the rest stays in the config file
 - **The game's version question no longer stops every start** (new setting `Loading.VersionQuestion`, default `Auto`)
   - why: most mods never update their `_info.ini` version line, so players clicked Ignore at every start
   - `Auto`: Keel answers Ignore when every listed mod is a code mod; Keel checks those DLLs against the running build and leaves out what does not fit

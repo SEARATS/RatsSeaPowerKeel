@@ -109,6 +109,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private bool restartForTakeover;            // the patcher arrived this start while another loader runs: one restart finishes it
     private ConfigEntry<string> versionCheck;
     private ConfigEntry<string> versionQuestion;
+    private ConfigFile config;                  // for Keel's Options tab
     private ConfigEntry<string> disabled;
     private ConfigEntry<string> hotkey;
     private ConfigEntry<bool> notice;
@@ -138,7 +139,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         Current = this;
         log = Keel.Log;
-        var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
+        config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
         BindSettings(config);
         InstallTakeover();
         // As early as possible: a crash in the game's own start-up load is caught too, and the files it opens are on the list.
@@ -1276,6 +1277,9 @@ internal sealed partial class KeelHost : MonoBehaviour
             log.LogWarning($"No Restart button in the Mods menu: {why}");
         else
             log.LogInfo("Mods menu: Restart button and Reload follow-up ready.");
+        string options = KeelOptions.Install(config);
+        if (options != null)
+            log.LogWarning($"No Keel tab in the Options menu, the settings are only in the config file: {options}");
     }
 
     private void OnApplicationQuit()
