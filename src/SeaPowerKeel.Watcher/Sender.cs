@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
@@ -6,8 +7,8 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace SeaPowerKeel;
@@ -19,6 +20,8 @@ namespace SeaPowerKeel;
 internal static class Sender
 {
     private const string Endpoint = "https://hub.sewerlabs.dev/api/report";
+    private const string Known = "https://hub.sewerlabs.dev/api/v1/known?mod=";
+    private const int KnownTimeoutSeconds = 4;      // only a hint: a slow or missing board must not hold up the window
     private const string Board = "https://hub.sewerlabs.dev";
     private const long MaxBytes = 5 * 1024 * 1024;     // the board refuses more
     // TLS 1.3: .NET Framework 4.8 runs with it on Windows 11 but has no name for it.
@@ -75,7 +78,7 @@ internal static class Sender
     {
         private readonly string zip, game;
         private readonly TextBox note;
-        private readonly Label status;
+        private readonly Label status, hint;
         private readonly Button send, cancel;
         private bool sent;
 
@@ -101,6 +104,9 @@ internal static class Sender
             var look = new LinkLabel { Text = $"Show the zip ({Size(size)}) in Explorer", AutoSize = true, Margin = new Padding(0, 0, 0, kit.P(12)) };
             look.LinkClicked += (s, e) => LogBundle.Reveal(zip);
             column.Controls.Add(look);
+            hint = kit.Line("", Font, Bad, 12);
+            hint.Visible = false;
+            column.Controls.Add(hint);
             column.Controls.Add(kit.Line("What happened? (optional)", Font, DialogKit.TextColor, 4));
             note = new TextBox { Multiline = true, Width = kit.Wide, Height = kit.P(64), MaxLength = 1000, ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, kit.P(14)) };
             column.Controls.Add(note);
@@ -123,10 +129,16 @@ internal static class Sender
                 Say($"The logs are {Size(size)}, more than the 5 MB the board takes. Please use Save logs and attach the file to a post on {Board}.", Bad);
             }
             send.Click += async (s, e) => await SendClicked();
-            Shown += (s, e) =>
+            Shown += async (s, e) =>
             {
                 Activate();
                 ActiveControl = note;
+                string fix = await Task.Run(() => KnownFix(zip));
+                if (fix != null && !IsDisposed)
+                {
+                    hint.Text = fix;
+                    hint.Visible = true;
+                }
             };
         }
 
@@ -158,17 +170,19 @@ internal static class Sender
             }
             send.Enabled = cancel.Enabled = note.Enabled = false;
             Say("Sending …", DialogKit.TextColor);
-            string answer = await Task.Run(() => Upload(zip, note.Text.Trim(), game));
-            if (answer.StartsWith("#", StringComparison.Ordinal))
+            (string id, string message, string error) = await Task.Run(() => Upload(zip, note.Text.Trim(), game));
+            if (id != null)
             {
                 sent = true;
-                Say($"Sent, thank you. Your report is number {answer}. If you post about it on {Board}, mention that number.", Good);
+                // The board's answer under the number (known problem, fixed in a version, new); older boards send none.
+                Say($"Sent, thank you. Your report is number #{id}." + (string.IsNullOrWhiteSpace(message) ? "" : "\n" + message.Trim()) +
+                    $"\nIf you post about it on {Board}, mention that number.", Good);
                 send.Text = "Close";
                 send.Enabled = true;
                 AcceptButton = send;
                 return;
             }
-            Say(answer + $"\n\nYou can still use Save logs and attach the file to a post on {Board}.", Bad);
+            Say(error + $"\n\nYou can still use Save logs and attach the file to a post on {Board}.", Bad);
             send.Text = "Try again";
             send.Enabled = cancel.Enabled = note.Enabled = true;
         }
@@ -177,21 +191,73 @@ internal static class Sender
     // What the board's mail says: a crash or a report sent from the report window, and the report's one-line summary.
     private static string kind = "report", summary = "";
 
-    /// <summary>"#id" when the board took the report, else a sentence for the player.</summary>
-    private static string Upload(string zip, string note, string game)
+    private static HttpClient Client(int timeoutSeconds)
     {
         try
         {
-            try
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | Tls13;
+        }
+        catch (NotSupportedException)
+        {
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+        }
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"RATS-Keel/{(KeelVersion.Length > 0 ? KeelVersion : "0")}");
+        return http;
+    }
+
+    /// <summary>
+    /// "Known problem, fixed in R.A.T.S. X 1.7: please update." when the crash in the zip is pinned on a mod and the board lists a
+    /// fix newer than the installed version; else null (no pinned mod, no fix, board offline or slow). Sends only the mod's name.
+    /// </summary>
+    private static string KnownFix(string zip)
+    {
+        try
+        {
+            string json;
+            using (ZipArchive archive = ZipFile.OpenRead(zip))
             {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | Tls13;
+                ZipArchiveEntry entry = archive.Entries.FirstOrDefault(e => e.Name == KeelNames.CrashJsonFile);
+                if (entry == null)
+                    return null;
+                using var reader = new StreamReader(entry.Open());
+                json = reader.ReadToEnd();
             }
-            catch (NotSupportedException)
-            {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-            }
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd($"RATS-Keel/{(KeelVersion.Length > 0 ? KeelVersion : "0")}");
+            string mod = CrashJson.Field(json, "mod"), installed = CrashJson.Field(json, "modVersion");
+            if (string.IsNullOrWhiteSpace(mod) || string.IsNullOrWhiteSpace(installed))
+                return null;
+            using HttpClient http = Client(KnownTimeoutSeconds);
+            string fix = NewestFix(http.GetStringAsync(Known + Uri.EscapeDataString(mod)).GetAwaiter().GetResult(), installed);
+            return fix == null ? null : $"Known problem, fixed in {mod} {fix}: please update. You can still send the report.";
+        }
+        catch (Exception)
+        {
+            return null;    // offline or an odd answer: no hint
+        }
+    }
+
+    /// <summary>The newest fixed_in of the board's "known" list that is newer than the installed version, or null.</summary>
+    private static string NewestFix(string body, string installed)
+    {
+        if (!Parse(body).TryGetValue("known", out object list) || !(list is object[] groups))
+            return null;
+        string best = null;
+        foreach (var g in groups.OfType<Dictionary<string, object>>())
+        {
+            if (!(g.TryGetValue("state", out object state) && state as string == "fixed" && g.TryGetValue("fixed_in", out object v) && v is string fixedIn))
+                continue;
+            if (CrashJson.Newer(fixedIn, installed) && (best == null || CrashJson.Newer(fixedIn, best)))
+                best = fixedIn;
+        }
+        return best;
+    }
+
+    /// <summary>The report's number and the board's answer when it took the report, else a sentence for the player in error.</summary>
+    private static (string id, string message, string error) Upload(string zip, string note, string game)
+    {
+        try
+        {
+            using HttpClient http = Client(60);
             using var form = new MultipartFormDataContent();
             var file = new ByteArrayContent(File.ReadAllBytes(zip));
             file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
@@ -203,16 +269,31 @@ internal static class Sender
             form.Add(new StringContent(summary ?? ""), "summary");
             using HttpResponseMessage response = http.PostAsync(Endpoint, form).GetAwaiter().GetResult();
             string body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            Match id = Regex.Match(body, "\"id\"\\s*:\\s*(\\d+)");
-            if (response.IsSuccessStatusCode && id.Success)
-                return "#" + id.Groups[1].Value;
-            Match error = Regex.Match(body, "\"error\"\\s*:\\s*\"([^\"]*)\"");
-            return error.Success ? "The board did not take the report: " + error.Groups[1].Value : $"The board did not take the report (HTTP {(int)response.StatusCode}).";
+            Dictionary<string, object> answer = Parse(body);
+            if (response.IsSuccessStatusCode && answer.TryGetValue("id", out object id) && id is int number)
+                return (number.ToString(), answer.TryGetValue("message", out object message) ? message as string : null, null);
+            return (null, null, answer.TryGetValue("error", out object error) && error is string why
+                ? "The board did not take the report: " + why : $"The board did not take the report (HTTP {(int)response.StatusCode}).");
         }
         catch (Exception ex)
         {
-            return "Could not reach the board: " + (ex.InnerException?.Message ?? ex.Message);
+            return (null, null, "Could not reach the board: " + (ex.InnerException?.Message ?? ex.Message));
         }
+    }
+
+    // The board's JSON answer as fields; an answer that is not JSON (a proxy's error page) gives none.
+    private static Dictionary<string, object> Parse(string body)
+    {
+        try
+        {
+            if (new JavaScriptSerializer().DeserializeObject(body) is Dictionary<string, object> fields)
+                return fields;
+        }
+        catch (Exception)
+        {
+            // not JSON
+        }
+        return new Dictionary<string, object>();
     }
 
     private static string Size(long bytes) => bytes >= 1024 * 1024 ? $"{bytes / 1024.0 / 1024.0:0.0} MB" : $"{Math.Max(1, bytes / 1024)} KB";

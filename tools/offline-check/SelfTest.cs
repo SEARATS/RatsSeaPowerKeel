@@ -324,6 +324,37 @@ internal static class SelfTest
     // ---- helpers ----
 
 
+    // Keel-crash.json (docs/crash-json.md): the fields the feedback board groups by, and nothing of the player's.
+    private static void CrashJsonChecks(string caughtDir, string stack)
+    {
+        string json = File.Exists(Path.Combine(caughtDir, KeelNames.CrashJsonFile)) ? File.ReadAllText(Path.Combine(caughtDir, KeelNames.CrashJsonFile)) : "";
+        Check(json.Contains("\"schema\": 1") && CrashJson.Field(json, "module") == "UnityPlayer.dll" && CrashJson.Field(json, "code") == "0xC0000005",
+              "Keel-crash.json is written next to Keel-crash.txt, with module and code of a native crash");
+        Check(CrashJson.Field(json, "mod") == "Beta" && CrashJson.Field(json, "guid") == "b" && CrashJson.Field(json, "modVersion") == "1.0"
+              && CrashJson.Field(json, "step") == "running", "the json names the mod the crash is pinned on, its version and Keel's step");
+        Check(!json.Contains("exception"), "a native crash has no exception field");
+        List<string> frames = CrashJson.Frames(stack);
+        Check(frames.Count == 3 && frames[0] == "UnityEngine.Diagnostics.Utils.ForceCrash" && frames[1] == "BetaMod.Hooks.Boom",
+              "frames are Namespace.Type.Method, top first, without arguments and without Keel's catcher");
+        Check(CrashJson.Frame("0x1 (Mono JIT code) [C:\\Users\\bob\\Mod.cs:12] BetaMod.Hooks:Prefix (int)") == "BetaMod.Hooks.Prefix",
+              "a Unity frame loses its source path and arguments");
+        Check(CrashJson.Frame("  at (wrapper dynamic-method) SeaPower.Unit.DMD<SeaPower.Unit::Update>(SeaPower.Unit)") == "SeaPower.Unit.Update",
+              "a Harmony-patched frame is named after the method it patches");
+        Check(CrashJson.Frame("  at C:\\Users\\bob\\x.dll") == null, "a frame that looks like a path is left out");
+        string many = string.Join("\n", Enumerable.Range(0, 30).Select(i => $"  at Mod.Type.M{i} ()"));
+        Check(CrashJson.Frames(many).Count == CrashJson.MaxFrames, "at most 20 frames");
+        Check(CrashJson.ExceptionType("Unhandled Exception: System.NullReferenceException: Object reference not set\n  at A.B.C ()") == "NullReferenceException"
+              && CrashJson.ExceptionType(stack) == null, "a managed exception is named by its type only");
+        string managed = CrashJson.Text(new CrashText.Journal { Step = "start", Scene = "MainMenu" },
+                                        "System.InvalidOperationException: boom \"quoted\"\n  at BetaMod.Plugin.Start ()", null);
+        Check(CrashJson.Field(managed, "exception") == "InvalidOperationException" && CrashJson.Field(managed, "step") == "start"
+              && CrashJson.Field(managed, "scene") == "MainMenu" && !managed.Contains("\"mod\"") && !managed.Contains("\"module\""),
+              "a managed crash: exception, step, scene; fields Keel does not know are left out");
+        Check(CrashJson.Text(new CrashText.Journal(), null, null).Contains("\"frames\": []"), "no record still gives a valid file with no frames");
+        Check(CrashJson.Newer("1.10", "1.9") && CrashJson.Newer("1.7.1", "1.7") && !CrashJson.Newer("1.7.0", "1.7") && !CrashJson.Newer("", "1.0"),
+              "versions compare by their numbers");
+    }
+
     private static void CrashGuardChecks(string tmp)
     {
         var ui = new KeelUiState("test", true, false, null);
@@ -465,7 +496,8 @@ internal static class SelfTest
         caughtRun.Mark("quit", "");
         Check(caught.State == PluginState.NotStarted && caughtNotes.Count == 1 && caughtNotes[0].Contains("Beta"), "a crash after start-up with the mod on the catcher's stack: named and held out, no hunt needed");
         caughtRun.WriteModsFile(new[] { caught });
-        Check(File.ReadAllText(Path.Combine(caughtDir, KeelNames.ModsFile)).Contains("b\tBeta\tBetaMod"), "the watcher's list has id, name and code root");
+        Check(File.ReadAllText(Path.Combine(caughtDir, KeelNames.ModsFile)).Contains("b\tBeta\tBetaMod\t1.0"), "the watcher's list has id, name, code root and version");
+        CrashJsonChecks(caughtDir, stack);
 
         string keptDir = Path.Combine(tmp, "crashkept");
         Directory.CreateDirectory(keptDir);

@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="..\SeaPowerKeel\KeelNames.cs" Link="KeelNames.cs" />
     <Compile Include="..\SeaPowerKeel\CrashText.cs" Link="CrashText.cs" />
+    <Compile Include="..\SeaPowerKeel\CrashJson.cs" Link="CrashJson.cs" />
     <Compile Include="..\SeaPowerKeel\ReportFacts.cs" Link="ReportFacts.cs" />
     <Compile Include="..\SeaPowerKeel\ReportFormat.cs" Link="ReportFormat.cs" />
     <Reference Include="System.Windows.Forms" />
@@ -22,6 +23,7 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
 </Project>
