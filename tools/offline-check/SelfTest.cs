@@ -72,6 +72,8 @@ internal static class SelfTest
             Console.WriteLine("Scanner: only the exact Anchor Chain DLL names are left out, and every one is listed");
             Console.WriteLine("_info.ini [Compatibility], by the game's rules");
             InfoIni();
+            Console.WriteLine("Harmony method history and its disk cache");
+            MethodHistoryChecks.Run(tmp, core, ThisDll, Check);
             ScannerExclusions(tmp, managed, core);
             Console.WriteLine("Scanner: Anchor Chain plugin classes must be public (exported)");
             ExportedTypes(tmp, managed, core);

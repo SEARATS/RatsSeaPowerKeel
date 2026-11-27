@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace SeaPowerKeel;
 
@@ -12,13 +11,7 @@ internal static class FileHash
     {
         try
         {
-            using var stream = File.OpenRead(path);
-            using var sha = SHA256.Create();
-            byte[] digest = sha.ComputeHash(stream);
-            var sb = new StringBuilder(digest.Length * 2);
-            foreach (byte b in digest)
-                sb.Append(b.ToString("x2"));
-            return sb.ToString();
+            return ReadSha256(path);
         }
         catch (Exception)
         {
@@ -26,6 +19,15 @@ internal static class FileHash
             return "";
         }
     }
+
+    internal static string ReadSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha = SHA256.Create();
+        return Hex(sha.ComputeHash(stream));
+    }
+
+    internal static string Hex(byte[] hash) => BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
 
     /// <summary>The first characters, enough to compare by eye in the report window.</summary>
     public static string Short(string hex) => hex.Length > 12 ? hex.Substring(0, 12) + "..." : hex;

@@ -50,6 +50,12 @@ Copy-Item (Join-Path $root 'LICENSE') (Join-Path $dist 'LICENSE.txt')
 Copy-Item (Join-Path $root 'CHANGELOG.md') $dist      # What's new shows its top sections to players of a local or offline copy
 New-Item -ItemType Directory -Force (Join-Path $dist 'lib') | Out-Null
 Copy-Item (Join-Path $root 'lib\AnchorChain.keel.bin'), (Join-Path $root 'lib\THIRD-PARTY.txt') (Join-Path $dist 'lib')
+$history = Join-Path $root 'external\binaries\keel\method-history-v1'
+if (Test-Path -LiteralPath $history) {
+    Copy-Item -LiteralPath $history -Destination (Join-Path $dist 'lib') -Recurse
+} else {
+    Write-Warning 'Method history was skipped. Run git submodule update --init to include the published snapshots.'
+}
 $preview = Join-Path $root 'workshop\preview.jpg'
 if (Test-Path $preview) { Copy-Item $preview $dist } else { Write-Warning 'workshop\preview.jpg missing.' }
 

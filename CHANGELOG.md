@@ -14,6 +14,11 @@ Merged since 0.8.0, ships with the next release ([how releases work](docs/commun
   - `Skip`: always Ignore; `Ask`: the game always asks, as before
   - the report names the mods Keel answered for
   - a Workshop item whose metadata misses the game version still gets no updates from the game: only its author can fix that
+- **Keel names game methods that changed under an out-of-date Harmony mod** ([method history](docs/method-history.md))
+  - why: a mod whose `_info.ini` names an older game version may patch code that changed since; the report says which targets and lookups
+  - compares the installed `Seapower-Scripts.dll` with a bundled snapshot of that older build (first one: 0.9.3-261116, from SEARATS/binaries)
+  - names a changed method body, changed callers or changed callees; Standard and Strict still decide whether the mod starts
+  - the result is cached per mod DLL and game build, so later starts skip the scan
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
   - implies `StartEarly`
