@@ -139,12 +139,12 @@ internal sealed class SetupForm : Form
     {
         var kit = new DialogKit(500);
         wide = kit.Wide;
-        Text = "R.A.T.S. Keel Setup";
+        Text = "Keel Setup";
         StartPosition = FormStartPosition.CenterScreen;
         kit.Style(this);
 
         FlowLayoutPanel column = kit.Column();
-        column.Controls.Add(kit.Line("R.A.T.S. Keel", DialogKit.Heading, DialogKit.HeadingColor, 4));
+        column.Controls.Add(kit.Line("Keel", DialogKit.Heading, DialogKit.HeadingColor, 4));
         column.Controls.Add(kit.Line("Sets up Keel for your copy of Sea Power. You can undo it here at any time.", Font, Color.FromArgb(70, 70, 70), 16));
         column.Controls.Add(FolderPicker(kit, out folder, out browse));
         status = kit.Line("", Font, DialogKit.TextColor, 16);
@@ -215,7 +215,7 @@ internal sealed class SetupForm : Form
             if (!c.HasBepInEx && zip.Length == 0)
                 return "BepInEx is missing. Press Install again to download it.";
             return "Done. " + string.Join(" ", c.Install(File.ReadAllBytes(Program.StubFile), c.HasBepInEx ? new byte[0] : zip, File.ReadAllBytes(Program.PatcherFile))) +
-                   "\n\nStart Sea Power, switch R.A.T.S. Keel on in Mods, and restart the game.";
+                   "\n\nStart Sea Power, switch Keel on in Mods, and restart the game.";
         });
     }
 

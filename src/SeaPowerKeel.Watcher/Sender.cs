@@ -50,7 +50,7 @@ internal static class Sender
         catch (Exception ex)
         {
             MessageBox.Show(owner, "Keel could not pack the logs: " + ex.Message + "\n\nYou can still use Save logs and attach the file to a post on " + Board + ".",
-                            "R.A.T.S. Keel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            "Keel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
@@ -87,7 +87,7 @@ internal static class Sender
             this.zip = zip;
             this.game = game;
             var kit = new DialogKit(480);
-            Text = "R.A.T.S. Keel";
+            Text = "Keel";
             TopMost = true;
             StartPosition = owner == null ? FormStartPosition.CenterScreen : FormStartPosition.CenterParent;
             ShowInTaskbar = owner == null;

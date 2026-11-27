@@ -12,7 +12,7 @@
 
 ```mermaid
 ---
-title: R.A.T.S. Keel as the interface between mods and Sea Power
+title: Keel as the interface between mods and Sea Power
 config:
   theme: neutral
   flowchart:
@@ -21,7 +21,7 @@ config:
 flowchart LR
     Mod["<b>Mod</b><br/>modder's code"]
 
-    subgraph Keel["R.A.T.S. Keel «component»"]
+    subgraph Keel["Keel «component»"]
         direction TB
         API["<b>Stable Keel API</b><br/>what mods call, never breaks"]
         subgraph Adapters["Adapter layer"]
@@ -55,7 +55,7 @@ flowchart LR
 
 ```mermaid
 ---
-title: A mod call through R.A.T.S. Keel, per case
+title: A mod call through Keel, per case
 config:
   theme: neutral
   themeVariables:
@@ -70,7 +70,7 @@ config:
 ---
 sequenceDiagram
     participant M as Mod
-    participant K as R.A.T.S. Keel
+    participant K as Keel
     participant G as Sea Power
 
     alt 1. unchanged

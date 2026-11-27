@@ -211,7 +211,7 @@ internal static class WhatsNew
     public static void Write(string path, Dictionary<string, SeenMod> mods)
     {
         var sb = new StringBuilder();
-        sb.Append("# R.A.T.S. Keel: the mods of the last start, for What's new. Delete it to start over.\n");
+        sb.Append("# Keel: the mods of the last start, for What's new. Delete it to start over.\n");
         foreach (SeenMod m in mods.Values)
         {
             sb.Append($"mod\t{m.Key}\t{Clean(m.Name)}\t{m.Updated}\t{m.Stamp}\n");

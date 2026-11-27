@@ -356,7 +356,7 @@ internal sealed partial class KeelHost
         if (draw)
             GUI.color = new UnityEngine.Color(1, 1, 1, alpha);
         EnsureOneLineStyles();
-        var title = new GUIContent(Fit("WHAT'S NEW  ·  R.A.T.S. KEEL", oneTitle, inner - 26));
+        var title = new GUIContent(Fit("WHAT'S NEW  ·  KEEL", oneTitle, inner - 26));
         const float th = 24;
         if (draw)
         {

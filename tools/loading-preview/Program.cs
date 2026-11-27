@@ -26,7 +26,7 @@ internal static class Program
         float scale = args.Length > 2 ? float.Parse(args[2], CultureInfo.InvariantCulture) : 1f;
         Directory.CreateDirectory(args[1]);
 
-        // "21:14:45.141 +41.826s [Info    : R.A.T.S. Keel] RUNNING: ..."
+        // "21:14:45.141 +41.826s [Info    : Keel] RUNNING: ..."
         var line = new Regex(@"^\d\d:\d\d:\d\d\.\d+ \+(\d+\.\d+)s \[(\w+)\s*: (.+?)\] (.*)$");
         double now = 0;
         var progress = new Progress(() => now);
@@ -65,7 +65,7 @@ internal static class Program
         return 0;
     }
 
-    private const string KeelSource = "R.A.T.S. Keel";
+    private const string KeelSource = "Keel";
     private static readonly Regex Result = new(@"^([A-Z][A-Z ]+): (.+?) \(");
     private static readonly Regex Starting = new(@"^STARTING (\d+)/(\d+): (.+?) \(");
     private static readonly Regex Found = new(@"^Found (\d+) plugin");

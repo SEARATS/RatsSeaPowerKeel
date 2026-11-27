@@ -1,6 +1,6 @@
-# Sea Power: R.A.T.S. Keel
+# Sea Power: Keel
 
-Keel is the mod loader for Sea Power's code mods and carries on Anchor Chain: it finds the mod DLLs, checks them against your game version, starts them and tells you what happened.
+Keel (by R.A.T.S.) is the mod loader for Sea Power's code mods and carries on Anchor Chain: it finds the mod DLLs, checks them against your game version, starts them and tells you what happened.
 
 | | |
 | --- | --- |
@@ -52,13 +52,13 @@ Full detail: [docs/features.md](docs/features.md). How it works and where it dif
 
 ## Settings
 
-- In the game: Options > *R.A.T.S. Keel* tab (most settings apply at the next start).
+- In the game: Options > *Keel* tab (most settings apply at the next start).
 - The ones players change most: `Loading.GameVersionCheck` (`Standard`), `Loading.VersionQuestion` (`Auto`), `Loading.TakeOver` (`true`), `WhatsNew.Show` (`true`), `Loading window.Show` (`true`), `Report.Hotkey` (`Ctrl+Shift+K`).
 - All settings with defaults: [docs/settings.md](docs/settings.md); the file is `BepInEx\config\dev.sewerlabs.seapowerkeel.cfg`, made on the first start.
 
 ## For mod authors
 
-- Your mod loads as built; list R.A.T.S. Keel as the required item (3835527459). Guide: [docs/for-mod-authors.md](docs/for-mod-authors.md).
+- Your mod loads as built; list Keel as the required item (3835527459). Guide: [docs/for-mod-authors.md](docs/for-mod-authors.md).
 
 ## Building
 
@@ -76,7 +76,7 @@ Offline check, self-tests and layout: [docs/building.md](docs/building.md).
 
 - [R.A.T.S. Source License](LICENSE): read it, learn from it, fork it, send fixes; no re-uploads, no reuse in other projects.
 - Releases before 2026-11-18 stay MIT. agm-114's changes of 2026-11-14 (PR #3) came in under MIT and keep that notice: [lib/THIRD-PARTY.txt](lib/THIRD-PARTY.txt).
-- The name and the look are not part of that. "R.A.T.S.", "R.A.T.S. Keel", the logo, the Workshop pictures and texts and the plugin ids `dev.sewerlabs.seapowerkeel*` belong to the author; all rights reserved.
+- The name and the look are not part of that. "R.A.T.S.", the name "Keel" for a Sea Power mod loader, the logo, the Workshop pictures and texts and the plugin ids `dev.sewerlabs.seapowerkeel*` belong to the author; all rights reserved.
 - Keel carries on [Anchor Chain](https://github.com/SeaPower-Modders/AnchorChain) (MIT), the community chainloader Sea Power's code mods are built on, made by [JustOneOther](https://github.com/JustOneOther) and [agm-114](https://github.com/agm-114) of the [SeaPower-Modders](https://github.com/SeaPower-Modders). Its history is part of this repository, its source is in [`anchor-chain/`](anchor-chain/) under its own license ([anchor-chain/LICENSE.md](anchor-chain/LICENSE.md)).
 - Keel's own code is written from scratch; it reads Anchor Chain mods through their public attributes and interface. Anchor Chain's library (`lib/`, MIT) and BepInEx keep their own licenses: [lib/THIRD-PARTY.txt](lib/THIRD-PARTY.txt).
 - Code signing and privacy: [docs/code-signing-policy.md](docs/code-signing-policy.md).

@@ -14,7 +14,7 @@ using UnityEngine;
 namespace SeaPowerKeel;
 
 /// <summary>
-/// R.A.T.S. Keel: a mod loader for Sea Power. Started by the stub in BepInEx\plugins (see <see cref="Boot"/>), it reads the
+/// Keel: a mod loader for Sea Power. Started by the stub in BepInEx\plugins (see <see cref="Boot"/>), it reads the
 /// game's mod list, finds the plugins in the enabled mod folders without loading them, checks each DLL against the
 /// running game build, works out dependencies, conflicts and start order, and starts the plugins one by one, each on its
 /// own so that one broken mod cannot stop the rest. It runs plain BepInEx plugins and Anchor Chain mods (the latter only
@@ -23,7 +23,7 @@ namespace SeaPowerKeel;
 public static class Keel
 {
     public const string Guid = "dev.sewerlabs.seapowerkeel";
-    public const string Name = "R.A.T.S. Keel";
+    public const string Name = "Keel";
     public static readonly string Version = typeof(Keel).Assembly.GetName().Version.ToString(3);
 
     internal static readonly List<PluginEntry> Plugins = new();
@@ -2041,7 +2041,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             GUI.DrawTexture(new Rect(0, 0, window.width, HeaderHeight), headerBack);
             buttonSpots.Add((new Rect(window.x + close.x, window.y + close.y, close.width, close.height), CloseWindow));
         }
-        GUI.Label(new Rect(9, 0, window.width - 45, HeaderHeight), "R.A.T.S. KEEL  ·  MOD REPORT", headStyle);
+        GUI.Label(new Rect(9, 0, window.width - 45, HeaderHeight), "KEEL  ·  MOD REPORT", headStyle);
         GUI.Label(new Rect(0, 0, window.width - 34, HeaderHeight), $"{Keel.Version}  ·  {GameState.BuildName}", metaStyle);
         if (GUI.Button(close, "×", buttonStyle))
             CloseWindow();

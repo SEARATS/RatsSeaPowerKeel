@@ -7,7 +7,7 @@
   <PropertyGroup>
     <AssemblyName>SeaPowerKeel.Patcher</AssemblyName>
     <RootNamespace>SeaPowerKeel.Patcher</RootNamespace>
-    <Product>R.A.T.S. Keel takeover: keeps other mod loaders from starting while Keel is switched on.</Product>
+    <Product>Keel takeover: keeps other mod loaders from starting while Keel is switched on.</Product>
     <Version>1.1.0</Version>
     <DefineConstants>$(DefineConstants);KEEL_NO_UNITY</DefineConstants>
   </PropertyGroup>

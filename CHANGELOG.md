@@ -4,7 +4,10 @@
 
 Merged since 0.8.0, ships with the next release ([how releases work](docs/community/releases.md)): start early, the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
-- **Keel has its own tab in the game's Options menu** (R.A.T.S. Keel)
+- **New name: just Keel** (Steam title *Keel - Sea Power Mod Loader*): shown as Keel in the game, the Mods list, the cards, the report, window titles and message boxes
+  - why: the loader is for every Sea Power modder, not only the R.A.T.S. mods
+  - plugin ids, folders and DLL names stay, so nothing changes for installs
+- **Keel has its own tab in the game's Options menu** (Keel)
   - the settings players change: version question, game version check, broken patches, crashers, What's new, notices, report size, loading window, log
   - most apply at the next start (Keel reads them while the game starts); the rest stays in the config file
 - **The game's version question no longer stops every start** (new setting `Loading.VersionQuestion`, default `Auto`)

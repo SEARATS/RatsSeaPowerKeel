@@ -1,4 +1,4 @@
-# R.A.T.S. Keel: install
+# Keel: install
 
 All the steps for the three ways. The short table is in the [README](../README.md).
 
@@ -20,7 +20,7 @@ Keel installs in three ways. Each one ends the same: a starter file in `BepInEx\
 
 The same result as the setup, without running any `.exe`:
 
-1. Subscribe to R.A.T.S. Keel on the Workshop, start the game, switch Keel on in Mods, close the game.
+1. Subscribe to Keel on the Workshop, start the game, switch Keel on in Mods, close the game.
 2. BepInEx (skip if the game folder already has a `BepInEx` folder):
    - download `BepInEx_win_x64_5.4.23.2.zip` from [BepInEx's GitHub release](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2)
    - unzip it into the game folder, so `winhttp.dll`, `doorstop_config.ini` and `BepInEx\` sit next to `Sea Power.exe`
@@ -35,7 +35,7 @@ The same result as the setup, without running any `.exe`:
 
 `KeelSetup.exe` is a Windows program: on Linux, install by hand. A player got Keel running this way (2026-11-10); we have not run it on Linux ourselves.
 
-1. Subscribe to R.A.T.S. Keel on the Workshop, start the game, switch Keel on in Mods, close the game.
+1. Subscribe to Keel on the Workshop, start the game, switch Keel on in Mods, close the game.
 2. BepInEx (skip if the game folder already has a `BepInEx` folder):
    - download `BepInEx_win_x64_5.4.23.2.zip` from [BepInEx's GitHub release](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) - the Windows build, the game runs through Proton
    - unzip it into the game folder, so `winhttp.dll`, `doorstop_config.ini` and `BepInEx/` sit next to `Sea Power.exe`
@@ -60,7 +60,7 @@ The same result as the setup, without running any `.exe`:
   - What a mod set up itself stays until a restart, as the game cannot unload code.
   - The same dialog has a *Restart* button (saves the list, closes the game and starts it again). The report window has *Restart the game* (click twice).
 - If Keel was switched off at that moment, nothing loads, and switching it on in the running game does not start it: restart the game. The same goes for subscribing to, removing or reinstalling a mod, and for Steam re-downloading Keel's folder.
-- If the game log says "R.A.T.S. Keel is switched off in the game's mod list", switch Keel on in Mods and restart.
+- If the game log says "Keel is switched off in the game's mod list", switch Keel on in Mods and restart.
 
 ## Switching from Anchor Chain or Alpine
 

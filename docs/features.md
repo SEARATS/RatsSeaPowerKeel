@@ -1,4 +1,4 @@
-# R.A.T.S. Keel: feature detail
+# Keel: feature detail
 
 Everything Keel does, in full. The short list is in the [README](../README.md).
 

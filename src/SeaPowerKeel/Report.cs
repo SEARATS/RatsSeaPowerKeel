@@ -61,7 +61,7 @@ internal static class Report
                 sb.AppendLine($"[SKIPPED DLL] {System.IO.Path.GetFileName(d.Path)} – {d.Folder?.Label}, {d.Path}{Environment.NewLine}    {d.Reason}");
         }
         sb.AppendLine();
-        sb.AppendLine("R.A.T.S. Keel - Kanalratte");
+        sb.AppendLine("Keel - Kanalratte");
         return sb.ToString();
     }
 

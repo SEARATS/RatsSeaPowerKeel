@@ -1,4 +1,4 @@
-# R.A.T.S. Keel: building and layout
+# Keel: building and layout
 
 ```
 dotnet build src/SeaPowerKeel/SeaPowerKeel.csproj -c Release          # -p:Deploy=true copies it into StreamingAssets\SeaPowerKeel

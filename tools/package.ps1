@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds a release of R.A.T.S. Keel and stages the folder that goes to the Steam Workshop.
+    Builds a release of Keel and stages the folder that goes to the Steam Workshop.
 
 .DESCRIPTION
     Release builds of the loader and the stub, then dist\SeaPowerKeel\ with exactly what players get:
@@ -60,7 +60,7 @@ $preview = Join-Path $root 'workshop\preview.jpg'
 if (Test-Path $preview) { Copy-Item $preview $dist } else { Write-Warning 'workshop\preview.jpg missing.' }
 
 $version = ([xml](Get-Content (Join-Path $root 'src\SeaPowerKeel\SeaPowerKeel.csproj'))).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-Write-Host "Staged R.A.T.S. Keel $version in $dist"
+Write-Host "Staged Keel $version in $dist"
 
 if ($Install) {
     if (Get-Process -Name 'Sea Power' -ErrorAction SilentlyContinue) { throw 'Sea Power is running - close it first.' }

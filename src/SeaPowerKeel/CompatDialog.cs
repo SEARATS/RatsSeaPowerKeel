@@ -123,7 +123,7 @@ internal static class CompatDialog
                 return;
             value = rewritten;
             box = __instance;
-            // The top bar says where the list comes from (his wish 2026-11-12): "MESSAGE  ·  R.A.T.S. Keel".
+            // The top bar says where the list comes from (his wish 2026-11-12): "MESSAGE  ·  Keel".
             PropertyInfo h = __instance.GetType().GetProperty("Header", Any);
             if (h?.CanWrite == true)
                 h.SetValue(__instance, Branded(h.GetValue(__instance) as string));
@@ -160,7 +160,7 @@ internal static class CompatDialog
     internal static string Branded(string header)
     {
         string h = string.IsNullOrEmpty(header) ? "MESSAGE" : header;
-        return h.Contains(Keel.Name) ? h : h + BrandSuffix;
+        return h.EndsWith(BrandSuffix) ? h : h + BrandSuffix;   // "Keel" alone is too short to look for anywhere in the header
     }
 
     // The header can be set after the text: it keeps the brand on Keel's dialog.
