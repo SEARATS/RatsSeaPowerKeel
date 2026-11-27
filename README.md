@@ -5,7 +5,7 @@ Keel is the mod loader for Sea Power's code mods and carries on Anchor Chain: it
 | | |
 | --- | --- |
 | Questions | [R.A.T.S. Discord](https://discord.gg/CzuHd4f8Yf): help, ideas, talk; the first place to ask |
-| Version | `0.8.1` (unreleased) |
+| Version | `0.8.3` (unreleased) |
 | Game | Sea Power 0.9.3 (public and beta) tested in the game with 0.6.0 (2026-11-18); `_info.ini` declares 0.9.0 up to, not including, 0.10.0 |
 | Needs | [BepInEx 5](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.2) (KeelSetup adds it); Keel is the loader itself and needs no other one |
 | Get it | [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3835527459) |
@@ -26,6 +26,7 @@ Mods made for [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/
 - Runs plain BepInEx plugins and Anchor Chain mods as they are; one DLL for the game's current main version.
 - A mod can name the Workshop items it needs: a missing one shows on the card with a Get it button, an installed one that is off is switched on ([for mod authors](docs/for-mod-authors.md)).
 - Checks every DLL against the game's `Managed` assemblies and leaves out one that could stop missions from loading, saying why.
+- For out-of-date mods, flags Harmony targets and method lookups affected by changes in the game ([method history](docs/method-history.md)).
 - Report window (Ctrl+Shift+K): every mod running, with errors, or not started and why; the same in `BepInEx\Keel-report.txt`.
 - Journals every step, so after a crash the next start names the mod whose code was running and keeps it out until it is updated.
 - `KeelWatcher.exe` shows a window the moment the game dies, naming the mod.

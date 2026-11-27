@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3 - unreleased
+
+- When a code mod declares support for an older Sea Power version, Keel can name Harmony targets and method lookups whose code, callers, or callees changed. These findings appear in the report under both Standard and Strict checks.
+- Keel stores preflight results by the mod DLL's SHA-256 and the installed game build. Updating either DLL triggers a fresh check. The Workshop package bundles the first reference snapshot from SEARATS/binaries. Players and mod authors can keep their existing config and mod metadata.
+- Verified offline with an installed Sea Power 0.9.3 assembly and fixtures for transitive changes, recursion, and cache invalidation.
+
 ## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it

@@ -5,7 +5,7 @@
     <AssemblyName>SeaPowerKeel</AssemblyName>
     <RootNamespace>SeaPowerKeel</RootNamespace>
     <Product>R.A.T.S. Keel: a mod loader for Sea Power that checks every mod against the running game before it starts it.</Product>
-    <Version>0.8.1</Version>
+    <Version>0.8.3</Version>
     <!--Local mod folder for testing: the game lists every StreamingAssets sub folder as a mod.-->
     <ModDeployDir>$(GameDir)\Sea Power_Data\StreamingAssets\SeaPowerKeel</ModDeployDir>
   </PropertyGroup>
@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ModFiles Include="mod\**\*.*" />
+    <HistoryFiles Include="..\..\external\binaries\keel\method-history-v1\**\*.kh.gz" />
   </ItemGroup>
 
   <!--Only with -p:Deploy=true: the game is his, and a DLL dropped into its mod folders starts with his next game.-->
@@ -30,6 +31,7 @@
     <MakeDir Directories="$(ModDeployDir)" />
     <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(ModDeployDir)" />
     <Copy SourceFiles="@(ModFiles)" DestinationFolder="$(ModDeployDir)\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(HistoryFiles)" DestinationFolder="$(ModDeployDir)\lib\method-history-v1\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Message Importance="high" Text="SeaPowerKeel deployed to $(ModDeployDir)" />
   </Target>
 

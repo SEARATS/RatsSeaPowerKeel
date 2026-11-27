@@ -1,0 +1,3 @@
+[submodule "external/binaries"]
+	path = external/binaries
+	url = https://github.com/SEARATS/binaries.git

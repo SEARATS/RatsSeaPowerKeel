@@ -13,6 +13,15 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        if (args.Length == 4 && args[0] == "--snapshot-methods")
+        {
+            Version version = InfoVersion.Number(args[1]) ?? throw new ArgumentException("Expected a Sea Power build version.");
+            var snapshot = MethodSnapshot.Scan(args[1], File.ReadAllBytes(Path.Combine(args[2], MethodSnapshot.AssemblyFile)));
+            string path = Path.Combine(args[3], version.ToString(3), snapshot.AssemblyHash + MethodSnapshot.Extension);
+            snapshot.Write(path);
+            Console.WriteLine($"Wrote {snapshot.Methods.Count:N0} methods for Sea Power {snapshot.Build} to {path}");
+            return 0;
+        }
         if (args.Length > 0 && args[0] == "--selftest")
             return SelfTest.Run(args.Skip(1).ToArray());
         if (args.Length > 0 && args[0] == "--inicheck")
@@ -22,6 +31,7 @@ internal static class Program
             Console.WriteLine("usage: SeaPowerKeel.OfflineCheck <Managed> <BepInEx core> <mod folder | folder of mod folders> ...");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --selftest <Managed> <BepInEx core>      (Keel's own tests; exit code 1 when one fails)");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --inicheck <Managed> [<Managed> ...]     (do the game's IniHandler members [ACConfig] needs exist?)");
+            Console.WriteLine("       SeaPowerKeel.OfflineCheck --snapshot-methods <game build version> <Managed> <history directory>");
             return 2;
         }
         string managed = args[0], core = args[1];

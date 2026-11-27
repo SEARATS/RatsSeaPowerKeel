@@ -37,7 +37,7 @@ Copy-Item (Join-Path $root 'src\SeaPowerKeel.Patcher\bin\Release\netstandard2.1\
 # shipped: the setup downloads the release pinned in tools\bepinex.ps1 and refuses any file with another hash.
 . (Join-Path $PSScriptRoot 'bepinex.ps1')
 Get-OfficialBepInExZip $root | Out-Null      # checks now that the pinned release is still downloadable and unchanged
-dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release -p:BepInExVersion="$BepInExVersion" -p:BepInExSha256="$BepInExSha256"
+dotnet build (Join-Path $root 'src\SeaPowerKeel.Setup\SeaPowerKeel.Setup.csproj') -c Release -p:GameDir="$GameDir" -p:BepInExVersion="$BepInExVersion" -p:BepInExSha256="$BepInExSha256"
 if ($LASTEXITCODE -ne 0) { throw 'Build failed: KeelSetup' }
 Copy-Item (Join-Path $root 'src\SeaPowerKeel.Setup\bin\Release\net48\KeelSetup.exe') $dist
 Copy-Item (Join-Path $root 'src\SeaPowerKeel\mod\_info.ini') $dist
@@ -45,6 +45,12 @@ Copy-Item (Join-Path $root 'LICENSE') (Join-Path $dist 'LICENSE.txt')
 Copy-Item (Join-Path $root 'CHANGELOG.md') $dist      # What's new shows its top sections to players of a local or offline copy
 New-Item -ItemType Directory -Force (Join-Path $dist 'lib') | Out-Null
 Copy-Item (Join-Path $root 'lib\AnchorChain.keel.bin'), (Join-Path $root 'lib\THIRD-PARTY.txt') (Join-Path $dist 'lib')
+$history = Join-Path $root 'external\binaries\keel\method-history-v1'
+if (Test-Path -LiteralPath $history) {
+    Copy-Item -LiteralPath $history -Destination (Join-Path $dist 'lib') -Recurse
+} else {
+    Write-Warning 'Method history was skipped. Run git submodule update --init to include the published snapshots.'
+}
 $preview = Join-Path $root 'workshop\preview.jpg'
 if (Test-Path $preview) { Copy-Item $preview $dist } else { Write-Warning 'workshop\preview.jpg missing.' }
 

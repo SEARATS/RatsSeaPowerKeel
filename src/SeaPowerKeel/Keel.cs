@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
@@ -550,7 +551,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (pass.Early && blockSet.Count == 0)
             blockingDone = true;
         if (!pass.Early || blockSet.Count > 0)
-            yield return Check(blockSet == null ? null : p => blockSet.Contains(p), keep: pass.Early);
+            yield return Check(blockSet == null ? null : p => blockSet.Contains(p), keep: pass.Early, blocking: pass.Early);
         if (!pass.Reload)
             log.LogInfo($"Game-version check done ({watch.ElapsedMilliseconds} ms, frames included).");
         watch.Restart();
@@ -958,9 +959,10 @@ internal sealed partial class KeelHost : MonoBehaviour
     // An early start checks in up to three steps (blocking mods, early mods, the rest): one Preflight, and so one index of the
     // game's type names, serves them all instead of one built on the main thread per step. Kept until a step passes keep: false.
     private Preflight keptPreflight;
+    private HistoryPreflight keptHistory;
     private readonly Dictionary<string, Preflight.Result> keptResults = new(StringComparer.OrdinalIgnoreCase);
 
-    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false)
+    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false, bool blocking = false)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
@@ -976,15 +978,42 @@ internal sealed partial class KeelHost : MonoBehaviour
             yield break;
         }
         keptPreflight = keep ? preflight : null;
+        string appVersion = Application.version;
+        var history = keptHistory ?? new HistoryPreflight(Paths.ManagedPath, Paths.BepInExAssemblyDirectory,
+            Path.Combine(Path.GetDirectoryName(typeof(Keel).Assembly.Location) ?? "", "lib", MethodSnapshot.DirectoryName),
+            Path.Combine(Paths.BepInExRootPath, "cache", MethodSnapshot.DirectoryName), appVersion, message => log.LogDebug(message));
+        keptHistory = keep ? history : null;
         try
         {
             List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending && (only == null || only(p))).GroupBy(p => p.Dll).ToList();
             Dictionary<string, Preflight.Result> results = keptResults;
+            var checks = new Dictionary<string, (string Declared, string[] Warnings)>(StringComparer.OrdinalIgnoreCase);
             foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
+                string declared = null;
+                string[] baselines = [];
                 try
                 {
-                    results[dll.Key] = preflight.Check(dll.Key);
+                    string[] compatibility = InfoVersion.ReadFolder(dll.First().Folder?.Path);
+                    declared = InfoVersion.Mismatch(compatibility, appVersion);
+                    if (declared != null)
+                        baselines = history.Baselines(compatibility);
+                }
+                catch (Exception ex)
+                {
+                    log.LogDebug($"Could not find method history for {dll.Key}: {ex.Message}");
+                }
+                Task<HistoryPreflight.Review> task = blocking || baselines.Length == 0 ? null
+                    : Task.Run(() => history.Check(preflight, dll.Key, baselines));
+                while (task != null && !task.IsCompleted)
+                    yield return null;
+                try
+                {
+                    HistoryPreflight.Review review = task?.GetAwaiter().GetResult();
+                    if (blocking && baselines.Length != 0)
+                        review = history.Check(preflight, dll.Key, baselines);
+                    results[dll.Key] = review?.Result ?? preflight.Check(dll.Key);
+                    checks[dll.Key] = (declared, review?.Warnings ?? []);
                 }
                 catch (Exception ex)
                 {
@@ -997,8 +1026,13 @@ internal sealed partial class KeelHost : MonoBehaviour
                 if (!results.TryGetValue(dll.Key, out Preflight.Result r))
                     continue;
                 string matching = Preflight.MatchingMapBuild(dll.Key, r, results);
+                if (!checks.TryGetValue(dll.Key, out var check))
+                    continue;
                 foreach (PluginEntry p in dll)
-                    Preflight.Judge(p, r, matching, mode == "Strict", InfoVersion.MismatchInFolder(p.Folder?.Path, Application.version));
+                {
+                    Preflight.Judge(p, r, matching, mode == "Strict", check.Declared);
+                    p.Warnings.AddRange(check.Warnings);
+                }
             }
         }
         finally
