@@ -128,7 +128,7 @@ Players can switch to `Strict` (any missing use or patch target keeps the DLL ou
 
 ## Errors
 
-Keel 0.8.1 adds optional runtime diagnostic scopes:
+Keel's next release adds optional runtime diagnostic scopes (on `main` now):
 
 ```csharp
 var plugin = Keel.ForPlugin(new PluginId("your.plugin.guid"));
