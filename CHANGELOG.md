@@ -4,9 +4,21 @@
 
 Merged since 0.8.0, ships with the next release ([how releases work](docs/community/releases.md)): start early, the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
-- Keel reports changed Harmony targets, method lookups, callers, and callees for code mods that declare support for an older Sea Power version in the bundled history.
-- Keel caches the preflight by the mod DLL's SHA-256 and the installed game build. Updating either DLL triggers a fresh check. The package includes the first reference snapshot from SEARATS/binaries.
-- Verified offline with a Sea Power 0.9.3 assembly and fixtures for transitive changes, recursion, and cache invalidation.
+- **Keel has its own tab in the game's Options menu** (R.A.T.S. Keel)
+  - the settings players change: version question, game version check, broken patches, crashers, What's new, notices, report size, loading window, log
+  - most apply at the next start (Keel reads them while the game starts); the rest stays in the config file
+- **The game's version question no longer stops every start** (new setting `Loading.VersionQuestion`, default `Auto`)
+  - why: most mods never update their `_info.ini` version line, so players clicked Ignore at every start
+  - `Auto`: Keel answers Ignore when every listed mod is a code mod; Keel checks those DLLs against the running build and leaves out what does not fit
+  - a data mod on the list (units, sounds, missions): the game still asks, Keel cannot check those
+  - `Skip`: always Ignore; `Ask`: the game always asks, as before
+  - the report names the mods Keel answered for
+  - a Workshop item whose metadata misses the game version still gets no updates from the game: only its author can fix that
+- **Keel names game methods that changed under an out-of-date Harmony mod** ([method history](docs/method-history.md))
+  - why: a mod whose `_info.ini` names an older game version may patch code that changed since; the report says which targets and lookups
+  - compares the installed `Seapower-Scripts.dll` with a bundled snapshot of that older build (first one: 0.9.3-261116, from SEARATS/binaries)
+  - names a changed method body, changed callers or changed callees; Standard and Strict still decide whether the mod starts
+  - the result is cached per mod DLL and game build, so later starts skip the scan
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
   - implies `StartEarly`
@@ -55,6 +67,16 @@ Merged since 0.8.0, ships with the next release ([how releases work](docs/commun
   - a mod that merely called a patched game method no longer hides the mod whose patch broke
   - mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
 - **The compatibility check reads Harmony's ref, out and pointer argument kinds** when matching overloads (false warning on UNREP's speed patch)
+- **Every crash leaves `BepInEx\Keel-crash.json`** next to `Keel-crash.txt`, and *Save logs* / *Send report* pack it
+  - the crash as fields: exception or native module and code, managed frames, the mod it is pinned on, Keel's step, the scene
+  - why: the feedback board groups reports by these fields instead of guessing from log text
+  - no paths, no arguments, no user names ([docs/crash-json.md](docs/crash-json.md))
+- **Send report shows the board's answer** under the report number: a known problem and the version that fixes it, or a new one
+- **Send report says first when a fix is out**: "Known problem, fixed in <mod> <version>: please update"
+  - only when the crash is pinned on a mod and the board lists a fix newer than the installed version; sending stays possible
+  - only the mod's name goes out for that; offline or slow (4 s) means no hint
+- `Keel-mods.txt` (the watcher's list) carries each mod's version
+- 12 new self-test checks
 
 ## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 

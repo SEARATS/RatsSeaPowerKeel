@@ -17,6 +17,8 @@ internal static class KeelNames
     public const string JournalFile = "Keel-session.txt";
     public const string HeldFile = "Keel-held.txt";
     public const string CrashFile = "Keel-crash.txt";
+    /// <summary>The same crash as fields for the feedback board (docs/crash-json.md), written next to Keel-crash.txt.</summary>
+    public const string CrashJsonFile = "Keel-crash.json";
     public const string WatcherFile = "Keel-watcher.txt";
     public const string ModsFile = "Keel-mods.txt";
     public const string StackFile = "Keel-crash-stack.txt";
@@ -29,7 +31,7 @@ internal static class KeelNames
 
     /// <summary>What a log bundle (Save logs, Send report) takes from BepInEx\, as file patterns.</summary>
     public static readonly string[] BundleFiles =
-        { "Keel-log*.txt", ReportFile, "Keel-crash*.txt", JournalFile, ModsFile, HeldFile, WatcherFile, "LogOutput.log" };
+        { "Keel-log*.txt", ReportFile, "Keel-crash*.txt", CrashJsonFile, JournalFile, ModsFile, HeldFile, WatcherFile, "LogOutput.log" };
 
     /// <summary>
     /// The game's folder in LocalLow (Player.log, CrashDiagnostics), named from Unity's company and product. Keel itself asks Unity
