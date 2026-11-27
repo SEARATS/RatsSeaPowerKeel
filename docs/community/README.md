@@ -8,6 +8,7 @@ Notes for players, mod authors and partners: how we work together, who is on boa
 | [ROADMAP.md](ROADMAP.md) | The plan: waves 0 to 3 |
 | [diagrams.md](diagrams.md) | How Keel sits between mods and the game: component, sequence, state |
 | [how-we-work.md](how-we-work.md) | Where things live, how decisions are made, Anchor Chain |
+| [releases.md](releases.md) | Merge often, release on purpose: what a merge does, the release-day steps |
 | [partner-mods.md](partner-mods.md) | The mods we start with, partners, wanted modders |
 | [november-2026.md](november-2026.md) | What went wrong in November 2026, and what changes |
 | [open-for-discussion.md](open-for-discussion.md) | Topics still open, one file each below |
