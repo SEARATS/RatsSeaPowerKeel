@@ -558,7 +558,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         if (pass.Early && blockSet.Count == 0)
             blockingDone = true;
         if (!pass.Early || blockSet.Count > 0)
-            yield return Check(blockSet == null ? null : p => blockSet.Contains(p), keep: pass.Early, blocking: pass.Early);
+            yield return Check(blockSet == null ? null : p => blockSet.Contains(p), keep: pass.Early);
         if (!pass.Reload)
             log.LogInfo($"Game-version check done ({watch.ElapsedMilliseconds} ms, frames included).");
         watch.Restart();
@@ -971,7 +971,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private HistoryPreflight keptHistory;
     private readonly Dictionary<string, Preflight.Result> keptResults = new(StringComparer.OrdinalIgnoreCase);
 
-    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false, bool blocking = false)
+    private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
@@ -995,48 +995,14 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending && (only == null || only(p))).GroupBy(p => p.Dll).ToList();
-            Dictionary<string, Preflight.Result> results = keptResults;
             var checks = new Dictionary<string, (string Declared, string[] Warnings)>(StringComparer.OrdinalIgnoreCase);
             foreach (IGrouping<string, PluginEntry> dll in dlls)
-            {
-                string declared = null;
-                string[] baselines = [];
-                try
-                {
-                    string[] compatibility = InfoVersion.ReadFolder(dll.First().Folder?.Path);
-                    declared = InfoVersion.Mismatch(compatibility, appVersion);
-                    if (declared != null)
-                        baselines = history.Baselines(compatibility);
-                }
-                catch (Exception ex)
-                {
-                    log.LogDebug($"Could not find method history for {dll.Key}: {ex.Message}");
-                }
-                Task<HistoryPreflight.Review> task = blocking || baselines.Length == 0 ? null
-                    : Task.Run(() => history.Check(preflight, dll.Key, baselines));
-                while (task != null && !task.IsCompleted)
-                    yield return null;
-                try
-                {
-                    HistoryPreflight.Review review = task?.GetAwaiter().GetResult();
-                    if (blocking && baselines.Length != 0)
-                        review = history.Check(preflight, dll.Key, baselines);
-                    results[dll.Key] = review?.Result ?? preflight.Check(dll.Key);
-                    checks[dll.Key] = (declared, review?.Warnings ?? []);
-                }
-                catch (Exception ex)
-                {
-                    Warn($"Could not check {dll.Key}: {ex.Message}");
-                }
-                yield return null;
-            }
+                yield return CheckDll(preflight, history, dll, appVersion, checks);
             foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
-                if (!results.TryGetValue(dll.Key, out Preflight.Result r))
+                if (!keptResults.TryGetValue(dll.Key, out Preflight.Result r) || !checks.TryGetValue(dll.Key, out var check))
                     continue;
-                string matching = Preflight.MatchingMapBuild(dll.Key, r, results);
-                if (!checks.TryGetValue(dll.Key, out var check))
-                    continue;
+                string matching = Preflight.MatchingMapBuild(dll.Key, r, keptResults);
                 foreach (PluginEntry p in dll)
                 {
                     Preflight.Judge(p, r, matching, mode == "Strict", check.Declared);
@@ -1054,6 +1020,40 @@ internal sealed partial class KeelHost : MonoBehaviour
                 keptResults.Clear();
             }
         }
+    }
+
+    // One DLL of a Check step. The method history scan reads the whole game assembly the first time, so it runs on a worker and
+    // the coroutine waits frame by frame: the game keeps drawing, and a blocking start that pumps the coroutine just waits for it.
+    private IEnumerator CheckDll(Preflight preflight, HistoryPreflight history, IGrouping<string, PluginEntry> dll, string appVersion,
+        Dictionary<string, (string Declared, string[] Warnings)> checks)
+    {
+        string declared = null;
+        string[] baselines = [];
+        try
+        {
+            string[] compatibility = InfoVersion.ReadFolder(dll.First().Folder?.Path);
+            declared = InfoVersion.Mismatch(compatibility, appVersion);
+            if (declared != null)
+                baselines = history.Baselines(compatibility);
+        }
+        catch (Exception ex)
+        {
+            log.LogDebug($"Could not find method history for {dll.Key}: {ex.Message}");
+        }
+        Task<HistoryPreflight.Review> task = baselines.Length == 0 ? null : Task.Run(() => history.Check(preflight, dll.Key, baselines));
+        while (task != null && !task.IsCompleted)
+            yield return null;
+        try
+        {
+            HistoryPreflight.Review review = task?.GetAwaiter().GetResult();
+            keptResults[dll.Key] = review?.Result ?? preflight.Check(dll.Key);
+            checks[dll.Key] = (declared, review?.Warnings ?? []);
+        }
+        catch (Exception ex)
+        {
+            Warn($"Could not check {dll.Key}: {ex.Message}");
+        }
+        yield return null;
     }
 
     private static Loading.Progress Window => Loading.LoadingWindow.Progress;

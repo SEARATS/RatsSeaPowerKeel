@@ -1,20 +1,57 @@
 # Method history
 
-When a code mod's `_info.ini` declares compatibility with an older Sea Power version, Keel uses the latest bundled snapshot covered by that declaration. It compares methods in the installed `Seapower-Scripts.dll` with the snapshot and reports changes to the methods the mod patches or looks up. A warning can name a changed method body, callers that can reach the method, or methods it can reach. If the bundled release has multiple recorded builds, Keel reports a category when it detects the change against each of those builds.
+Keel names the game methods that changed under a code mod made for an older Sea Power version.
 
-Keel resolves statically declared Harmony patches and unambiguous method lookups the existing preflight recognizes. Computed targets, unresolved overloads, reflective dispatch, and virtual dispatch beyond the IL's named target can escape the scan. A warning means the code changed. The existing Standard and Strict rules still decide whether to start the mod. If there is no matching historical snapshot, Keel uses its ordinary compatibility checks.
+## When it runs
 
-Keel reads the bundled history offline. It builds an installed-game snapshot once per game assembly SHA-256 as needed. For a comparison, it caches the full preflight result and the method warnings in `BepInEx/cache/method-history-v1`. The cache key includes the mod DLL's SHA-256, the installed game's version and managed DLL hashes, the BepInEx core DLL hashes, the bundled comparison data, and the Keel build.
+- The mod's `_info.ini` `[Compatibility]` names an older game version than the running one
+- Keel bundles a snapshot of a build that version covers (`lib/method-history-v1/<version>/`); it takes the newest one
+- No matching snapshot: only the ordinary game-version check runs
+
+## What it reports
+
+- Harmony patch targets and AccessTools lookups whose method changed since that build:
+  - its code or metadata
+  - its callers (anything that can reach it)
+  - its callees (anything it can reach)
+- Several recorded builds of one version: a change is named only when it differs from every one of them
+- At most 12 lines per mod, then a count
+- A warning means the code changed, not that the mod breaks; Standard and Strict still decide whether the mod starts
+
+## What it cannot see
+
+- Targets computed at run time (`TargetMethod()`, names built in code)
+- Overloads Keel cannot pick for sure
+- Reflection and virtual calls beyond the method named in the IL
+
+## Cache
+
+- `BepInEx/cache/method-history-v1`
+  - `game/`: a snapshot of the installed `Seapower-Scripts.dll`, made once per build; older ones are deleted
+  - `results/`: the full check per mod DLL; results unused for 30 days are deleted
+- A result is reused only while these stay the same:
+  - the mod DLL (SHA-256)
+  - `Seapower-Scripts.dll` (SHA-256)
+  - the other DLLs in `Managed` and `BepInEx/core` (size and write time)
+  - the bundled snapshots and the Keel build
 
 ## Record a Sea Power build
 
-Initialize the binaries submodule, then run the snapshot script with the **full build string** shown in Sea Power's log. Run it for each release or beta build whose users need a baseline.
+- Once per release or beta build players need as a baseline
+- Use the **full build string** from Sea Power's log
 
 ```powershell
 git submodule update --init
 ./tools/snapshot-methods.ps1 -BuildVersion '0.9.3-261116' -GameDir 'C:/Games/Sea Power'
 ```
 
-Pass `-ManagedDir` to read an archived game assembly. Pass `-BinariesRepo` to write into a separate checkout of SEARATS/binaries. Review and commit the generated `keel/method-history-v1/<version>/<sha256>.kh.gz` in that repository, then update Keel's `external/binaries` pin for the next package. The distribution script copies the catalog under `lib/method-history-v1`. An already packaged baseline works against a new locally installed game build.
+- `-ManagedDir`: read an archived game assembly instead
+- `-BinariesRepo`: write into another checkout of SEARATS/binaries
+- Commit `keel/method-history-v1/<version>/<sha256>.kh.gz` in SEARATS/binaries, then move Keel's `external/binaries` pin
+- The package copies the catalog to `lib/method-history-v1`; a packaged baseline also works against a newer game build
 
-Each entry contains the method signature, a SHA-256 of its normalized IL and method metadata, hashes of its transitive callers and callees, and its direct method-reference edges. The scanner normalizes metadata references and branch positions before hashing and groups recursive methods before hashing each direction. The snapshots contain signatures, edges, and digests. Keep the game assemblies out of the binaries repository.
+## What a snapshot holds
+
+- Per method: its signature, a SHA-256 of its normalized IL and metadata, hashes of its callers and callees, its direct call edges
+- Metadata tokens and branch offsets are normalized before hashing; recursive methods are hashed as one group
+- Signatures and hashes only: game assemblies never go into the binaries repo

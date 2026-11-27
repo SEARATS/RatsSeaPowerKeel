@@ -55,6 +55,7 @@ internal class HistoryPreflight(string managed, string core, string history, str
             path = Path.Combine(cache, "results", inputHash, modHash + MethodSnapshot.Extension);
             if (TryRead(path, ReadReview) is Review cached)
             {
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow);   // marks it as in use for Prune
                 log($"Method history cache hit for {Path.GetFileName(dll)}.");
                 return cached;
             }
@@ -75,7 +76,10 @@ internal class HistoryPreflight(string managed, string core, string history, str
                 warnings = Changes(result, installed, previous);
             }
             if (path != null && !result.PatchCheckIncomplete)
+            {
                 MethodSnapshot.WriteAtomically(path, w => WriteReview(w, result, warnings));
+                Prune();
+            }
             log($"Checked method history for {Path.GetFileName(dll)}.");
         }
         catch (Exception ex)
@@ -90,9 +94,13 @@ internal class HistoryPreflight(string managed, string core, string history, str
         if (environment != null)
             return environment;
         // The ordinary preflight also resolves types outside Seapower-Scripts. Include everything it can resolve.
+        // Size and write time, not a SHA-256: hashing the whole Managed folder at every start cost more than the cache saved.
+        // The game's own assembly, the one the history compares, keeps its full hash.
+        // Steam and BepInEx rewrite the files they update, so a changed DLL still changes its fingerprint.
         IEnumerable<string> Fingerprints(string directory) => Directory.EnumerateFiles(directory, "*.dll")
             .OrderBy(x => x, StringComparer.Ordinal)
-            .Select(x => Path.GetFileName(x) + "=" + HashOf(x));
+            .Select(x => new FileInfo(x))
+            .Select(x => x.Name + "=" + (x.Name == MethodSnapshot.AssemblyFile ? HashOf(x.FullName) : x.Length + "@" + x.LastWriteTimeUtc.Ticks));
         return environment = string.Join("\n", new[] { ResultFormat, typeof(Preflight).Module.ModuleVersionId.ToString(), "Managed" }
             .Concat(Fingerprints(managed)).Append("BepInEx").Concat(Fingerprints(core)));
     }
@@ -125,12 +133,36 @@ internal class HistoryPreflight(string managed, string core, string history, str
         try
         {
             snapshot.Write(path);
+            // One install has one game build: snapshots of earlier builds are never read again.
+            foreach (string old in Directory.GetFiles(Path.GetDirectoryName(path), "*" + MethodSnapshot.Extension))
+                if (!string.Equals(old, path, StringComparison.OrdinalIgnoreCase))
+                    File.Delete(old);
         }
         catch (Exception ex)
         {
             log($"Could not cache the installed game snapshot: {ex.Message}");
         }
         return snapshot;
+    }
+
+    // Results of other game builds, mod versions or Keel builds are never read again; the ones in use are touched on every hit.
+    private bool pruned;
+
+    private void Prune()
+    {
+        if (pruned)
+            return;
+        pruned = true;
+        string results = Path.Combine(cache, "results");
+        DateTime cutoff = DateTime.UtcNow.AddDays(-30);
+        foreach (string folder in Directory.GetDirectories(results))
+        {
+            foreach (string file in Directory.GetFiles(folder))
+                if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    File.Delete(file);
+            if (!Directory.EnumerateFileSystemEntries(folder).Any())
+                Directory.Delete(folder);
+        }
     }
 
     internal static string[] Changes(Preflight.Result result, MethodSnapshot current, MethodSnapshot[] previous)

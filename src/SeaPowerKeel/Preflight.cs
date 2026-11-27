@@ -117,6 +117,8 @@ internal sealed class Preflight : IDisposable
         if (image == null && byDll.TryGetValue(dll, out Result cached))
             return cached;
         var r = new Result();
+        if (image == null)
+            byDll[dll] = r;   // a caller with its own image (the method history) keeps the result itself
         using var stream = new MemoryStream(image ?? File.ReadAllBytes(dll), writable: false);
         using ModuleDefinition mod = ModuleDefinition.ReadModule(stream, new ReaderParameters { AssemblyResolver = resolver, ReadSymbols = false });
         var classLoad = new SortedSet<string>();

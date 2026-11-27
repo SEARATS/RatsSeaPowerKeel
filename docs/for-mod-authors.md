@@ -109,7 +109,8 @@ Requires=3840000000, com.you.library, My Library
 
 ## The game-version check
 
-When your `_info.ini` declares support for an older version in Keel's [method history](method-history.md), the report can also name changed Harmony targets, callers, callees, and method lookups. Check those warnings when updating a patch for a new game build.
+- Your `_info.ini` names an older game version: the report can also name your Harmony targets and lookups whose game code changed ([method history](method-history.md))
+- Check those lines first when you update a patch for a new game build
 
 Before a DLL is loaded, Keel checks every type, method and field it uses from the game's assemblies against the running
 build (the same check as `modtool compat`):
