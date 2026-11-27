@@ -22,7 +22,7 @@ starts six plugins from one DLL and writes `KEEL_RECOVERY PASS` after checking:
   off, so the second invocation succeeds. These exceptions deliberately reproduce
   the report's error formats; they are not a reproduction of the native crash.
 
-An unchanged 0.8.1 loader writes `KEEL_RECOVERY BASELINE`, with the uncaught failure's
+An unchanged loader from `main` writes `KEEL_RECOVERY BASELINE`, with the uncaught failure's
 startup patch still installed and both runtime exceptions occurring twice. Compare its
 report with the updated loader's report, then remove the fixture and restore the
 original mod selections, config and installed loader.
