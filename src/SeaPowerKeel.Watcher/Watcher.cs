@@ -16,7 +16,7 @@ namespace SeaPowerKeel;
 /// </summary>
 internal static class Watcher
 {
-    private const string Title = "R.A.T.S. Keel";
+    private const string Title = "Keel";
 
     [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
 

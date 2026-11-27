@@ -1,11 +1,11 @@
-# Writing a mod for R.A.T.S. Keel
+# Writing a mod for Keel
 
 Keel runs two kinds of plugins from the game's mod folders (Workshop items and `Sea Power_Data\StreamingAssets\<folder>`).
 You do not need to reference Keel.
 
 **Your mod loads as built.** Nothing to recompile, nothing to add.
 
-- **List R.A.T.S. Keel as your Workshop item's required item** (Steam: your item, *Add/Remove Required Items*, Workshop item
+- **List Keel as your Workshop item's required item** (Steam: your item, *Add/Remove Required Items*, Workshop item
   3835527459). Keel brings Anchor Chain's library, so your players need no Anchor Chain item and none of its manual install
   steps: subscribe, run `KeelSetup.exe` once, play.
 - **Anchor Chain mods and plain BepInEx plugins run as they are** (sections 1 and 2).

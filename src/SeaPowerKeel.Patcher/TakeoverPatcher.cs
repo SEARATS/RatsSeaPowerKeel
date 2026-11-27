@@ -9,7 +9,7 @@ using Mono.Cecil;
 namespace SeaPowerKeel.Patcher;
 
 /// <summary>
-/// A BepInEx patcher that patches no game assembly. BepInEx runs it before it looks for plugins. While R.A.T.S. Keel is switched
+/// A BepInEx patcher that patches no game assembly. BepInEx runs it before it looks for plugins. While Keel is switched
 /// on, it marks the DLLs of other mod loaders in BepInEx's own plugin cache (BepInEx\cache\chainloader_typeloader.dat) as holding
 /// no plugin, so the chainloader does not start them. It writes that cache file itself, and nothing is
 /// hooked or patched: if anything here does not fit, BepInEx scans the folder as usual and the other loader starts (Keel then leaves
@@ -35,7 +35,7 @@ public static class TakeoverPatcher
         var record = new Takeover.Record();
         try
         {
-            log = Logger.CreateLogSource("R.A.T.S. Keel takeover");
+            log = Logger.CreateLogSource("Keel takeover");
             Run(record);
         }
         catch (Exception ex)
@@ -94,7 +94,7 @@ public static class TakeoverPatcher
             foreach (string g in guids[dll].Where(Takeover.IsOtherLoader).Distinct())
             {
                 record.Kept.Add(new Takeover.Blocked { Guid = g, Name = Takeover.OtherLoaders[g], File = dll });
-                log.LogMessage($"Not starting {Takeover.OtherLoaders[g]} ({dll}): R.A.T.S. Keel runs the mods. Its files stay as they are; " +
+                log.LogMessage($"Not starting {Takeover.OtherLoaders[g]} ({dll}): Keel runs the mods. Its files stay as they are; " +
                                "switch Keel off in the game's mod list to use it again.");
             }
     }

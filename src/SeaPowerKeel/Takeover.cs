@@ -42,7 +42,7 @@ internal static class Takeover
         if (!pluginGuids.Any(g => string.Equals(g, StubGuid, StringComparison.OrdinalIgnoreCase)))
             return "Keel's starter file is not in BepInEx\\plugins";
         if (!keelEnabled)
-            return "R.A.T.S. Keel is switched off in the game's mod list";
+            return "Keel is switched off in the game's mod list";
         if (SwitchedOff(configText))
             return "TakeOver is off in Keel's settings";
         return null;

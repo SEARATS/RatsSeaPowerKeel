@@ -1,4 +1,4 @@
-# R.A.T.S. Keel community
+# Keel community
 
 Notes for players, mod authors and partners: how we work together, who is on board, what is open. The plan itself is the
 [roadmap](ROADMAP.md).

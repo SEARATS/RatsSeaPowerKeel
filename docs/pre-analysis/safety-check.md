@@ -24,7 +24,7 @@
 
 ```mermaid
 ---
-title: R.A.T.S. Keel with a safety check in front (proposal)
+title: Keel with a safety check in front (proposal)
 config:
   theme: neutral
   flowchart:
@@ -33,7 +33,7 @@ config:
 flowchart LR
     Mod["<b>Your mods</b><br/>built once"]
 
-    subgraph Keel["R.A.T.S. Keel"]
+    subgraph Keel["Keel"]
         direction TB
         Safety["<b>Safety check</b><br/>before a mod starts:<br/>what it can reach,<br/>what an update changed"]
         Held["<b>Held back</b><br/>known-bad file,<br/>or you say no"]

@@ -1,4 +1,4 @@
-# R.A.T.S. Keel roadmap
+# Keel roadmap
 
 This file is the plan and lives here on GitHub. It is discussed in Discord: one thread per wave in `#proposals`, and the
 `#roadmap` post links here.

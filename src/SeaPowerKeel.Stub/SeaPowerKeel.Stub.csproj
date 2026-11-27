@@ -6,7 +6,7 @@
   <PropertyGroup>
     <AssemblyName>SeaPowerKeel.Stub</AssemblyName>
     <RootNamespace>SeaPowerKeel.Stub</RootNamespace>
-    <Product>R.A.T.S. Keel stub: starts the Keel mod loader from the game's mod folders.</Product>
+    <Product>Keel stub: starts the Keel mod loader from the game's mod folders.</Product>
     <Version>1.0.0</Version>
   </PropertyGroup>
 
