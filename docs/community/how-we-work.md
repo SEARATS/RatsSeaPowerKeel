@@ -2,7 +2,7 @@
 
 ## One home for each thing
 
-- **Code, pull requests, issues**: GitHub (`struckl/SeaPowerKeel`)
+- **Code, pull requests, issues**: GitHub (`SEARATS/RatsSeaPowerKeel`)
 - **Ideas and plans**: Discord `#proposals`, one thread per idea
 - **Releases and news**: Discord `#announcements` + the Workshop change note, the same text
 - **The plan**: [the roadmap](ROADMAP.md) on GitHub (linked from the Workshop page); discussed in Discord `#proposals`, one thread per wave
