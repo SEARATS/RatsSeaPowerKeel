@@ -45,15 +45,6 @@ internal class MethodSnapshot
         return method.FullName + (method.HasGenericParameters ? "`" + method.GenericParameters.Count : "");
     }
 
-    public static string FileHash(string path)
-    {
-        using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
-        return Hex(sha.ComputeHash(stream));
-    }
-
-    public static string Hex(byte[] hash) => BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-
     public static MethodSnapshot Scan(string build, byte[] image)
     {
         using var stream = new MemoryStream(image, writable: false);
@@ -85,7 +76,7 @@ internal class MethodSnapshot
         var entries = new Dictionary<string, Fingerprint>(methods.Length, StringComparer.Ordinal);
         for (int i = 0; i < methods.Length; i++)
             entries.Add(ids[i], new Fingerprint(bodies[i], callerHashes[i], calleeHashes[i], calls[i]));
-        return new MethodSnapshot(build, Hex(sha.ComputeHash(image)), entries);
+        return new MethodSnapshot(build, FileHash.Hex(sha.ComputeHash(image)), entries);
     }
 
     private static MethodReference LocalDefinition(MethodReference target) =>

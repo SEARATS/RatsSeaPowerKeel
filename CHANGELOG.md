@@ -1,16 +1,22 @@
 # Changelog
 
-## 0.8.3 - unreleased
+## Unreleased
 
-- When a code mod declares support for an older Sea Power version, Keel can name Harmony targets and method lookups whose code, callers, or callees changed. These findings appear in the report under both Standard and Strict checks.
-- Keel stores preflight results by the mod DLL's SHA-256 and the installed game build. Updating either DLL triggers a fresh check. The Workshop package bundles the first reference snapshot from SEARATS/binaries. Players and mod authors can keep their existing config and mod metadata.
-- Verified offline with an installed Sea Power 0.9.3 assembly and fixtures for transitive changes, recursion, and cache invalidation.
+Merged since 0.8.0, ships with the next release ([how releases work](docs/community/releases.md)): start early, the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
-## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
-
+- Keel reports changed Harmony targets, method lookups, callers, and callees for code mods that declare support for an older Sea Power version in the bundled history.
+- Keel caches the preflight by the mod DLL's SHA-256 and the installed game build. Updating either DLL triggers a fresh check. The package includes the first reference snapshot from SEARATS/binaries.
+- Verified offline with a Sea Power 0.9.3 assembly and fixtures for transitive changes, recursion, and cache invalidation.
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
   - implies `StartEarly`
+- **The report shows each DLL's SHA-256**: short in the report window, full in `Keel-report.txt`
+  - why: players can match a file with the checksum list of its release (`SHA256SUMS.txt`, GitHub release notes)
+- **Builds come out byte for byte the same**: deterministic build settings and a pinned .NET SDK (`global.json`)
+  - why: anyone can rebuild a release and compare the checksums
+- **GitHub checks every release by itself**: it rebuilds Keel from the release's source, compares every file with the zip, checks them on VirusTotal and writes the result into the release notes
+  - signed build proof per file: `gh attestation verify <file> --repo SEARATS/RatsSeaPowerKeel`
+  - Keel now compiles against the official BepInEx release and Unity's public reference files, pinned by hash, on every PC alike
 - **`StartEarly` mods start in the game's first frames**, one per frame, next to the game (they no longer hold it up)
 - **The early opt-in is seen in the DLL too**: Keel looks at the plugins of the mod list on disk before the game's first frame
   - the same scan serves the start when the game's list matches it, so no DLL is read twice

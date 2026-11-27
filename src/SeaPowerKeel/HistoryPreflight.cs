@@ -49,9 +49,9 @@ internal class HistoryPreflight(string managed, string core, string history, str
         {
             image = File.ReadAllBytes(dll);
             using var sha = SHA256.Create();
-            string modHash = MethodSnapshot.Hex(sha.ComputeHash(image));
+            string modHash = FileHash.Hex(sha.ComputeHash(image));
             string input = string.Join("\n", new[] { EnvironmentInputs(), appVersion }.Concat(baselines.Select(HashOf)));
-            string inputHash = MethodSnapshot.Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(input)));
+            string inputHash = FileHash.Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(input)));
             path = Path.Combine(cache, "results", inputHash, modHash + MethodSnapshot.Extension);
             if (TryRead(path, ReadReview) is Review cached)
             {
@@ -100,7 +100,7 @@ internal class HistoryPreflight(string managed, string core, string history, str
     private string HashOf(string path)
     {
         if (!hashes.TryGetValue(path, out string hash))
-            hashes.Add(path, hash = MethodSnapshot.FileHash(path));
+            hashes.Add(path, hash = FileHash.ReadSha256(path));
         return hash;
     }
 
