@@ -1,7 +1,7 @@
 # Writing a mod for Keel
 
 Keel runs two kinds of plugins from the game's mod folders (Workshop items and `Sea Power_Data\StreamingAssets\<folder>`).
-You do not need to reference Keel for ordinary plugins. See [Prepare startup data](#prepare-startup-data) if your mod reads or indexes files at launch.
+You do not need to reference Keel.
 
 **Your mod loads as built.** Nothing to recompile, nothing to add.
 
@@ -89,54 +89,24 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 
 ## Prepare startup data
 
-Use preparation to read, parse, or index files while the splash screen is up. Keep Unity calls, game APIs, Harmony patches, and UI work in your normal plugin. A preparation helper and the plugin can start independently.
-
-Put the helper DLL beside your mod's `_info.ini` and name it there.
+Put the helper DLL beside `_info.ini` and opt in there.
 
 ```ini
 [Keel]
 Prepare=MyMod.Prepare.dll
 ```
 
-The helper can target `netstandard2.1` with no game or loader references. Give one public type a method with this signature.
+Export this method on one public type. The helper can target `netstandard2.1`.
 
 ```csharp
-using System;
-using System.IO;
-
-public static class StartupData
-{
-    public static string[] DefinitionFiles { get; private set; }
-
-    public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)
-    {
-        report("Indexing loadout definitions");
-        string folder = Path.GetDirectoryName(typeof(StartupData).Assembly.Location);
-        DefinitionFiles = Directory.GetFiles(Path.Combine(folder, "definitions"), "*.ini");
-    }
-}
+public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)
 ```
 
-The two arguments give you the game's StreamingAssets directory and the enabled mod directories in load order. Keel runs one helper at a time. `report` updates the loading window and accepts `null` to clear the line.
+Keel runs helpers one at a time during the splash. Use the worker for file I/O and parsing. Keep Unity, game APIs, and Harmony in the plugin. `report` sets the splash status line. Pass `null` to clear it.
 
-If the plugin needs the prepared data, let its Unity coroutine yield while the helper runs. For example, a BepInEx plugin can do this in `Start`.
+If your plugin needs the result, yield from a Unity coroutine until `Keel.WhenPrepared(modFolder).IsCompleted`, then fall back if the helper produced no data. With `HoldOutCrashers` enabled, a helper that crashes the game stays out until its DLL changes or you clear `BepInEx/Keel-prepare.txt`.
 
-```csharp
-private IEnumerator Start()
-{
-    string folder = Path.GetDirectoryName(GetType().Assembly.Location);
-    var preparation = SeaPowerKeel.Keel.WhenPrepared(folder);
-    while (!preparation.IsCompleted)
-        yield return null;
-
-    var files = StartupData.DefinitionFiles ?? ReadDefinitions();
-    ApplyDefinitions(files);
-}
-```
-
-`WhenPrepared` completes when the helper finishes, fails, or is skipped. Check that the data exists before using it. The plugin keeps its usual `StartEarly` or `BlockingStart` setting, and a startup helper runs once per game launch. Keel names failed helpers in `Keel-log.txt`. If the game ends while a helper is running, `HoldOutCrashers` holds it until its DLL changes or you remove `BepInEx/Keel-prepare.txt`.
-
-A plugin with its own startup progress window can call `Keel.HandOffStartupWindow()`. Keel hides its full loading window and still shows the summary card.
+For custom progress UI, call `Keel.HandOffStartupWindow()` to hide Keel's loading window and keep its summary card.
 
 ## Required Workshop items
 
