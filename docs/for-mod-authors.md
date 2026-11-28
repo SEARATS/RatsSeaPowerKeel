@@ -87,6 +87,27 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 - **Seen in the report and log:** "Started before the load screen ended (the mod asked for it): ...".
 - **Load-screen hooks:** an early mod sees the real end of the load screen (Keel does not call its postfix again).
 
+## Prepare startup data
+
+Put the helper DLL beside `_info.ini` and opt in there.
+
+```ini
+[Keel]
+Prepare=MyMod.Prepare.dll
+```
+
+Export this method on one public type. The helper can target `netstandard2.1`.
+
+```csharp
+public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)
+```
+
+Keel runs helpers one at a time during the splash. Use the worker for file I/O and parsing. Keep Unity, game APIs, and Harmony in the plugin. `report` sets the splash status line. Pass `null` to clear it.
+
+If your plugin needs the result, yield from a Unity coroutine until `Keel.WhenPrepared(modFolder).IsCompleted`, then fall back if the helper produced no data. With `HoldOutCrashers` enabled, a helper that crashes the game stays out until its DLL changes or you clear `BepInEx/Keel-prepare.txt`.
+
+For custom progress UI, call `Keel.HandOffStartupWindow()` to hide Keel's loading window and keep its summary card.
+
 ## Required Workshop items
 
 A mod that needs another Workshop item (a library mod it depends on) names it in its `_info.ini`, one line per item:

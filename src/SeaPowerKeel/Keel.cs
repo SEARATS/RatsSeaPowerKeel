@@ -49,6 +49,15 @@ public static class Keel
     public static void SetReportOpen(bool open) => KeelHost.Current?.SetReportOpen(open);
     public static string GetReport() => KeelHost.Current?.ReadReport() ?? "";
 
+    /// <summary>
+    /// For a mod with a preparation DLL (<c>[Keel] Prepare=</c> in its _info.ini): finishes when its preparation is done, failed
+    /// or was skipped. Already finished for a folder without one. Yield until it completes before using prepared data.
+    /// </summary>
+    public static Task WhenPrepared(string modFolder) => Preparation.For(modFolder);
+
+    /// <summary>A mod that draws its own start-up progress calls this: Keel's loading window steps aside and comes back as the summary.</summary>
+    public static void HandOffStartupWindow() => Loading.LoadingWindow.ExternalProgress = true;
+
     private static ManualLogSource log;
     /// <summary>Keel's one log source; every part of Keel writes through it.</summary>
     internal static ManualLogSource Log => log ??= BepInEx.Logging.Logger.CreateLogSource(Name);
@@ -416,7 +425,9 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             disk = ModFolders.FromDisk();
-            scan = EarlyScan.Of(disk.Where(f => f.Enabled).ToList(), Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+            List<ModFolder> enabled = disk.Where(f => f.Enabled).ToList();
+            StartPreparations(enabled);
+            scan = EarlyScan.Of(enabled, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
         }
         catch (Exception ex)
         {
@@ -424,10 +435,25 @@ internal sealed partial class KeelHost : MonoBehaviour
             scan = null;
             return null;
         }
+        PrepareChecks(scan.Plugins);
         if (!scan.Plugins.Any(p => p.StartEarly && p.State == PluginState.Pending))
             return null;
         log.LogInfo("A mod asked to start early: Keel takes the mod list from usersettings.ini now instead of waiting for the game's.");
         return disk;
+    }
+
+    // The mods' preparation DLLs (see Preparation) start first, before the scan: they get the whole splash for their work.
+    private void StartPreparations(List<ModFolder> enabled)
+    {
+        try
+        {
+            Preparation.Start(enabled, Paths.BepInExRootPath, Application.streamingAssetsPath, Application.version,
+                holdCrashers.Value, Loading.LoadingWindow.ReportPreparation, log.LogInfo, log.LogWarning).ForEach(Warn);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning($"Mods cannot prepare startup data this start: {ex.Message}");
+        }
     }
 
     // A mod asked for a blocking start (BlockingStart): it starts right before the game's first load screen (see LoadScreenGate),
@@ -970,12 +996,28 @@ internal sealed partial class KeelHost : MonoBehaviour
     private Preflight keptPreflight;
     private HistoryPreflight keptHistory;
     private readonly Dictionary<string, Preflight.Result> keptResults = new(StringComparer.OrdinalIgnoreCase);
+    private PreparedPreflight preparedChecks;
+
+    private void PrepareChecks(IEnumerable<PluginEntry> plugins)
+    {
+        if (versionCheck.Value == "Off")
+            return;
+        var files = plugins.Where(p => p.State == PluginState.Pending)
+            .OrderByDescending(p => p.BlockingStart).ThenByDescending(p => p.StartEarly)
+            .GroupBy(p => p.Dll, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Dll: g.Key, Compatibility: g.First().Folder?.InfoLines ?? [])).ToArray();
+        if (files.Length != 0)
+            preparedChecks = new PreparedPreflight(Paths.ManagedPath, Paths.BepInExAssemblyDirectory, Application.version, files);
+    }
 
     private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
+        {
+            StopPreparingChecks();
             yield break;
+        }
         Preflight preflight = keptPreflight;
         try
         {
@@ -983,6 +1025,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         catch (Exception ex)
         {
+            StopPreparingChecks();
             Warn($"Game version check unavailable: {ex.Message}");
             yield break;
         }
@@ -1018,8 +1061,15 @@ internal sealed partial class KeelHost : MonoBehaviour
                     log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");
                 preflight.Dispose();
                 keptResults.Clear();
+                StopPreparingChecks();
             }
         }
+    }
+
+    private void StopPreparingChecks()
+    {
+        preparedChecks?.Discard();
+        preparedChecks = null;
     }
 
     // One DLL of a Check step. The method history scan reads the whole game assembly the first time, so it runs on a worker and
@@ -1039,6 +1089,12 @@ internal sealed partial class KeelHost : MonoBehaviour
         catch (Exception ex)
         {
             log.LogDebug($"Could not find method history for {dll.Key}: {ex.Message}");
+        }
+        if (preparedChecks?.Take(dll.Key, useResult: baselines.Length == 0) is Preflight.Result ready)
+        {
+            keptResults[dll.Key] = ready;
+            checks[dll.Key] = (declared, []);
+            yield break;
         }
         Task<HistoryPreflight.Review> task = baselines.Length == 0 ? null : Task.Run(() => history.Check(preflight, dll.Key, baselines));
         while (task != null && !task.IsCompleted)

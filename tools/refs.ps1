@@ -8,9 +8,11 @@
 $UnityVersion = '6000.0.84'
 $UnitySha256 = '25c5a5009b775e727729acc28e0d9d910735ec4f4a2312d49a1c9235ccb152c6'
 $UnityRefs = 'UnityEngine.dll', 'UnityEngine.CoreModule.dll', 'UnityEngine.IMGUIModule.dll', 'UnityEngine.TextRenderingModule.dll'
+$NoesisVersion = '3.2.13'
+$NoesisSha256 = 'b88eb9e057e2edd1fdacf96873511f245ee887e7c32550722faf6c548e46b35b'
 
 # Returns @{ ManagedDir = <Unity references>; BepInExCore = <official BepInEx\core> }, cached in obj\.
-function Get-PublicRefs([string]$root) {
+function Get-PublicRefs([string]$root, [switch]$WithNoesis) {
     $bepInEx = Get-OfficialBepInEx $root
     $cache = Join-Path $root 'obj\unity'
     New-Item -ItemType Directory -Force $cache | Out-Null
@@ -32,5 +34,37 @@ function Get-PublicRefs([string]$root) {
         # one fixed flavour of the package: a different folder would change the references written into the DLL
         Copy-Item (Join-Path $unpacked "lib\netstandard2.0\$name") $managed -Force
     }
-    return @{ ManagedDir = $managed; BepInExCore = Join-Path $bepInEx 'BepInEx\core' }
+    $core = Join-Path $bepInEx 'BepInEx\core'
+    if ($WithNoesis) { Write-NoesisReference $cache $managed $core }
+    return @{ ManagedDir = $managed; BepInExCore = $core }
+}
+
+function Write-NoesisReference([string]$cache, [string]$managed, [string]$core) {
+    $package = "noesis.gui.$NoesisVersion.nupkg"
+    $nupkg = Join-Path $cache $package
+    if (!(Test-Path -LiteralPath $nupkg)) {
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/noesis.gui/$NoesisVersion/$package" -OutFile $nupkg
+    }
+    $hash = (Get-FileHash -LiteralPath $nupkg -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne $NoesisSha256) { throw "Noesis.GUI $NoesisVersion is not the pinned package (SHA-256 $hash)." }
+
+    # Load from bytes so the pinned BepInEx files can be restaged in the same PowerShell process.
+    $cecil = [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes((Join-Path $core 'Mono.Cecil.dll')))
+    $moduleType = $cecil.GetType('Mono.Cecil.ModuleDefinition', $true)
+    $source = Join-Path $cache 'Noesis.GUI.dll'
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($nupkg)
+    try {
+        $entry = $zip.GetEntry('lib/netstandard2.0/Noesis.GUI.dll')
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $source, $true)
+    } finally { $zip.Dispose() }
+
+    $module = $moduleType::ReadModule($source)
+    try {
+        # Match the Unity assembly Sea Power loads. This reference stays in obj.
+        $module.Assembly.Name.Name = 'Noesis.NoesisGUI'
+        $module.Assembly.Name.Version = [Version]'0.0.0.0'
+        $module.Name = 'Noesis.NoesisGUI.dll'
+        $module.Write((Join-Path $managed $module.Name))
+    } finally { $module.Dispose() }
 }

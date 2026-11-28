@@ -203,11 +203,40 @@ internal sealed class Overlay
 
     // Each stage's step; false when the window is gone or hidden (nothing to paint).
 
+    private bool handedOffFull;
+
     private bool TickFull()
     {
         Progress.Snapshot s = progress.Take(0);
+        if (LoadingWindow.ExternalProgress)
+            return TickHandedOff(s);
         if (s.Done && s.SinceDone > options.LingerSeconds) Begin(Stage.Moving);
         else if (s.Elapsed > options.MaxSeconds) Begin(s.Done ? Stage.Moving : Stage.Fading);
+        return true;
+    }
+
+    // A mod shows its own progress (agm-114, PR #16): the full window hides at once and comes back as the summary card in its
+    // place, without the glide, when Keel is done.
+    private bool TickHandedOff(Progress.Snapshot s)
+    {
+        if (!handedOffFull)
+        {
+            handedOffFull = true;
+            Native.ShowWindow(hwnd, Native.SW_HIDE);
+        }
+        if (!s.Done)
+        {
+            if (s.Elapsed > options.MaxSeconds)
+                Begin(Stage.Fading);
+            return false;
+        }
+        Begin(Stage.Summary);
+        summaryStartTicks = DateTime.UtcNow.Ticks;
+        summary = s;
+        now = SummaryRect();
+        Native.SetWindowPos(hwnd, IntPtr.Zero, now.Left, now.Top, now.Right - now.Left, now.Bottom - now.Top, Native.SWP_NOACTIVATE | Native.SWP_NOZORDER);
+        PublishSummary();
+        Native.ShowWindow(hwnd, Native.SW_SHOWNOACTIVATE);
         return true;
     }
 
@@ -219,12 +248,17 @@ internal sealed class Overlay
         if (k < 1.0)
             return true;
         stage = Stage.Summary; stageStart = Now;
-        // Where the card is, in pixels of the game window: the game-drawn card takes over right there.
+        PublishSummary();
+        return true;
+    }
+
+    // Where the card is, in pixels of the game window: the game-drawn card takes over right there.
+    private void PublishSummary()
+    {
         LoadingWindow.SummaryX = now.Left - game.Left; LoadingWindow.SummaryY = now.Top - game.Top;
         LoadingWindow.SummaryW = now.Right - now.Left; LoadingWindow.SummaryH = now.Bottom - now.Top;
         LoadingWindow.SummaryScale = scale;
         LoadingWindow.SummaryReady = true;
-        return true;
     }
 
     private bool TickSummary(double t)
@@ -478,6 +512,10 @@ internal sealed class Overlay
         y += S(22);
 
         int rowH = S(19);
+        // A preparation DLL's line sits in the top row while the list has not filled it yet.
+        string preparing = LoadingWindow.PreparationStatus;
+        if (!string.IsNullOrEmpty(preparing) && s.Recent.Count < Layout.Rows)
+            Put(dc, fontText, Dim, preparing, pad, y, w - 2 * pad, rowH, Native.DT_END_ELLIPSIS);
         for (int i = 0; i < Layout.Rows; i++)
         {
             int idx = i - (Layout.Rows - s.Recent.Count);

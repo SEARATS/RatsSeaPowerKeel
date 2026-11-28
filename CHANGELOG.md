@@ -42,6 +42,9 @@ Merged since 0.8.0, ships with the next release ([how releases work](docs/commun
   - the menu is measured on a screen-size change or a new scene, then every 10 s (a mod may add an entry later)
   - where the game's UI root has no size, the menu view is the frame
 - 3 new self-test checks
+- Code mods can use `[Keel] Prepare=<dll>` to read or index data on a worker during the splash. See the [startup preparation guide](docs/for-mod-authors.md#prepare-startup-data).
+- Keel uses background compatibility results as they finish and checks the DLL hash before reusing them. Pending or changed DLLs use the regular check.
+- Mods with their own startup progress can hide Keel's loading window with `Keel.HandOffStartupWindow()`. Keel still shows the summary card.
 - **The in-game report groups plugins by mod** (PR #13 by agm-114)
   - a mod with one DLL: one compact row
   - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves

@@ -10,7 +10,7 @@ using SeaPowerKeel;
 // Keel's own tests, run outside the game: dotnet run -c Release --project tools/offline-check -- --selftest <Managed> <BepInEx core>
 // The mods tested are classes of this very assembly (see the AnchorChain namespace below): the scanner reads DLLs through
 // Mono.Cecil without running them, so a copy of this DLL in a temp folder is a mod folder. Nothing of the game is started.
-internal static class SelfTest
+internal static partial class SelfTest
 {
     private enum ActivityOperation { RebuildPage }
     private static int failures, checks;
@@ -104,6 +104,7 @@ internal static class SelfTest
             EarlyStartChecks();
             RequiredItemChecks();
             ReportFactsChecks(tmp);
+            PreparationChecks(tmp, managed, core);
         }
         finally
         {

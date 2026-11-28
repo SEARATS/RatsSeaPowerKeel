@@ -194,7 +194,7 @@ internal sealed class CrashGuard
         }
     }
 
-    private static string Stamp(string dll)
+    internal static string Stamp(string dll)
     {
         try
         {

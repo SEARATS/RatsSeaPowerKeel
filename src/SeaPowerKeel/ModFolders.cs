@@ -18,6 +18,22 @@ internal sealed class ModFolder
     public bool Enabled;
     public int Order;             // position in the game's mod list, 0 = top
 
+    private string[] infoLines;
+    public string[] InfoLines => infoLines ??= ReadInfoLines(Path);
+
+    private static string[] ReadInfoLines(string folder)
+    {
+        try
+        {
+            string path = System.IO.Path.Combine(folder, "_info.ini");
+            return File.Exists(path) ? File.ReadAllLines(path) : Array.Empty<string>();
+        }
+        catch (Exception)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
     private string title;
     public string Title => title ??= ReadTitle(Path) ?? "";
     public string Label => SteamId == 0 ? Name
