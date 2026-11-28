@@ -54,7 +54,7 @@ The same result as the setup, without running any `.exe`:
 
 ## After installing
 
-- Automatic `*Preloader.dll` discovery requires stub 1.1.0 or later. Rerun KeelSetup or replace `BepInEx/plugins/SeaPowerKeel.Stub.dll` with the file under `copy-to-BepInEx-plugins` while the game is closed.
+- Mods that opt into `[Keel] Preload=` require stub 1.1.0 or later. Rerun KeelSetup or replace `BepInEx/plugins/SeaPowerKeel.Stub.dll` with the file under `copy-to-BepInEx-plugins` while the game is closed.
 - The stub runs once, while the game starts, and reads the mod list then. Restart after every change to the mod list.
 - Or let Keel follow: after the game's *Reload* in the Mods menu (Mods, Apply), Keel starts the code mods you switched on and takes switched-off ones out as far as the running game allows.
   - Their patches come off and a BepInEx plugin is stopped.

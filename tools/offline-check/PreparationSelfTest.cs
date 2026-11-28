@@ -18,8 +18,8 @@ internal static partial class SelfTest
     private static void PreparationChecks(string tmp, string managed, string core)
     {
         Console.WriteLine("Preparation DLLs: opt-in by [Keel] Prepare=, run on a worker, held after a crash inside one");
-        Check(EarlyStart.ValueInInfoIni(["[Language_en]", "Prepare=No.dll", "[Keel]", "Prepare = My.Prepare.dll ; note"], Preparation.InfoKey) == "My.Prepare.dll"
-              && EarlyStart.ValueInInfoIni(["[Keel]", "StartEarly=true"], Preparation.InfoKey) == null,
+        Check(EarlyStart.ValueInInfoIni(["[Language_en]", "Prepare=No.dll", "[Keel]", "Prepare = My.Prepare.dll ; note"], nameof(StartupHelper.Prepare)) == "My.Prepare.dll"
+              && EarlyStart.ValueInInfoIni(["[Keel]", "StartEarly=true"], nameof(StartupHelper.Prepare)) == null,
               "prepare: the manifest parser reads Prepare= in [Keel] and trims comments");
         Check(PreparationEntry.Forbidden("UnityEngine.CoreModule") && PreparationEntry.Forbidden("Assembly-CSharp") && PreparationEntry.Forbidden("0Harmony")
               && PreparationEntry.Forbidden("SeaPowerKeel") && !PreparationEntry.Forbidden("System.Runtime") && !PreparationEntry.Forbidden("Newtonsoft.Json"),
@@ -30,11 +30,10 @@ internal static partial class SelfTest
         string dll = Path.Combine(mod, "Prep.Prepare.dll");
         WritePrepareDll(dll, "PrepFixture");
         File.WriteAllText(Path.Combine(mod, "_info.ini"), "[Keel]\nPrepare=Prep.Prepare.dll\n");
-        var notes = new List<string>();
-        Check(Preparation.Requested(new ModFolder { Path = mod, Name = "prep-mod" }, notes) == Path.GetFullPath(dll) && notes.Count == 0, "prepare: a DLL at the top of the folder is taken");
-        File.WriteAllText(Path.Combine(mod, "_info.ini"), "[Keel]\nPrepare=sub\\Prep.Prepare.dll\n");
-        Check(Preparation.Requested(new ModFolder { Path = mod, Name = "prep-mod" }, notes) == null && notes.Count == 1, "prepare: a path into a subfolder is refused, with a note");
-        File.WriteAllText(Path.Combine(mod, "_info.ini"), "[Keel]\nPrepare=Prep.Prepare.dll\n");
+        Check(Preparation.ResolveHelper(mod, "Prep.Prepare.dll", StartupHelper.Prepare) == Path.GetFullPath(dll),
+              "prepare: a DLL at the top of the folder is taken");
+        Check(Preparation.ResolveHelper(mod, "sub/Prep.Prepare.dll", StartupHelper.Prepare) == null,
+              "prepare: a path into a subfolder is refused");
 
         string root = Path.Combine(tmp, "prep-bepinex");
         Directory.CreateDirectory(root);
@@ -131,15 +130,10 @@ internal static partial class SelfTest
 
     private class CurrentBoot
     {
-        public static Func<string, string[]> Find;
         public static Func<string, Action<string, string[], Action<string>>> Open;
 
-        public static void BootWithPreloaders(string version, string path, Func<string, string[]> find,
-            Func<string, Action<string, string[], Action<string>>> open)
-        {
-            Find = find;
+        public static void BootWithPreload(string version, string path, Func<string, Action<string, string[], Action<string>>> open) =>
             Open = open;
-        }
 
         public static void Boot(string version, string path) => throw new InvalidOperationException("Expected preloader callbacks.");
     }
@@ -157,67 +151,84 @@ internal static partial class SelfTest
         Check(StartupPreloaders.Boot(typeof(LegacyBoot), "1.1.0", "legacy.dll") && LegacyBoot.Path == "legacy.dll",
               "preloader: the new stub still calls Boot on an older Keel");
         Check(StartupPreloaders.Boot(typeof(CurrentBoot), "1.1.0", "keel.dll")
-              && CurrentBoot.Find != null && CurrentBoot.Open?.Method.DeclaringType?.Assembly == typeof(StartupPreloaders).Assembly,
-              "preloader: the new Keel boot receives the stub's discovery and execution callbacks");
+              && CurrentBoot.Open?.Method.DeclaringType?.Assembly == typeof(StartupPreloaders).Assembly,
+              "preloader: the new Keel boot receives the stub's load callback");
         Check(typeof(Keel).GetMethod("Boot")?.GetParameters().Length == 2,
               "preloader: older stubs still have the original unambiguous boot entry");
 
-        string folder = Path.Combine(tmp, "preloaders"), nested = Path.Combine(folder, "code", "helpers");
-        Directory.CreateDirectory(nested);
-        string direct = Path.Combine(folder, "DirectPreloader.dll"), deep = Path.Combine(nested, "Nested.PreLoader.DLL");
-        string legacy = Path.Combine(folder, KeelNames.AnchorChainPreloaderFile), similar = Path.Combine(folder, "Extra.Preloader.dll.bak");
-        WritePrepareDll(direct, "DirectPreloaderFixture");
-        WritePrepareDll(deep, "NestedPreloaderFixture");
-        File.WriteAllText(legacy, "reserved loader");
-        File.WriteAllText(similar, "backup");
-        File.WriteAllText(Path.Combine(folder, "_info.ini"), "[Keel]\nPrepare=DirectPreloader.dll\n");
-        Check(CurrentBoot.Find(folder).OrderBy(x => x).SequenceEqual(new[] { direct, deep }.OrderBy(x => x)),
-              "preloader: suffix discovery is recursive, case-insensitive and leaves out Anchor Chain and backup files");
+        ModFolder Add(string name, string setting, string file, StartupHelper entry = StartupHelper.Preload, bool enabled = true)
+        {
+            string dir = Path.Combine(tmp, name);
+            string target = Path.Combine(dir, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            WritePrepareDll(target, name, entry);
+            File.WriteAllText(Path.Combine(dir, "_info.ini"), setting);
+            var item = Folder(dir);
+            item.Enabled = enabled;
+            return item;
+        }
 
-        string disabled = Path.Combine(tmp, "preloaders-off");
-        Directory.CreateDirectory(disabled);
-        WritePrepareDll(Path.Combine(disabled, "OffPreloader.dll"), "DisabledPreloaderFixture");
-        string outdated = Path.Combine(tmp, "preloaders-outdated");
-        Directory.CreateDirectory(outdated);
-        WritePrepareDll(Path.Combine(outdated, "OldPreloader.dll"), "OutdatedPreloaderFixture");
-        File.WriteAllText(Path.Combine(outdated, "_info.ini"), "[Compatibility]\nExactVersion=0.9.2\n");
-        ModFolder[] folders = [Folder(folder), Folder(disabled), Folder(outdated)];
-        folders[0].Enabled = true;
-        folders[1].Enabled = false;
-        folders[2].Enabled = true;
+        const string direct = "DirectPreloader.dll", deep = "code/helpers/Nested.PreLoader.DLL";
+        ModFolder preload = Add("preloader-opt-in", $"[Keel]\nPreload={deep}\n", deep);
+        ModFolder filenameOnly = Add("preloader-unlisted", "[Keel]\n", direct);
+        ModFolder conflict = Add("preloader-conflict", $"[Keel]\nPreload={direct}\nPrepare=Other.dll\n", direct);
+        WritePrepareDll(Path.Combine(conflict.Path, "Other.dll"), "preloader-conflict-prepare");
+        ModFolder named = Add("preloader-prepare", $"[Keel]\nPrepare={direct}\n", direct, StartupHelper.Prepare);
+        ModFolder disabled = Add("preloader-disabled", $"[Keel]\nPreload={direct}\n", direct, enabled: false);
+        ModFolder oldGame = Add("preloader-old-game", $"[Keel]\nPreload={direct}\n[Compatibility]\nExactVersion=0.9.2\n", direct);
+        ModFolder wrongEntry = Add("preloader-wrong-entry", $"[Keel]\nPreload={direct}\n", direct, StartupHelper.Prepare);
+        ModFolder wrongSuffix = Add("preloader-wrong-suffix", "[Keel]\nPreload=Startup.dll\n", "Startup.dll");
+        string target = Path.GetFullPath(Path.Combine(preload.Path, deep));
+        Check(Preparation.ResolveHelper(preload.Path, deep, StartupHelper.Preload) == target
+              && Preparation.ResolveHelper(conflict.Path, "../preloader-unlisted/" + direct, StartupHelper.Preload) == null
+              && Preparation.ResolveHelper(preload.Path, target, StartupHelper.Preload) == null,
+              "preloader: a named nested file is selected case-insensitively and paths outside the folder are rejected");
+
         var ran = new List<string>();
         var warned = new List<string>();
-
         Action<string, string[], Action<string>> Open(string path)
         {
             ran.Add(path);
             return CurrentBoot.Open(path);
         }
+        string wrongTarget = Path.Combine(wrongEntry.Path, direct);
         int reports = 0;
-        Preparation.Start(folders, root, tmp, "0.9.3", true, message => { if (message != null) reports++; },
-            _ => { }, warned.Add, CurrentBoot.Find, Open);
-        Check(Preparation.For(folder).Wait(10000) && ran.SequenceEqual(CurrentBoot.Find(folder))
-              && reports == 2 && warned.Count == 0 && Preparation.For(disabled).IsCompleted && Preparation.For(outdated).IsCompleted,
-              "preloader: both helpers run once through the stub, even with a matching Prepare entry, and other folders stay out");
+        List<string> notes = Preparation.Start([preload, filenameOnly, conflict, named, disabled, oldGame, wrongEntry, wrongSuffix],
+            root, tmp, "0.9.3", true, message => { if (message != null) reports++; }, _ => { }, warned.Add, Open);
+        bool completed = Keel.WhenPreloaded(preload.Path).Wait(10000) && Keel.WhenPrepared(named.Path).Wait(10000)
+            && Keel.WhenPreloaded(wrongEntry.Path).Wait(10000);
+        Check(completed && ran.SequenceEqual([target, wrongTarget]) && reports == 2 && warned.Count == 1
+              && warned[0].Contains("Expected one public static void Preload") && notes.Any(x => x.Contains("Choose either"))
+              && notes.Any(x => x.Contains("declared game version")) && notes.Any(x => x.Contains("ending in Preloader.dll")),
+              "preloader: only a valid explicit Preload choice opens through the stub and Prepare uses its own entry");
+        Check(ReferenceEquals(Keel.WhenPrepared(preload.Path), System.Threading.Tasks.Task.CompletedTask)
+              && ReferenceEquals(Keel.WhenPreloaded(named.Path), System.Threading.Tasks.Task.CompletedTask),
+              "preloader: wait APIs track only their own startup option");
+        Check(Keel.WhenPreloaded(filenameOnly.Path).IsCompleted && Keel.WhenPreloaded(conflict.Path).IsCompleted
+              && Keel.WhenPrepared(conflict.Path).IsCompleted && Keel.WhenPreloaded(disabled.Path).IsCompleted,
+              "preloader: a filename alone, conflicting keys and disabled folders do not queue helpers");
+
+        notes = Preparation.Start([preload], root, tmp, "0.9.3", true, _ => { }, _ => { }, warned.Add);
+        Check(notes.Any(x => x.Contains("updated Keel stub")) && Keel.WhenPreloaded(preload.Path).IsCompleted,
+              "preloader: a previous stub reports that the preload opt-in requires an upgrade");
 
         string state = Path.Combine(root, KeelNames.PrepareFile);
-        File.WriteAllText(state, $"running\t{deep}\t{CrashGuard.Stamp(deep)}\n");
+        File.WriteAllText(state, $"running\t{target}\t{CrashGuard.Stamp(target)}\n");
         ran.Clear();
-        warned.Clear();
-        Preparation.Start(folders, root, tmp, "0.9.3", true, _ => { }, _ => { }, warned.Add, CurrentBoot.Find, Open);
-        Check(Preparation.For(folder).Wait(10000) && ran.SequenceEqual([direct]) && warned.Count == 1
-              && warned[0].Contains("Nested.PreLoader.DLL") && File.ReadAllText(state).StartsWith("held\t"),
-              "preloader: the crash holdout applies to an automatically discovered helper");
+        notes = Preparation.Start([preload], root, tmp, "0.9.3", true, _ => { }, _ => { }, warned.Add, Open);
+        Check(Keel.WhenPreloaded(preload.Path).IsCompleted && ran.Count == 0 && notes.Any(x => x.Contains("clearing"))
+              && File.ReadAllText(state).StartsWith("held\t"),
+              "preloader: the crash holdout applies to an explicitly selected preloader");
     }
 
     // A preparation DLL written with Cecil: Prepare(streamingAssets, folders, report) reports "prepared <first folder's name>".
-    private static void WritePrepareDll(string path, string name)
+    private static void WritePrepareDll(string path, string name, StartupHelper entry = StartupHelper.Prepare)
     {
         using var asm = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(name, new Version(1, 0)), name, ModuleKind.Dll);
         ModuleDefinition m = asm.MainModule;
         var type = new TypeDefinition("Fixture", "Prep", TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed, m.TypeSystem.Object);
         m.Types.Add(type);
-        var prepare = new MethodDefinition("Prepare", MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig, m.TypeSystem.Void);
+        var prepare = new MethodDefinition(entry.ToString(), MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig, m.TypeSystem.Void);
         prepare.Parameters.Add(new ParameterDefinition(m.TypeSystem.String));
         prepare.Parameters.Add(new ParameterDefinition(m.ImportReference(typeof(string[]))));
         prepare.Parameters.Add(new ParameterDefinition(m.ImportReference(typeof(Action<string>))));

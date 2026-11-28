@@ -8,7 +8,7 @@ namespace SeaPowerKeel.Stub;
 
 /// <summary>
 /// The only part of Keel that goes into <c>BepInEx\plugins</c>. It finds <c>SeaPowerKeel.dll</c> in the game's
-/// enabled mod folders (newest version wins), and discovers and loads startup helpers for Keel's worker.
+/// enabled mod folders (newest version wins) and opens explicitly selected preloaders for Keel's worker.
 /// </summary>
 [BepInPlugin(Guid, "Keel stub", "1.1.0")]
 public class Stub : BaseUnityPlugin

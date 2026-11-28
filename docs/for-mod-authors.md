@@ -91,16 +91,18 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 
 Use preparation to read, parse, or index files while the splash screen is up. Keep Unity calls, game APIs, Harmony patches, and UI work in your normal plugin. A preparation helper and the plugin can start independently.
 
-With Keel stub 1.1.0 or later, name the helper `MyMod.Preloader.dll` or `MyModPreloader.dll`. The stub searches enabled mod folders and their subfolders for names ending in `Preloader.dll`. Keel handles Anchor Chain's own starter through the existing loader settings.
+Choose one startup option per mod folder. If both keys appear with a value, Keel skips the startup helper and explains why in the report.
 
-You can also name a DLL at the top level in your mod's `_info.ini`. This works with the older stub too.
+### Early preparation in Keel
+
+Put the helper DLL beside your mod's `_info.ini` and name it explicitly. This path also works with older Keel stubs.
 
 ```ini
 [Keel]
 Prepare=MyMod.Prepare.dll
 ```
 
-Keel runs a file listed both ways once. Either way, the helper can target `netstandard2.1` with no game or loader references. Give one public type a method with this signature.
+The helper can target `netstandard2.1` and use plain .NET libraries. Give one public type a `public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)` method.
 
 ```csharp
 using System;
@@ -137,6 +139,17 @@ private IEnumerator Start()
 ```
 
 `WhenPrepared` completes when the helper finishes, fails, or is skipped. Check that the data exists before using it. The plugin keeps its usual `StartEarly` or `BlockingStart` setting, and a startup helper runs once per game launch. Keel names failed helpers in `Keel-log.txt`. If the game ends while a helper is running, `HoldOutCrashers` holds it until its DLL changes or you remove `BepInEx/Keel-prepare.txt`.
+
+### Preloading through the BepInEx stub
+
+Use Keel stub 1.1.0 or later. Set `Preload=` to one relative path within your mod folder. The filename must end in `Preloader.dll`. Keel opens only the DLL you explicitly name.
+
+```ini
+[Keel]
+Preload=bin/MyMod.Preloader.dll
+```
+
+The preloader exposes `public static void Preload(string streamingAssets, string[] enabledModFolders, Action<string> report)`. A plugin that needs its output can yield while `Keel.WhenPreloaded(folder)` is pending and fall back if the helper produced no data. The two options share the startup worker and crash holdout. Keel handles Anchor Chain's starter through the existing loader settings.
 
 A plugin with its own startup progress window can call `Keel.HandOffStartupWindow()`. Keel hides its full loading window and still shows the summary card.
 

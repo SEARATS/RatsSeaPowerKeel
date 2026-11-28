@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!--The file in BepInEx\plugins that locates Keel and startup preloader DLLs in enabled mod folders.-->
+  <!--The file in BepInEx\plugins that locates Keel and opens explicitly selected startup preloader DLLs.-->
   <PropertyGroup>
     <AssemblyName>SeaPowerKeel.Stub</AssemblyName>
     <RootNamespace>SeaPowerKeel.Stub</RootNamespace>

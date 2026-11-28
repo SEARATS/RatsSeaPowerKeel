@@ -9,30 +9,23 @@ namespace SeaPowerKeel;
 // One worker runs the startup helpers in mod-list order. Normal plugins follow Keel's usual schedule.
 internal static class Preparation
 {
-    public const string InfoKey = "Prepare";
     private static volatile IReadOnlyDictionary<string, Job> jobsByFolder = new Dictionary<string, Job>();
 
-    private class Job(string folder, string named, bool namedHeld)
+    private class Job(string dll, StartupHelper kind)
     {
-        public string Folder { get; } = folder;
-        public string Named { get; } = named;
-        public bool NamedHeld { get; } = namedHeld;
+        public string Dll { get; } = dll;
+        public StartupHelper Kind { get; } = kind;
         public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private class Helper(string dll, Func<string, Action<string, string[], Action<string>>> open)
-    {
-        public string Dll { get; } = dll;
-        public Func<string, Action<string, string[], Action<string>>> Open { get; } = open;
-    }
-
-    internal static Task For(string folder)
+    internal static Task For(string folder, StartupHelper kind = StartupHelper.Prepare)
     {
         if (string.IsNullOrWhiteSpace(folder))
             return Task.CompletedTask;
         try
         {
-            return jobsByFolder.TryGetValue(Normal(folder), out Job job) ? job.Completion.Task : Task.CompletedTask;
+            return jobsByFolder.TryGetValue(Normal(folder), out Job job) && job.Kind == kind
+                ? job.Completion.Task : Task.CompletedTask;
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException)
         {
@@ -42,7 +35,7 @@ internal static class Preparation
 
     internal static List<string> Start(IList<ModFolder> folders, string bepInExRoot, string streamingAssets, string gameVersion,
         bool hold, Action<string> status, Action<string> info, Action<string> warn,
-        Func<string, string[]> findPreloaders = null, Func<string, Action<string, string[], Action<string>>> openPreloader = null)
+        Func<string, Action<string, string[], Action<string>>> openPreloader = null)
     {
         var notes = new List<string>();
         string stateFile = Path.Combine(bepInExRoot, KeelNames.PrepareFile);
@@ -52,23 +45,42 @@ internal static class Preparation
         var queue = new List<Job>();
         foreach (ModFolder folder in enabled)
         {
-            string dll = Requested(folder, notes);
-            if (dll == null && findPreloaders == null)
+            string preload = ReadOption(folder.InfoLines, StartupHelper.Preload);
+            string prepare = ReadOption(folder.InfoLines, StartupHelper.Prepare);
+            if (preload != null && prepare != null)
+            {
+                notes.Add($"Skipped startup helpers in {folder.Label}. Choose either [Keel] Preload= or Prepare=.");
                 continue;
+            }
+            string name = preload ?? prepare;
+            if (name == null)
+                continue;
+            var kind = preload == null ? StartupHelper.Prepare : StartupHelper.Preload;
+            if (kind == StartupHelper.Preload && openPreloader == null)
+            {
+                notes.Add($"Skipped [Keel] Preload= in {folder.Label}. Install the updated Keel stub to enable preloading.");
+                continue;
+            }
+            string dll = ResolveHelper(folder.Path, name, kind);
+            if (dll == null)
+            {
+                string expected = kind == StartupHelper.Preload
+                    ? "Specify a file ending in Preloader.dll inside its mod folder."
+                    : "Specify a DLL at the top level of its mod folder.";
+                notes.Add($"Skipped [Keel] {kind}={name} in {folder.Label}. {expected}");
+                continue;
+            }
             if (InfoVersion.Mismatch(folder.InfoLines, gameVersion) != null)
             {
-                if (dll != null)
-                    notes.Add($"Skipped startup preparation for {folder.Label} because its declared game version differs.");
+                notes.Add($"Skipped startup helper {name} in {folder.Label} because its declared game version differs.");
                 continue;
             }
-            bool namedHeld = dll != null && IsHeld(dll, held);
-            if (namedHeld)
+            if (IsHeld(dll, held))
             {
                 notes.Add(HeldNote(dll));
-                if (findPreloaders == null)
-                    continue;
+                continue;
             }
-            var job = new Job(folder.Path, dll, namedHeld);
+            var job = new Job(dll, kind);
             if (byFolder.TryAdd(Normal(folder.Path), job))
                 queue.Add(job);
         }
@@ -79,54 +91,17 @@ internal static class Preparation
             string[] paths = enabled.Select(f => f.Path).ToArray();
             _ = Task.Run(() =>
             {
-                // Resolve empty folders before starting any helper so their tasks can finish immediately after discovery.
-                var batches = new List<(Job Job, List<Helper> Helpers)>();
                 foreach (Job job in queue)
-                {
-                    List<Helper> helpers = FindHelpers(job, held, findPreloaders, openPreloader, warn);
-                    if (helpers.Count == 0)
-                        job.Completion.TrySetResult(true);
-                    else
-                        batches.Add((job, helpers));
-                }
-                foreach (var (job, helpers) in batches)
-                {
-                    foreach (Helper helper in helpers)
-                        RunOne(helper, streamingAssets, paths, stateFile, held, status, info, warn);
-                    job.Completion.TrySetResult(true);
-                }
+                    RunOne(job, streamingAssets, paths, stateFile, held, status, info, warn, openPreloader);
             });
         }
         return notes;
     }
 
-    private static List<Helper> FindHelpers(Job job, Dictionary<string, string> held, Func<string, string[]> findPreloaders,
-        Func<string, Action<string, string[], Action<string>>> openPreloader, Action<string> warn)
+    private static string ReadOption(string[] lines, StartupHelper kind)
     {
-        var helpers = new List<Helper>();
-        if (findPreloaders != null)
-        {
-            try
-            {
-                foreach (string dll in findPreloaders(job.Folder))
-                {
-                    if (IsHeld(dll, held))
-                    {
-                        if (!ModFolders.SamePath(dll, job.Named))
-                            warn(HeldNote(dll));
-                    }
-                    else
-                        helpers.Add(new Helper(dll, openPreloader));
-                }
-            }
-            catch (Exception ex)
-            {
-                warn($"Could not find startup preloaders in {job.Folder}. {ex.Message}");
-            }
-        }
-        if (job.Named != null && !job.NamedHeld && helpers.All(helper => !ModFolders.SamePath(helper.Dll, job.Named)))
-            helpers.Add(new Helper(job.Named, PreparationEntry.Open));
-        return helpers;
+        string value = EarlyStart.ValueInInfoIni(lines, kind.ToString())?.Trim().Trim('"');
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static bool IsHeld(string dll, Dictionary<string, string> held) =>
@@ -136,43 +111,63 @@ internal static class Preparation
         $"Skipped {Path.GetFileName(dll)} after the last game ended during preparation. " +
         $"It can run again after a mod update or after clearing {KeelNames.PrepareFile}.";
 
-    internal static string Requested(ModFolder folder, List<string> notes)
+    internal static string ResolveHelper(string folder, string name, StartupHelper kind)
     {
-        string name = EarlyStart.ValueInInfoIni(folder.InfoLines, InfoKey)?.Trim().Trim('"');
-        if (string.IsNullOrWhiteSpace(name))
+        string[] segments = name.Split('\\', '/');
+        string file = segments[^1];
+        if (kind == StartupHelper.Prepare
+            ? segments.Length != 1 || !file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            : !file.EndsWith("Preloader.dll", StringComparison.OrdinalIgnoreCase)
+                || file.Equals(KeelNames.AnchorChainPreloaderFile, StringComparison.OrdinalIgnoreCase))
             return null;
-        if (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && name.IndexOfAny(['/', '\\', ':']) < 0
-            && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+
+        string path = folder;
+        foreach (string segment in segments)
         {
-            string path = Path.Combine(folder.Path, name);
-            if (File.Exists(path))
-                return Path.GetFullPath(path);
+            if (string.IsNullOrWhiteSpace(segment) || segment is "." or ".." || segment.Contains(':')
+                || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                return null;
+
+            path = Path.Combine(path, segment);
+            if (kind == StartupHelper.Preload)
+            {
+                try
+                {
+                    if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                        return null;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return null;
+                }
+            }
         }
-        notes.Add($"Skipped [Keel] Prepare={name} in {folder.Label}. Specify a DLL in the top level of the mod folder.");
-        return null;
+        return File.Exists(path) ? Path.GetFullPath(path) : null;
     }
 
-    private static void RunOne(Helper helper, string streamingAssets, string[] folders, string stateFile,
-        Dictionary<string, string> held, Action<string> status, Action<string> info, Action<string> warn)
+    private static void RunOne(Job job, string streamingAssets, string[] folders, string stateFile,
+        Dictionary<string, string> held, Action<string> status, Action<string> info, Action<string> warn,
+        Func<string, Action<string, string[], Action<string>>> openPreloader)
     {
-        string name = Path.GetFileName(helper.Dll);
-        held.Remove(helper.Dll);
-        WriteState(stateFile, held, helper.Dll);
+        string name = Path.GetFileName(job.Dll);
+        held.Remove(job.Dll);
+        WriteState(stateFile, held, job.Dll);
         try
         {
-            Action<string, string[], Action<string>> prepare = helper.Open(helper.Dll);
-            info($"Preparing startup data with {name}.");
-            prepare(streamingAssets, (string[])folders.Clone(), status);
-            info($"Finished startup preparation with {name}.");
+            var run = job.Kind == StartupHelper.Preload ? openPreloader(job.Dll) : PreparationEntry.Open(job.Dll, job.Kind);
+            info($"Running {job.Kind} from {name}.");
+            run(streamingAssets, (string[])folders.Clone(), status);
+            info($"Finished {job.Kind} from {name}.");
         }
         catch (Exception ex)
         {
-            warn($"Startup preparation failed for {name} ({helper.Dll}). {ex.Message}");
+            warn($"Startup helper {name} failed during {job.Kind}. {ex.Message}");
         }
         finally
         {
             WriteState(stateFile, held);
             status(null);
+            job.Completion.TrySetResult(true);
         }
     }
 
