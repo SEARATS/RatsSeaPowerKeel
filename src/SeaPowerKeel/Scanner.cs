@@ -12,8 +12,6 @@ namespace SeaPowerKeel;
 /// </summary>
 internal static class Scanner
 {
-    public const string ManifestFile = "keel.ini";
-
     // Never plugins of their own: Keel itself and Anchor Chain's two loader DLLs (which Keel only uses as a library).
     // Only these exact names: a mod called AnchorChainSomething.dll is a mod.
     private static string ExcludedReason(string file)
@@ -31,7 +29,7 @@ internal static class Scanner
     /// <param name="searchDirs">Where Cecil looks for assemblies a DLL's attributes refer to (an enum argument such as
     /// BepInDependency's flags needs BepInEx.dll): the game's Managed folder and BepInEx\core. The mod folders are added.</param>
     /// <param name="skipped">Receives every DLL left out on purpose, with the reason (may be null).</param>
-    public static List<PluginEntry> Scan(IList<ModFolder> folders, Action<string> warn, List<SkippedDll> skipped, params string[] searchDirs)
+    public static List<PluginEntry> Scan(IList<ModFolder> folders, GameBuild build, Action<string> warn, List<SkippedDll> skipped, params string[] searchDirs)
     {
         var all = new List<PluginEntry>();
         int order = 0;
@@ -56,10 +54,12 @@ internal static class Scanner
             }
             foreach (string dll in dlls)
             {
-                string why = ExcludedReason(dll);
+                string excluded = ExcludedReason(dll);
+                string versionReason = excluded == null ? manifest?.Mismatch(dll, build) : null;
+                string why = excluded ?? versionReason;
                 if (why != null)
                 {
-                    skipped?.Add(new SkippedDll { Path = dll, Folder = folder, Reason = why });
+                    skipped?.Add(new SkippedDll { Path = dll, Folder = folder, Reason = why, VersionFiltered = versionReason != null });
                     continue;
                 }
                 List<PluginEntry> found = ScanDll(dll, folder, warn, resolver);
@@ -78,15 +78,12 @@ internal static class Scanner
                         found.Remove(p);
                     }
                 }
-                string offBuild = manifest?.OtherBuildOnly(dll);
                 foreach (PluginEntry p in found)
                 {
                     p.Order = order++;
                     p.StartEarly |= folderEarly || folderBlocking;
                     p.BlockingStart |= folderBlocking;
                     p.RequiredItems.AddRange(required);
-                    if (offBuild != null && p.State == PluginState.Pending)
-                        p.Stop(PluginState.Skipped, $"{offBuild} build: this game has the {GameState.BuildName} (keel.ini)");
                     all.Add(p);
                 }
             }
@@ -278,67 +275,6 @@ internal static class Scanner
 }
 
 /// <summary>
-/// <c>keel.ini</c> in a mod folder (optional): which DLLs are for which game map. Without it every DLL is scanned and each
-/// mod decides itself which build runs.
-/// <code>
-/// [Keel]
-/// globe = MyMod.dll        ; only on the 3D globe build
-/// flat  = MyModFlat.dll    ; an extra build for an older game: left out here
-/// </code>
-/// </summary>
-internal sealed class Manifest
-{
-    private readonly HashSet<string> globe = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> flat = new(StringComparer.OrdinalIgnoreCase);
-    private string folder;
-
-    public static Manifest Read(string folder, Action<string> warn)
-    {
-        string path = Path.Combine(folder, Scanner.ManifestFile);
-        if (!File.Exists(path))
-            return null;
-        var m = new Manifest { folder = folder };
-        bool inSection = false;
-        try
-        {
-            foreach (string raw in File.ReadAllLines(path))
-            {
-                string line = raw.Split(';', '#')[0].Trim();
-                if (line.StartsWith("["))
-                {
-                    inSection = line.Equals("[Keel]", StringComparison.OrdinalIgnoreCase);
-                    continue;
-                }
-                int eq = line.IndexOf('=');
-                if (!inSection || eq < 0)
-                    continue;
-                string key = line.Substring(0, eq).Trim().ToLowerInvariant();
-                IEnumerable<string> files = line.Substring(eq + 1).Split(',').Select(f => f.Trim().Replace('/', '\\')).Where(f => f.Length > 0);
-                if (key == "globe")
-                    m.globe.UnionWith(files);
-                else if (key == "flat")
-                    m.flat.UnionWith(files);
-            }
-        }
-        catch (Exception ex)
-        {
-            warn($"Cannot read {path}: {ex.Message}");
-            return null;
-        }
-        return m;
-    }
-
-    /// <summary>"Flat map" when the DLL is listed only for the flat map (an extra build for an older game), else null.</summary>
-    public string OtherBuildOnly(string dll)
-    {
-        string rel = dll.Substring(folder.Length).TrimStart('\\', '/').Replace('/', '\\');
-        bool forGlobe = globe.Contains(rel) || globe.Contains(Path.GetFileName(dll));
-        bool forFlat = flat.Contains(rel) || flat.Contains(Path.GetFileName(dll));
-        return forFlat && !forGlobe ? "Flat map" : null;
-    }
-}
-
-/// <summary>
 /// The scan Keel makes from the disk's mod list before the game's first frame, to see whether a mod asks to start early.
 /// When the game's own list later turns on the same folders in the same order, the scan is used as it is (each DLL is read once);
 /// its warnings and left-out DLLs are passed on only then, so nothing is reported twice.
@@ -350,10 +286,10 @@ internal sealed class EarlyScan
     private readonly List<string> warnings = new();
     private readonly List<SkippedDll> skipped = new();
 
-    public static EarlyScan Of(List<ModFolder> enabled, params string[] searchDirs)
+    public static EarlyScan Of(List<ModFolder> enabled, GameBuild build, params string[] searchDirs)
     {
         var scan = new EarlyScan { folders = enabled };
-        scan.Plugins = Scanner.Scan(enabled, scan.warnings.Add, scan.skipped, searchDirs);
+        scan.Plugins = Scanner.Scan(enabled, build, scan.warnings.Add, scan.skipped, searchDirs);
         return scan;
     }
 

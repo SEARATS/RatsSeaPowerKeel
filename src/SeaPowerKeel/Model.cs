@@ -84,4 +84,5 @@ internal sealed class SkippedDll
     public string Path;
     public ModFolder Folder;
     public string Reason;
+    public bool VersionFiltered;
 }

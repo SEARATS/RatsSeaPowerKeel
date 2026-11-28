@@ -76,11 +76,11 @@ internal sealed class Runner
         return best;
     }
 
-    public Runner(ManualLogSource log, GameObject host, IEnumerable<ModFolder> folders)
+    public Runner(ManualLogSource log, GameObject host, IEnumerable<ModFolder> folders, IEnumerable<SkippedDll> skipped)
     {
         this.log = log;
         this.host = host;
-        AddFolders(folders);
+        AddFolders(folders, skipped);
         AppDomain.CurrentDomain.AssemblyResolve += Resolve;
         AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
         Application.logMessageReceived += OnLog;
@@ -90,17 +90,19 @@ internal sealed class Runner
     /// Libraries a mod ships (and Anchor Chain's DLL, for Anchor Chain mods): found by assembly name when a mod asks for one,
     /// first in mod-list order. Called again for folders switched on in the running game.
     /// </summary>
-    public void AddFolders(IEnumerable<ModFolder> folders)
+    public void AddFolders(IEnumerable<ModFolder> folders, IEnumerable<SkippedDll> skipped)
     {
+        var versionFiltered = new HashSet<string>(skipped.Where(d => d.VersionFiltered).Select(d => d.Path), StringComparer.OrdinalIgnoreCase);
+        foreach (string name in libraryIndex.Where(entry => versionFiltered.Contains(entry.Value)).Select(entry => entry.Key).ToArray())
+            libraryIndex.Remove(name);
         foreach (ModFolder f in folders)
         {
             try
             {
                 foreach (string dll in Directory.GetFiles(f.Path, "*.dll", SearchOption.AllDirectories))
                 {
-                    string name = Path.GetFileNameWithoutExtension(dll);
-                    if (!libraryIndex.ContainsKey(name))
-                        libraryIndex[name] = dll;
+                    if (!versionFiltered.Contains(dll))
+                        libraryIndex.TryAdd(Path.GetFileNameWithoutExtension(dll), dll);
                 }
             }
             catch (Exception)

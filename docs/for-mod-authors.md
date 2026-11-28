@@ -11,7 +11,7 @@ You do not need to reference Keel.
 - **Anchor Chain mods and plain BepInEx plugins run as they are** (sections 1 and 2).
 - **Bug reports that say what broke.** When a game update breaks your mod, Keel's report (`BepInEx\Keel-report.txt`) names
   the missing method, field or type and the Harmony patch whose target is gone; *Save logs* gives players one zip to attach.
-- **An extra DLL for an older game build:** list it in a small `keel.ini` and Keel leaves it out (below).
+- **Multiple game builds in one Workshop item.** Use `keel.ini` to select DLLs by game version or game assembly hash.
 - **While Keel is on, it is the only loader:** an Anchor Chain or Alpine preloader that is still installed does not start, so
   your mod is never started twice.
 
@@ -47,18 +47,26 @@ lists every DLL it left out on purpose (Keel's own and Anchor Chain's `AnchorCha
 
 A DLL that has both an `[ACPlugin]` and a `[BepInPlugin]` entry runs through its Anchor Chain entry only.
 
-## An extra DLL for an older build: `keel.ini`
+## Select DLLs by game build
 
-Keel supports the game's current main version only. A mod that still ships a second DLL for an older build (the flat map
-of 0.8.7) can say so, and Keel leaves that DLL out:
+List build-specific DLLs in the mod's `keel.ini`.
 
 ```ini
-[Keel]
-globe = MyMod.dll
-flat  = MyModFlat.dll
+[GameVersions]
+MyMod.261116.dll = 0.9.3-261116
+MyMod.Future.dll = >=0.9.4 <0.10.0
+variants/MyMod.Beta.dll = sha256:REPLACE_WITH_THE_64_HEX_DIGIT_HASH
 ```
 
-DLLs not named there are scanned as usual. Without `keel.ini` every DLL is scanned and each mod has to decide itself.
+`0.9.3-261116` matches one build. `0.9.3` matches that release, and a range requires every bound to match. Use commas for alternatives. If builds share a version, get the assembly hash from the game folder.
+
+```powershell
+Get-FileHash 'Sea Power_Data/Managed/Seapower-Scripts.dll' -Algorithm SHA256
+```
+
+A filename matches in any subfolder. A relative path targets one DLL and takes precedence. Use non-overlapping rules for variants with the same plugin ID. Keel scans unlisted DLLs normally and reports listed DLLs that lack a valid match.
+
+Legacy `[Keel]` keys `globe` and `flat` still work with a deprecation note. `[GameVersions]` takes precedence.
 
 ## Start early (opt-in)
 

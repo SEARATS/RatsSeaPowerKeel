@@ -7,17 +7,16 @@ using SeaPowerKeel;
 
 // SeaPowerKeel.OfflineCheck <Managed folder of a game build> <BepInEx core folder> <mod folder or folder of mod folders>...
 // Scans the given mod folders the way Keel does in the game, checks every plugin DLL against the given game build and prints
-// the plan and the report Keel would show (nothing is loaded or started). The game build is told by the Managed folder: the
-// game type Keel uses to tell the maps apart is looked up there.
+// the plan and the report Keel would show (nothing is loaded or started). Hash rules use the given Managed folder.
 internal static class Program
 {
     private static int Main(string[] args)
     {
         if (args.Length == 4 && args[0] == "--snapshot-methods")
         {
-            Version version = InfoVersion.Number(args[1]) ?? throw new ArgumentException("Expected a Sea Power build version.");
+            Version snapshotVersion = InfoVersion.Number(args[1]) ?? throw new ArgumentException("Expected a Sea Power build version.");
             var snapshot = MethodSnapshot.Scan(args[1], File.ReadAllBytes(Path.Combine(args[2], MethodSnapshot.AssemblyFile)));
-            string path = Path.Combine(args[3], version.ToString(3), snapshot.AssemblyHash + MethodSnapshot.Extension);
+            string path = Path.Combine(args[3], snapshotVersion.ToString(3), snapshot.AssemblyHash + MethodSnapshot.Extension);
             snapshot.Write(path);
             Console.WriteLine($"Wrote {snapshot.Methods.Count:N0} methods for Sea Power {snapshot.Build} to {path}");
             return 0;
@@ -26,9 +25,15 @@ internal static class Program
             return SelfTest.Run(args.Skip(1).ToArray());
         if (args.Length > 0 && args[0] == "--inicheck")
             return SelfTest.IniCheck(args.Skip(1).ToArray());
+        string version = null;
+        if (args.Length >= 2 && args[0] == "--game-version")
+        {
+            version = args[1];
+            args = args.Skip(2).ToArray();
+        }
         if (args.Length < 3)
         {
-            Console.WriteLine("usage: SeaPowerKeel.OfflineCheck <Managed> <BepInEx core> <mod folder | folder of mod folders> ...");
+            Console.WriteLine("usage: SeaPowerKeel.OfflineCheck [--game-version <version>] <Managed> <BepInEx core> <mod folder | folder of mod folders> ...");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --selftest <Managed> <BepInEx core>      (Keel's own tests; exit code 1 when one fails)");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --inicheck <Managed> [<Managed> ...]     (do the game's IniHandler members [ACConfig] needs exist?)");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --snapshot-methods <game build version> <Managed> <history directory>");
@@ -36,12 +41,14 @@ internal static class Program
         }
         string managed = args[0], core = args[1];
         Program.ResolveFrom(managed);
-        Console.WriteLine($"Game build: {GameState.BuildName} ({managed})");
+        var build = new GameBuild(version, managed);
+        Console.WriteLine($"Game build: {GameState.BuildName}, version {version ?? "unspecified"} ({managed})");
 
         var folders = new List<ModFolder>();
         foreach (string root in args.Skip(2))
         {
-            bool isMod = Directory.GetFiles(root, "*.dll", SearchOption.TopDirectoryOnly).Any() || File.Exists(Path.Combine(root, "_info.ini"));
+            bool isMod = Directory.GetFiles(root, "*.dll", SearchOption.TopDirectoryOnly).Any() ||
+                         File.Exists(Path.Combine(root, "_info.ini")) || File.Exists(Path.Combine(root, Manifest.FileName));
             IEnumerable<string> dirs = isMod ? new[] { root } : Directory.GetDirectories(root);
             foreach (string d in dirs)
             {
@@ -52,17 +59,17 @@ internal static class Program
 
         var notes = new List<string>();
         var skipped = new List<SkippedDll>();
-        List<PluginEntry> all = Scanner.Scan(folders, notes.Add, skipped, managed, core);
+        List<PluginEntry> all = Scanner.Scan(folders, build, notes.Add, skipped, managed, core);
         using (var pre = new Preflight(managed, core))
         {
-            // The game's own verdict (GameVersionCheck = Standard). The game's version is not known here, so _info.ini statements are not judged.
+            // Mirror the game's Standard verdict when a version is supplied.
             List<IGrouping<string, PluginEntry>> dlls = all.Where(p => p.State == PluginState.Pending).GroupBy(p => p.Dll).ToList();
             var results = dlls.ToDictionary(d => d.Key, d => pre.Check(d.Key), StringComparer.OrdinalIgnoreCase);
             foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
                 string matching = Preflight.MatchingMapBuild(dll.Key, results[dll.Key], results);
                 foreach (PluginEntry p in dll)
-                    Preflight.Judge(p, results[dll.Key], matching, strict: false, declared: null);
+                    Preflight.Judge(p, results[dll.Key], matching, strict: false, declared: InfoVersion.MismatchInFolder(p.Folder?.Path, version));
             }
             Console.WriteLine($"Type index for by-name lookups: {(pre.IndexMs > 0 ? pre.IndexMs + " ms" : "not needed")}");
         }

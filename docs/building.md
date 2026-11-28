@@ -8,11 +8,15 @@ dotnet build src/SeaPowerKeel.Stub/SeaPowerKeel.Stub.csproj -c Release
 - `-p:GameDir=...` for another install.
 - Run `git submodule update --init` before packaging to include the [method history snapshots](method-history.md).
 - `tools/package.ps1` (or `python tools/modtool.py package keel --yes` in the workspace) stages `dist\SeaPowerKeel\` for the Workshop. Page text and picture are in `workshop/`.
+- Release packaging uses pinned public references for BepInEx, Unity, and Noesis. Sea Power supplies Noesis at runtime.
 - `tools/offline-check` runs Keel's scanner, game-version check and planner over mod folders on disk against a game build's `Managed` folder, without the game:
 
 ```
 dotnet run -c Release --project tools/offline-check -- "<Managed>" "<Sea Power>\BepInEx\core" "<steamapps>\workshop\content\1286220"
 ```
+
+Pass `--game-version 0.9.3-261116` before the folders to check version rules.
+Hash rules use `Seapower-Scripts.dll` from the supplied `Managed` folder.
 
 Keel's own tests (the scanner, entry point, start order, `[ACConfig]`, Anchor Chain hand-over ... on stand-in mods and a stand-in `IniHandler`; no game needed), and the check that the game's real `IniHandler` has what `[ACConfig]` needs (one build per run):
 
