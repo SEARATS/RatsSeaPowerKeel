@@ -14,9 +14,8 @@ dotnet build src/SeaPowerKeel.Stub/SeaPowerKeel.Stub.csproj -c Release
 dotnet run -c Release --project tools/offline-check -- "<Managed>" "<Sea Power>\BepInEx\core" "<steamapps>\workshop\content\1286220"
 ```
 
-Pass `--game-version 0.9.3-261116` before the folder arguments to evaluate
-`keel.ini` version rules and the mod's `_info.ini` version declaration.
-Hash rules always use `Seapower-Scripts.dll` in the supplied `Managed` folder.
+Pass `--game-version 0.9.3-261116` before the folders to check version rules.
+Hash rules use `Seapower-Scripts.dll` from the supplied `Managed` folder.
 
 Keel's own tests (the scanner, entry point, start order, `[ACConfig]`, Anchor Chain hand-over ... on stand-in mods and a stand-in `IniHandler`; no game needed), and the check that the game's real `IniHandler` has what `[ACConfig]` needs (one build per run):
 

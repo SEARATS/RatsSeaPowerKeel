@@ -49,8 +49,7 @@ A DLL that has both an `[ACPlugin]` and a `[BepInPlugin]` entry runs through its
 
 ## Select DLLs by game build
 
-Add an optional `keel.ini` to the mod folder. List each build-specific DLL
-under `[GameVersions]`.
+List build-specific DLLs in the mod's `keel.ini`.
 
 ```ini
 [GameVersions]
@@ -59,28 +58,15 @@ MyMod.Future.dll = >=0.9.4 <0.10.0
 variants/MyMod.Beta.dll = sha256:REPLACE_WITH_THE_64_HEX_DIGIT_HASH
 ```
 
-A full version with a suffix matches that version string. A bare release such
-as `0.9.3` matches every build with that release number. Ranges compare release
-numbers and require every bound to match. Separate alternatives with commas.
-For example, `0.9.3-261116, 0.9.4` allows either that exact build or any 0.9.4 build.
-
-Use a SHA-256 rule when two builds share a version string. Copy the `Hash`
-column from PowerShell, run from the Sea Power installation folder.
+`0.9.3-261116` matches one build. `0.9.3` matches that release, and a range requires every bound to match. Use commas for alternatives. If builds share a version, get the assembly hash from the game folder.
 
 ```powershell
 Get-FileHash 'Sea Power_Data/Managed/Seapower-Scripts.dll' -Algorithm SHA256
 ```
 
-A filename applies to matching DLLs in the mod folder and its subfolders.
-Use a relative path for one DLL. A relative path rule takes precedence over a
-filename rule. Keel scans unlisted DLLs as usual. It leaves out DLLs with no
-matching rule before its normal compatibility check and records why in the
-report. Use disjoint rules for DLLs that implement the same plugin ID so only
-one variant is eligible.
-Keel reports invalid rules and skips a listed DLL if none of its valid rules matches.
+A filename matches in any subfolder. A relative path targets one DLL and takes precedence. Use non-overlapping rules for variants with the same plugin ID. Keel scans unlisted DLLs normally and reports listed DLLs that lack a valid match.
 
-The old `[Keel]` keys `globe` and `flat` still work and produce a deprecation
-note. A `[GameVersions]` rule takes precedence for a DLL named in both sections.
+Legacy `[Keel]` keys `globe` and `flat` still work with a deprecation note. `[GameVersions]` takes precedence.
 
 ## Start early (opt-in)
 
