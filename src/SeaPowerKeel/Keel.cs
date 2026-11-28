@@ -51,7 +51,7 @@ public static class Keel
 
     /// <summary>
     /// For a mod with a preparation DLL (<c>[Keel] Prepare=</c> in its _info.ini): finishes when its preparation is done, failed
-    /// or was skipped. A folder without an opted-in preparation helper is already complete.
+    /// or was skipped. Already finished for a folder without one. Yield until it completes before using prepared data.
     /// </summary>
     public static Task WhenPrepared(string modFolder) => Preparation.For(modFolder);
 

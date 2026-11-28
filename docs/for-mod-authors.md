@@ -91,18 +91,14 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 
 Use preparation to read, parse, or index files while the splash screen is up. Keep Unity calls, game APIs, Harmony patches, and UI work in your normal plugin. A preparation helper and the plugin can start independently.
 
-Choose one startup mode per mod folder. Mixing `[Keel] Prepare=` and `[Preloader] Load=` skips both sets of helpers.
-
-### Early preparation in Keel
-
-Put the helper DLL beside your mod's `_info.ini` and name it explicitly. This path also works with older Keel stubs.
+Put the helper DLL beside your mod's `_info.ini` and name it there.
 
 ```ini
 [Keel]
 Prepare=MyMod.Prepare.dll
 ```
 
-The helper can target `netstandard2.1` and use plain .NET libraries. Give one public type a `public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)` method.
+The helper can target `netstandard2.1` with no game or loader references. Give one public type a method with this signature.
 
 ```csharp
 using System;
@@ -139,20 +135,6 @@ private IEnumerator Start()
 ```
 
 `WhenPrepared` completes when the helper finishes, fails, or is skipped. Check that the data exists before using it. The plugin keeps its usual `StartEarly` or `BlockingStart` setting, and a startup helper runs once per game launch. Keel names failed helpers in `Keel-log.txt`. If the game ends while a helper is running, `HoldOutCrashers` holds it until its DLL changes or you remove `BepInEx/Keel-prepare.txt`.
-
-### Standalone preloaders
-
-The BepInEx starter DLL can load independent mod loaders on its own. Install BepInEx and copy `SeaPowerKeel.Stub.dll` from the release's `copy-to-BepInEx-plugins` folder into `BepInEx/plugins`. Enable your mod in the game's Mods list. This works without a Keel Workshop subscription or a Keel loader DLL.
-
-List each helper explicitly in the mod's `_info.ini`. Each path is relative to the mod folder, and each filename ends in `Preloader.dll`. The stub follows the game's mod-list order, then the order of the entries in each file.
-
-```ini
-[Preloader]
-Load=bin/MyMod.Preloader.dll
-Load2=bin/AdditionalPreloader.dll
-```
-
-Each DLL exposes `public static void Preload(string streamingAssets, string[] enabledModFolders, Action<string> report)` on one public type. The callback runs on Unity's main thread while BepInEx is starting. Use it to initialize your loader or register hooks, then return promptly. `report` writes to the BepInEx log. A managed failure in one callback leaves the next entry eligible to run. After a game exit during a callback, the stub holds that DLL until its file changes or you clear `BepInEx/Keel-preloaders.txt`.
 
 A plugin with its own startup progress window can call `Keel.HandOffStartupWindow()`. Keel hides its full loading window and still shows the summary card.
 

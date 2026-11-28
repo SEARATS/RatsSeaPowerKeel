@@ -1,17 +1,10 @@
-extern alias KeelStub;
-
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using TypeAttributes = Mono.Cecil.TypeAttributes;
-using MethodAttributes = Mono.Cecil.MethodAttributes;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using SeaPowerKeel;
-using StartupPreloaders = KeelStub::SeaPowerKeel.Stub.StartupPreloaders;
-using StubFolder = KeelStub::SeaPowerKeel.ModFolder;
 
 // Preparation DLLs and the compatibility checks made on a worker during the splash (PR #16, reworked).
 internal static partial class SelfTest
@@ -19,11 +12,11 @@ internal static partial class SelfTest
     private static void PreparationChecks(string tmp, string managed, string core)
     {
         Console.WriteLine("Preparation DLLs: opt-in by [Keel] Prepare=, run on a worker, held after a crash inside one");
-        Check(StartupManifest.Read(["[Language_en]", "Prepare=No.dll", "[Keel]", "Prepare = My.Prepare.dll ; note"]).Prepare == "My.Prepare.dll"
-              && StartupManifest.Read(["[Keel]", "StartEarly=true"]).Prepare == null,
-              "prepare: the manifest parser reads Prepare= in [Keel] and trims comments");
-        Check(PreparationEntry.Forbidden("UnityEngine.CoreModule") && PreparationEntry.Forbidden("Assembly-CSharp") && PreparationEntry.Forbidden("0Harmony")
-              && PreparationEntry.Forbidden("SeaPowerKeel") && !PreparationEntry.Forbidden("System.Runtime") && !PreparationEntry.Forbidden("Newtonsoft.Json"),
+        Check(EarlyStart.ValueInInfoIni(["[Language_en]", "Prepare=No.dll", "[Keel]", "Prepare = My.Prepare.dll ; note"], Preparation.InfoKey) == "My.Prepare.dll"
+              && EarlyStart.ValueInInfoIni(["[Keel]", "StartEarly=true"], Preparation.InfoKey) == null,
+              "prepare: only [Keel] Prepare= counts, value trimmed, comments cut");
+        Check(Preparation.Forbidden("UnityEngine.CoreModule") && Preparation.Forbidden("Assembly-CSharp") && Preparation.Forbidden("0Harmony")
+              && Preparation.Forbidden("SeaPowerKeel") && !Preparation.Forbidden("System.Runtime") && !Preparation.Forbidden("Newtonsoft.Json"),
               "prepare: game, Unity, loaders and Harmony are refused as references; the runtime and plain libraries are not");
 
         string mod = Path.Combine(tmp, "prep-mod");
@@ -31,10 +24,11 @@ internal static partial class SelfTest
         string dll = Path.Combine(mod, "Prep.Prepare.dll");
         WritePrepareDll(dll, "PrepFixture");
         File.WriteAllText(Path.Combine(mod, "_info.ini"), "[Keel]\nPrepare=Prep.Prepare.dll\n");
-        Check(Preparation.ResolveHelper(mod, "Prep.Prepare.dll") == Path.GetFullPath(dll),
-              "prepare: a DLL at the top of the folder is taken");
-        Check(Preparation.ResolveHelper(mod, "sub/Prep.Prepare.dll") == null,
-              "prepare: a path into a subfolder is refused");
+        var notes = new List<string>();
+        Check(Preparation.Requested(new ModFolder { Path = mod, Name = "prep-mod" }, notes) == Path.GetFullPath(dll) && notes.Count == 0, "prepare: a DLL at the top of the folder is taken");
+        File.WriteAllText(Path.Combine(mod, "_info.ini"), "[Keel]\nPrepare=sub\\Prep.Prepare.dll\n");
+        Check(Preparation.Requested(new ModFolder { Path = mod, Name = "prep-mod" }, notes) == null && notes.Count == 1, "prepare: a path into a subfolder is refused, with a note");
+        File.WriteAllText(Path.Combine(mod, "_info.ini"), "[Keel]\nPrepare=Prep.Prepare.dll\n");
 
         string root = Path.Combine(tmp, "prep-bepinex");
         Directory.CreateDirectory(root);
@@ -48,7 +42,7 @@ internal static partial class SelfTest
         Check(!File.Exists(Path.Combine(root, KeelNames.PrepareFile)), "prepare: nothing left in Keel-prepare.txt after a clean run");
 
         // The game died during the run: the line is still "running" at the next start.
-        File.WriteAllText(Path.Combine(root, KeelNames.PrepareFile), $"running\t{Path.GetFullPath(dll)}\t{StartupJournal.Stamp(dll)}\n");
+        File.WriteAllText(Path.Combine(root, KeelNames.PrepareFile), $"running\t{Path.GetFullPath(dll)}\t{CrashGuard.Stamp(dll)}\n");
         seen = null;
         said = Preparation.Start(folders, root, tmp, "0.9.3", true, t => seen ??= t, _ => { }, warned.Add);
         Check(said.Count == 2 && Preparation.For(mod).IsCompleted && seen == null
@@ -87,8 +81,6 @@ internal static partial class SelfTest
               && warned.Count == 1 && warned[0].Contains("Broken.dll") && steps.Count == 2,
               "prepare: a broken helper completes, the next enabled helper runs off-thread and the disabled helper stays out");
 
-        StubPreloaderChecks(tmp, root);
-
         Console.WriteLine("Compatibility checks made on a worker during the splash");
         string checkDir = Path.Combine(tmp, "prep-check");
         Directory.CreateDirectory(checkDir);
@@ -106,103 +98,14 @@ internal static partial class SelfTest
         Check(prepared.Take(Path.Combine(checkDir, "Other.dll")) == null, "prepared check: a DLL absent from the disk scan falls back");
     }
 
-    // Run separately from the stand-in tests so the release assemblies resolve to their real interfaces.
-    public static int CheckReleasedPreloaders(string managed, string previousStub, string anchorPreloader, string anchorLoader)
-    {
-        Program.ResolveFrom(managed);
-        using var previous = AssemblyDefinition.ReadAssembly(previousStub);
-        MethodDefinition awake = previous.MainModule.GetType("SeaPowerKeel.Stub.Stub").Methods.Single(m => m.Name == "Awake");
-        string[] names = awake.Body.Instructions.Where(i => i.OpCode.Code == Code.Ldstr).Select(i => (string)i.Operand).ToArray();
-        MethodInfo boot = typeof(Keel).GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
-        Check(boot != null && names.Contains(typeof(Keel).FullName) && names.Contains(boot.Name) && boot.ReturnType == typeof(void)
-              && boot.GetParameters().Select(p => p.ParameterType).SequenceEqual([typeof(string), typeof(string)]),
-              $"preloader: released Keel stub {previous.Name.Version.ToString(3)} resolves the legacy boot signature");
-
-        Assembly preloader = Assembly.LoadFrom(Path.GetFullPath(anchorPreloader));
-        Assembly loader = Assembly.LoadFrom(Path.GetFullPath(anchorLoader));
-        Type loaderType = loader.GetType(AcLoaderShim.LoaderType, throwOnError: true);
-        Type contract = preloader.GetType("AnchorChain.Preloader.IPluginLoader", throwOnError: true);
-        Check(contract.IsAssignableFrom(loaderType) && contract.GetMethod("LoadPlugins")?.ReturnType == typeof(void),
-              $"preloader: Anchor Chain {loader.GetName().Version.ToString(3)} binds to the current preloader's LoadPlugins interface");
-        string reason = AcLoaderShim.Prime(loader, [], Path.GetTempPath());
-        Check(reason == null, reason ?? "preloader: Keel can prime the released Anchor Chain loader for its mods");
-        return failures == 0 ? 0 : 1;
-    }
-
-    private static void StubPreloaderChecks(string tmp, string root)
-    {
-        Console.WriteLine("Standalone BepInEx preloaders");
-        Check(typeof(Keel).GetMethod("Boot")?.GetParameters().Length == 2,
-              "preloader: Keel retains the original boot entry for older stubs");
-        Check(typeof(StartupPreloaders).Assembly.GetReferencedAssemblies().All(name => name.Name != "SeaPowerKeel"),
-              "preloader: the stub has no dependency on the optional Keel loader");
-
-        StubFolder Add(string name, string setting, bool enabled = true)
-        {
-            string path = Path.Combine(tmp, name);
-            Directory.CreateDirectory(path);
-            File.WriteAllText(Path.Combine(path, "_info.ini"), setting);
-            return new StubFolder { Path = path, Name = name, Enabled = enabled };
-        }
-
-        const string first = "FirstPreloader.dll", second = "code/Second.PreLoader.DLL", bad = "BrokenPreloader.dll";
-        StubFolder configured = Add("preloader-explicit", $"[Preloader]\nLoad={first}\nLoad2={bad}\nLoad3={second}\nLoad4={first}\n");
-        StubFolder missingOptIn = Add("preloader-unlisted", "[Preloader]\n");
-        StubFolder conflict = Add("preloader-conflict", $"[Preloader]\nLoad={first}\n[Keel]\nPrepare=Other.dll\n");
-        StubFolder disabled = Add("preloader-disabled", $"[Preloader]\nLoad={first}\n", false);
-        StubFolder oldGame = Add("preloader-old-game", $"[Preloader]\nLoad={first}\n[Compatibility]\nExactVersion=0.9.2\n");
-        StubFolder oldOption = Add("preloader-keel-draft", $"[Keel]\nPreload={first}\n");
-
-        foreach (StubFolder item in new[] { configured, missingOptIn, conflict, disabled, oldGame, oldOption })
-            WritePrepareDll(Path.Combine(item.Path, first), item.Name, StartupHelper.Preload, gameReference: true);
-        Directory.CreateDirectory(Path.Combine(configured.Path, "code"));
-        string target = Path.GetFullPath(Path.Combine(configured.Path, second));
-        WritePrepareDll(target, "second-preloader", StartupHelper.Preload);
-        WritePrepareDll(Path.Combine(configured.Path, bad), "wrong-preloader-entry", StartupHelper.Prepare);
-        WritePrepareDll(Path.Combine(conflict.Path, "Other.dll"), "conflicting-prepare");
-
-        Check(StartupPreloaders.Resolve(configured.Path, second) == target
-              && StartupPreloaders.Resolve(conflict.Path, "../preloader-unlisted/" + first) == null
-              && StartupPreloaders.Resolve(conflict.Path, ".. /preloader-unlisted/" + first) == null
-              && StartupPreloaders.Resolve(configured.Path, target) == null,
-              "preloader: an explicitly named nested DLL is accepted and unsupported paths are refused");
-
-        var messages = new List<string>();
-        var warnings = new List<string>();
-        StartupPreloaders.Run([configured, missingOptIn, conflict, disabled, oldGame, oldOption], root, tmp, "0.9.3",
-            messages.Add, warnings.Add);
-        string[] started = messages.Where(x => x.StartsWith("Starting preloader ", StringComparison.Ordinal)).ToArray();
-        Check(started.Length == 2 && started[0].Contains(first) && started[1].Contains(second)
-              && messages.Count(x => x == "prepared preloader-explicit") == 2,
-              "preloader: the standalone stub starts multiple DLLs in manifest order, including a loader with a game reference");
-        Check(warnings.Count == 3 && warnings.Any(x => x.Contains("Expected one public static void Preload"))
-              && warnings.Any(x => x.Contains("Choose [Preloader]")) && warnings.Any(x => x.Contains("declared game version")),
-              "preloader: invalid helpers, conflicting settings and mismatched versions cannot start a callback");
-
-        List<string> notes = Preparation.Start([Folder(conflict.Path)], root, tmp, "0.9.3", true, _ => { }, _ => { }, warnings.Add);
-        Check(notes.Any(x => x.Contains("Choose [Keel]")) && Keel.WhenPrepared(conflict.Path).IsCompleted,
-              "prepare: Keel leaves a conflicting folder idle");
-
-        string state = Path.Combine(root, KeelNames.PreloaderJournal);
-        File.WriteAllText(state, $"running\t{target}\t{StartupJournal.Stamp(target)}\n");
-        messages.Clear();
-        warnings.Clear();
-        StartupPreloaders.Run([configured], root, tmp, "0.9.3", messages.Add, warnings.Add);
-        Check(messages.Count(x => x.StartsWith("Starting preloader ", StringComparison.Ordinal)) == 1
-              && warnings.Any(x => x.Contains(KeelNames.PreloaderJournal)) && File.ReadAllText(state).StartsWith("held\t"),
-              "preloader: the standalone stub holds a helper that crashed and continues with the others");
-    }
-
     // A preparation DLL written with Cecil: Prepare(streamingAssets, folders, report) reports "prepared <first folder's name>".
-    private static void WritePrepareDll(string path, string name, StartupHelper entry = StartupHelper.Prepare, bool gameReference = false)
+    private static void WritePrepareDll(string path, string name)
     {
         using var asm = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(name, new Version(1, 0)), name, ModuleKind.Dll);
         ModuleDefinition m = asm.MainModule;
-        if (gameReference)
-            m.AssemblyReferences.Add(new AssemblyNameReference("Seapower-Scripts", new Version(1, 0)));
         var type = new TypeDefinition("Fixture", "Prep", TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed, m.TypeSystem.Object);
         m.Types.Add(type);
-        var prepare = new MethodDefinition(entry.ToString(), MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig, m.TypeSystem.Void);
+        var prepare = new MethodDefinition("Prepare", MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig, m.TypeSystem.Void);
         prepare.Parameters.Add(new ParameterDefinition(m.TypeSystem.String));
         prepare.Parameters.Add(new ParameterDefinition(m.ImportReference(typeof(string[]))));
         prepare.Parameters.Add(new ParameterDefinition(m.ImportReference(typeof(Action<string>))));

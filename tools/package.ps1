@@ -5,7 +5,7 @@
 .DESCRIPTION
     Release builds of the loader and the stub, then dist\SeaPowerKeel\ with exactly what players get:
     SeaPowerKeel.dll, SeaPowerKeel.Patcher.dll, _info.ini, LICENSE.txt, CHANGELOG.md, preview.jpg (workshop\preview.jpg) and copy-to-BepInEx-plugins\SeaPowerKeel.Stub.dll,
-    which players install in Sea Power\BepInEx\plugins.
+    the one file players copy into Sea Power\BepInEx\plugins once (Keel never loads it from the mod folder).
     With -Install the staged folder also replaces <GameDir>\Sea Power_Data\StreamingAssets\SeaPowerKeel\. Sea Power must be closed.
 
 .EXAMPLE
