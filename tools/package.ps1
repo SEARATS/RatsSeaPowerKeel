@@ -23,7 +23,7 @@ $dist = Join-Path $root 'dist\SeaPowerKeel'
 # The public, hash-pinned references (tools\refs.ps1), never the game folder: GitHub Actions builds from the same files and
 # release-check.yml compares its build with this one byte for byte.
 . (Join-Path $PSScriptRoot 'refs.ps1')
-$refs = Get-PublicRefs $root
+$refs = Get-PublicRefs $root -WithNoesis
 $refArgs = "-p:ManagedDir=$($refs.ManagedDir)", "-p:BepInExCore=$($refs.BepInExCore)"
 
 foreach ($p in 'src\SeaPowerKeel\SeaPowerKeel.csproj', 'src\SeaPowerKeel.Stub\SeaPowerKeel.Stub.csproj', 'src\SeaPowerKeel.Patcher\SeaPowerKeel.Patcher.csproj', 'src\SeaPowerKeel.Watcher\SeaPowerKeel.Watcher.csproj') {
