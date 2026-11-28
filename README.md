@@ -25,7 +25,8 @@ Mods made for [Anchor Chain](https://steamcommunity.com/sharedfiles/filedetails/
 - Loads the plugin DLLs of the mods switched on in Mods, in dependency order; a mod that throws is marked and the next one starts.
 - Runs plain BepInEx plugins and Anchor Chain mods as they are; one DLL for the game's current main version.
 - A mod can name the Workshop items it needs: a missing one shows on the card with a Get it button, an installed one that is off is switched on ([for mod authors](docs/for-mod-authors.md)).
-- [Startup preparation for mod authors](docs/for-mod-authors.md#prepare-startup-data) moves file work to a background worker during the splash.
+- [Early preparation](docs/for-mod-authors.md#early-preparation-in-keel) runs file work on a background worker during the splash.
+- The BepInEx starter can start [standalone preloaders](docs/for-mod-authors.md#standalone-preloaders) with its own opt-in manifest entries.
 - Checks every DLL against the game's `Managed` assemblies and leaves out one that could stop missions from loading, saying why.
 - For out-of-date mods, flags Harmony targets and method lookups affected by changes in the game ([method history](docs/method-history.md)).
 - Report window (Ctrl+Shift+K): every mod running, with errors, or not started and why; the same in `BepInEx\Keel-report.txt`.

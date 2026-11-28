@@ -30,10 +30,11 @@ internal static class KeelNames
     public const string KeepFile = "Keel-keep.txt";
     /// <summary>Preparation DLLs running now, and those held after the game died while one ran (Preparation).</summary>
     public const string PrepareFile = "Keel-prepare.txt";
+    public const string PreloaderJournal = "Keel-preloaders.txt";
 
     /// <summary>What a log bundle (Save logs, Send report) takes from BepInEx\, as file patterns.</summary>
     public static readonly string[] BundleFiles =
-        { "Keel-log*.txt", ReportFile, "Keel-crash*.txt", CrashJsonFile, JournalFile, ModsFile, HeldFile, PrepareFile, WatcherFile, "LogOutput.log" };
+        { "Keel-log*.txt", ReportFile, "Keel-crash*.txt", CrashJsonFile, JournalFile, ModsFile, HeldFile, PrepareFile, PreloaderJournal, WatcherFile, "LogOutput.log" };
 
     /// <summary>
     /// The game's folder in LocalLow (Player.log, CrashDiagnostics), named from Unity's company and product. Keel itself asks Unity

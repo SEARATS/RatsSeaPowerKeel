@@ -43,6 +43,7 @@ Merged since 0.8.0, ships with the next release ([how releases work](docs/commun
   - where the game's UI root has no size, the menu view is the frame
 - 3 new self-test checks
 - Code mods can use `[Keel] Prepare=<dll>` to read or index data on a worker during the splash. See the [startup preparation guide](docs/for-mod-authors.md#prepare-startup-data).
+- Stub 1.1.0 can start multiple explicitly listed `*Preloader.dll` files through `[Preloader] Load=` entries, including on installations with no Keel loader. See the [standalone preloader guide](docs/for-mod-authors.md#standalone-preloaders).
 - Keel uses background compatibility results as they finish and checks the DLL hash before reusing them. Pending or changed DLLs use the regular check.
 - Mods with their own startup progress can hide Keel's loading window with `Keel.HandOffStartupWindow()`. Keel still shows the summary card.
 - **The in-game report groups plugins by mod** (PR #13 by agm-114)

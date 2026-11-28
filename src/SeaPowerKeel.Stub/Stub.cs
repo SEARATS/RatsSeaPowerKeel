@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
+using UnityEngine;
 
 namespace SeaPowerKeel.Stub;
 
 /// <summary>
-/// The only part of Keel that goes into <c>BepInEx\plugins</c>. It finds <c>SeaPowerKeel.dll</c> in the game's
-/// enabled mod folders (newest version wins) and starts it. It knows nothing about the game, so it is the same file for
-/// every game build and should never need replacing: the loader itself comes and updates through the Workshop.
+/// Starts explicitly listed preloaders from enabled mod folders, then boots Keel if an enabled folder provides it.
 /// </summary>
-[BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.0.0")]
+[BepInPlugin(Guid, "Keel stub", "1.1.0")]
 public class Stub : BaseUnityPlugin
 {
     public const string Guid = KeelNames.StubGuid;
@@ -23,46 +22,52 @@ public class Stub : BaseUnityPlugin
         try
         {
             List<ModFolder> folders = ModFolders.FromDisk();
-            var candidates = new List<(string path, Version version, ModFolder folder)>();
-            foreach (ModFolder folder in folders.Where(f => f.Enabled))
-            {
-                foreach (string path in ModFolders.FindFile(folder.Path, LoaderFile))
-                {
-                    try
-                    {
-                        candidates.Add((path, AssemblyName.GetAssemblyName(path).Version, folder));
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning($"Not a usable {LoaderFile}: {path} ({ex.Message})");
-                    }
-                }
-            }
-            if (candidates.Count == 0)
-            {
-                bool off = folders.Any(f => !f.Enabled && ModFolders.FindFile(f.Path, LoaderFile).Any());
-                Logger.LogWarning(off
-                    ? "R.A.T.S. Keel is switched off in the game's mod list: no Keel mod loads. Switch it on in Mods and restart."
-                    : "R.A.T.S. Keel is not installed (subscribe to it on the Workshop): no Keel mod loads.");
-                return;
-            }
-            // Newest first; on a tie the one higher up in the game's mod list.
-            (string path, Version version, ModFolder folder) pick =
-                candidates.OrderByDescending(c => c.version).ThenBy(c => c.folder.Order).First();
-            Logger.LogInfo($"Starting R.A.T.S. Keel {pick.version} from {pick.folder.Label} ({pick.path})");
-            Assembly loader = Assembly.LoadFrom(pick.path);
-            MethodInfo boot = loader.GetType(LoaderType, throwOnError: true)
-                                    .GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
-            if (boot == null)
-            {
-                Logger.LogError($"{pick.path} has no {LoaderType}.Boot: not a Keel loader this stub can start.");
-                return;
-            }
-            boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path });
+            StartupPreloaders.Run(folders, Paths.BepInExRootPath, Application.streamingAssetsPath, Application.version,
+                Logger.LogInfo, Logger.LogWarning);
+            StartKeel(folders);
         }
         catch (Exception ex)
         {
-            Logger.LogError($"Could not start R.A.T.S. Keel: {(ex is TargetInvocationException t && t.InnerException != null ? t.InnerException : ex)}");
+            Logger.LogError($"BepInEx startup failed. {ex.GetBaseException().Message}");
         }
+    }
+
+    private void StartKeel(List<ModFolder> folders)
+    {
+        var candidates = new List<(string path, Version version, ModFolder folder)>();
+        foreach (ModFolder folder in folders.Where(f => f.Enabled))
+        {
+            foreach (string path in ModFolders.FindFile(folder.Path, LoaderFile))
+            {
+                try
+                {
+                    candidates.Add((path, AssemblyName.GetAssemblyName(path).Version, folder));
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning($"Not a usable {LoaderFile}: {path} ({ex.Message})");
+                }
+            }
+        }
+        if (candidates.Count == 0)
+        {
+            if (folders.Any(f => !f.Enabled && ModFolders.FindFile(f.Path, LoaderFile).Any()))
+                Logger.LogInfo("Keel is switched off in the game's mod list.");
+            return;
+        }
+
+        // Newest first; on a tie the one higher up in the game's mod list.
+        (string path, Version version, ModFolder folder) pick =
+            candidates.OrderByDescending(c => c.version).ThenBy(c => c.folder.Order).First();
+        Logger.LogInfo($"Starting Keel {pick.version} from {pick.folder.Label} ({pick.path})");
+        Assembly loader = Assembly.LoadFrom(pick.path);
+        Type keel = loader.GetType(LoaderType, throwOnError: true);
+        MethodInfo boot = keel.GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
+        if (boot == null)
+        {
+            Logger.LogError($"Expected {LoaderType}.Boot in {pick.path}.");
+            return;
+        }
+        boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path });
     }
 }

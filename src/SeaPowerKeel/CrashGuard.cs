@@ -194,19 +194,6 @@ internal sealed class CrashGuard
         }
     }
 
-    internal static string Stamp(string dll)
-    {
-        try
-        {
-            var f = new FileInfo(dll);
-            return f.LastWriteTimeUtc.Ticks + ":" + f.Length;
-        }
-        catch (Exception)
-        {
-            return "";
-        }
-    }
-
     /// <summary>
     /// Reads what the last session left and acts on it: says what happened, and holds out the mod it can name (when <paramref name="hold"/>).
     /// A held mod stays out until its DLL changes (an update of the mod) or its line is removed from Keel-held.txt.
@@ -226,7 +213,7 @@ internal sealed class CrashGuard
             var keptOn = new HashSet<string>(CrashText.ReadLines(Path.Combine(dir, KeelNames.KeepFile)).Select(l => l.Trim()));
             PluginEntry culprit = Explain(plugins, caughtStack, note);
             if (culprit != null && hold && !keptOn.Contains(culprit.Guid))
-                held[culprit.Guid] = (Stamp(culprit.Dll), $"The last game ended unexpectedly {culpritHow}.");
+                held[culprit.Guid] = (StartupJournal.Stamp(culprit.Dll), $"The last game ended unexpectedly {culpritHow}.");
         }
         else
         {
@@ -302,7 +289,7 @@ internal sealed class CrashGuard
         foreach (KeyValuePair<string, (string stamp, string reason)> h in held)
         {
             PluginEntry p = plugins.FirstOrDefault(x => x.Guid == h.Key);
-            if (p != null && Stamp(p.Dll) != h.Value.stamp)
+            if (p != null && StartupJournal.Stamp(p.Dll) != h.Value.stamp)
                 continue;   // the mod was updated: it gets another chance
             keep.Add($"{h.Key}\t{h.Value.stamp}\t{h.Value.reason}");   // with no mod (its folder is off for now) the hold stays too
             if (p != null && hold && p.State == PluginState.Pending)
