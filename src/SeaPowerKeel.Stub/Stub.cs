@@ -9,7 +9,7 @@ using UnityEngine;
 namespace SeaPowerKeel.Stub;
 
 /// <summary>
-/// Installed in <c>BepInEx\plugins</c>. Starts opted-in preloaders, then boots the newest Keel from the enabled mod folders.
+/// Installed in <c>BepInEx\plugins</c>. Starts standalone preloaders, then boots the newest Keel from the enabled mod folders.
 /// </summary>
 [BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.0.0")]
 public class Stub : BaseUnityPlugin
@@ -29,25 +29,20 @@ public class Stub : BaseUnityPlugin
             Type[] signature = [typeof(string), typeof(string[]), typeof(Action<string>)];
             const BindingFlags preloadFlags = BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly;
             Action<string> report = Logger.LogInfo;
-            var preloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var candidates = new List<(string path, Version version, ModFolder folder)>();
             foreach (ModFolder folder in enabled)
             {
-                foreach (string name in ListedPreloaders(folder.InfoLines))
+                foreach (string path in FindPreloaders(folder.Path).Concat(ModFolders.FindFile(folder.Path, LoaderFile)))
                 {
+                    string name = Path.GetFileName(path);
+                    bool isKeel = name.Equals(LoaderFile, IgnoreCase);
                     try
                     {
-                        string root = Path.GetFullPath(folder.Path).TrimEnd('\\', '/');
-                        string path = Path.GetFullPath(Path.Combine(root, name));
-                        if (Path.IsPathRooted(name) || name.Contains(':') || !path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
-                            !path.EndsWith("Preloader.dll", IgnoreCase) || Path.GetFileName(path).Equals(KeelNames.AnchorChainPreloaderFile, IgnoreCase))
-                            throw new ArgumentException("Use a relative path to a Preloader.dll inside the mod folder.");
-                        if (!preloaded.Add(path))
+                        if (isKeel)
+                        {
+                            candidates.Add((path, AssemblyName.GetAssemblyName(path).Version, folder));
                             continue;
-                        for (string entry = path; entry.Length > root.Length; entry = Path.GetDirectoryName(entry))
-                            if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
-                                throw new IOException($"The path crosses a link at {entry}.");
-
+                        }
                         Assembly assembly = Assembly.LoadFrom(path);
                         if (!ModFolders.SamePath(path, assembly.Location))
                             throw new InvalidOperationException($"The assembly name is already used by {assembly.Location}.");
@@ -58,19 +53,9 @@ public class Stub : BaseUnityPlugin
                     }
                     catch (Exception ex)
                     {
-                        Logger.LogWarning($"Preloader {name} failed in {folder.Label}. {ex.GetBaseException().Message}");
-                    }
-                }
-
-                foreach (string path in ModFolders.FindFile(folder.Path, LoaderFile))
-                {
-                    try
-                    {
-                        candidates.Add((path, AssemblyName.GetAssemblyName(path).Version, folder));
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning($"Not a usable {LoaderFile}: {path} ({ex.Message})");
+                        Logger.LogWarning(isKeel
+                            ? $"Not a usable {LoaderFile}: {path} ({ex.Message})"
+                            : $"Preloader {name} failed in {folder.Label}. {ex.GetBaseException().Message}");
                     }
                 }
             }
@@ -101,26 +86,23 @@ public class Stub : BaseUnityPlugin
         }
     }
 
-    private static List<string> ListedPreloaders(string[] lines)
+    private static string[] FindPreloaders(string folder)
     {
-        var files = new List<string>();
-        string section = "";
-        foreach (string raw in lines)
+        var options = new EnumerationOptions
         {
-            string line = raw.Split(';', '#')[0].Trim();
-            if (line.StartsWith('['))
-                section = line;
-            if (line.Split('=', 2) is not [string key, string rawValue])
-                continue;
-            string value = rawValue.Trim().Trim('"');
-            if (string.IsNullOrWhiteSpace(value))
-                continue;
-            key = key.Trim();
-            if (section.Equals("[Keel]", IgnoreCase) && key.Equals("Prepare", IgnoreCase))
-                return [];
-            if (section.Equals("[Preloader]", IgnoreCase) && key.StartsWith("Load", IgnoreCase) && key.Skip(4).All(char.IsDigit))
-                files.Add(value);
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            MatchCasing = MatchCasing.CaseInsensitive
+        };
+        try
+        {
+            return Directory.GetDirectories(folder, "*", options).OrderBy(dir => dir, StringComparer.OrdinalIgnoreCase).Prepend(folder)
+                .SelectMany(dir => Directory.EnumerateFiles(dir, "*Preloader.dll", options).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+                .Where(path => !Path.GetFileName(path).Equals(KeelNames.AnchorChainPreloaderFile, IgnoreCase)).ToArray();
         }
-        return files;
+        catch (IOException)
+        {
+            return [];
+        }
     }
 }
