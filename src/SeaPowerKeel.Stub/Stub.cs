@@ -8,7 +8,9 @@ using UnityEngine;
 
 namespace SeaPowerKeel.Stub;
 
-/// <summary>Starts explicitly listed preloaders, then boots Keel if an enabled mod folder provides it.</summary>
+/// <summary>
+/// Installed in <c>BepInEx\plugins</c>. Starts opted-in preloaders, then boots the newest Keel from the enabled mod folders.
+/// </summary>
 [BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.0.0")]
 public class Stub : BaseUnityPlugin
 {
@@ -40,7 +42,13 @@ public class Stub : BaseUnityPlugin
                 }
             }
             if (candidates.Count == 0)
+            {
+                bool off = folders.Any(f => !f.Enabled && ModFolders.FindFile(f.Path, LoaderFile).Any());
+                Logger.LogWarning(off
+                    ? "R.A.T.S. Keel is switched off in the game's mod list: no Keel mod loads. Switch it on in Mods and restart."
+                    : "R.A.T.S. Keel is not installed (subscribe to it on the Workshop): no Keel mod loads.");
                 return;
+            }
             // Newest first; on a tie the one higher up in the game's mod list.
             (string path, Version version, ModFolder folder) pick =
                 candidates.OrderByDescending(c => c.version).ThenBy(c => c.folder.Order).First();
@@ -63,12 +71,10 @@ public class Stub : BaseUnityPlugin
 
     private static void RunPreloaders(ModFolder[] enabled, string streamingAssets, Action<string> info, Action<string> warn)
     {
-        string[] folders = Array.ConvertAll(enabled, folder => folder.Path);
         var loaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var entries = from folder in enabled
-                      from name in ListedPreloaders(folder.InfoLines)
-                      select (folder, name);
-        foreach (var (folder, name) in entries)
+        string[] folders = Array.ConvertAll(enabled, folder => folder.Path);
+        foreach (ModFolder folder in enabled)
+        foreach (string name in ListedPreloaders(folder.InfoLines))
         {
             try
             {
@@ -119,18 +125,14 @@ public class Stub : BaseUnityPlugin
 
     private static string PreloaderPath(string folder, string name)
     {
-        string[] parts = name.Split('/', '\\');
-        char[] invalid = Path.GetInvalidFileNameChars();
-        if (!name.EndsWith("Preloader.dll", IgnoreCase) || name.Contains(':') ||
-            parts[^1].Equals(KeelNames.AnchorChainPreloaderFile, IgnoreCase) ||
-            parts.Any(part => part.Length == 0 || part != part.TrimEnd(' ', '.') || part.IndexOfAny(invalid) >= 0))
+        string root = Path.GetFullPath(folder).TrimEnd('\\', '/');
+        string path = Path.GetFullPath(Path.Combine(root, name));
+        if (Path.IsPathRooted(name) || name.Contains(':') || !path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            !path.EndsWith("Preloader.dll", IgnoreCase) || Path.GetFileName(path).Equals(KeelNames.AnchorChainPreloaderFile, IgnoreCase))
             throw new ArgumentException("Use a relative path to a Preloader.dll inside the mod folder.");
-        foreach (string part in parts)
-        {
-            folder = Path.Combine(folder, part);
-            if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException($"The path crosses a link at {folder}.");
-        }
-        return Path.GetFullPath(folder);
+        for (string entry = path; entry.Length > root.Length; entry = Path.GetDirectoryName(entry))
+            if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException($"The path crosses a link at {entry}.");
+        return path;
     }
 }
