@@ -125,7 +125,8 @@ internal static class Preparation
         foreach (string segment in segments)
         {
             if (string.IsNullOrWhiteSpace(segment) || segment is "." or ".." || segment.Contains(':')
-                || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || (kind == StartupHelper.Preload && segment != segment.TrimEnd(' ', '.')))
                 return null;
 
             path = Path.Combine(path, segment);

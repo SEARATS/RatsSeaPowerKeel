@@ -181,6 +181,7 @@ internal static partial class SelfTest
         string target = Path.GetFullPath(Path.Combine(preload.Path, deep));
         Check(Preparation.ResolveHelper(preload.Path, deep, StartupHelper.Preload) == target
               && Preparation.ResolveHelper(conflict.Path, "../preloader-unlisted/" + direct, StartupHelper.Preload) == null
+              && Preparation.ResolveHelper(conflict.Path, ".. /preloader-unlisted/" + direct, StartupHelper.Preload) == null
               && Preparation.ResolveHelper(preload.Path, target, StartupHelper.Preload) == null,
               "preloader: a named nested file is selected case-insensitively and paths outside the folder are rejected");
 
