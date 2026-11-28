@@ -11,7 +11,7 @@ You do not need to reference Keel.
 - **Anchor Chain mods and plain BepInEx plugins run as they are** (sections 1 and 2).
 - **Bug reports that say what broke.** When a game update breaks your mod, Keel's report (`BepInEx\Keel-report.txt`) names
   the missing method, field or type and the Harmony patch whose target is gone; *Save logs* gives players one zip to attach.
-- **An extra DLL for an older game build:** list it in a small `keel.ini` and Keel leaves it out (below).
+- **Multiple game builds in one Workshop item.** Use `keel.ini` to select DLLs by game version or game assembly hash.
 - **While Keel is on, it is the only loader:** an Anchor Chain or Alpine preloader that is still installed does not start, so
   your mod is never started twice.
 
@@ -47,18 +47,40 @@ lists every DLL it left out on purpose (Keel's own and Anchor Chain's `AnchorCha
 
 A DLL that has both an `[ACPlugin]` and a `[BepInPlugin]` entry runs through its Anchor Chain entry only.
 
-## An extra DLL for an older build: `keel.ini`
+## Select DLLs by game build
 
-Keel supports the game's current main version only. A mod that still ships a second DLL for an older build (the flat map
-of 0.8.7) can say so, and Keel leaves that DLL out:
+Add an optional `keel.ini` to the mod folder. List each build-specific DLL
+under `[GameVersions]`.
 
 ```ini
-[Keel]
-globe = MyMod.dll
-flat  = MyModFlat.dll
+[GameVersions]
+MyMod.261116.dll = 0.9.3-261116
+MyMod.Future.dll = >=0.9.4 <0.10.0
+variants/MyMod.Beta.dll = sha256:REPLACE_WITH_THE_64_HEX_DIGIT_HASH
 ```
 
-DLLs not named there are scanned as usual. Without `keel.ini` every DLL is scanned and each mod has to decide itself.
+A full version with a suffix matches that version string. A bare release such
+as `0.9.3` matches every build with that release number. Ranges compare release
+numbers and require every bound to match. Separate alternatives with commas.
+For example, `0.9.3-261116, 0.9.4` allows either that exact build or any 0.9.4 build.
+
+Use a SHA-256 rule when two builds share a version string. Copy the `Hash`
+column from PowerShell, run from the Sea Power installation folder.
+
+```powershell
+Get-FileHash 'Sea Power_Data/Managed/Seapower-Scripts.dll' -Algorithm SHA256
+```
+
+A filename applies to matching DLLs in the mod folder and its subfolders.
+Use a relative path for one DLL. A relative path rule takes precedence over a
+filename rule. Keel scans unlisted DLLs as usual. It leaves out DLLs with no
+matching rule before its normal compatibility check and records why in the
+report. Use disjoint rules for DLLs that implement the same plugin ID so only
+one variant is eligible.
+Keel reports invalid rules and skips a listed DLL if none of its valid rules matches.
+
+The old `[Keel]` keys `globe` and `flat` still work and produce a deprecation
+note. A `[GameVersions]` rule takes precedence for a DLL named in both sections.
 
 ## Start early (opt-in)
 

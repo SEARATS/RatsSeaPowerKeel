@@ -128,6 +128,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private readonly List<string> notes = new();
     private bool done;
     private readonly List<SkippedDll> skippedDlls = new();
+    private GameBuild gameBuild;
     private float noticeUntil;
     private bool showWindow;
     private Rect window;                         // sized and centred by OnGUI when it opens
@@ -139,6 +140,7 @@ internal sealed partial class KeelHost : MonoBehaviour
     private void Awake()
     {
         Current = this;
+        gameBuild = new GameBuild(Application.version, Paths.ManagedPath);
         log = Keel.Log;
         config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
         BindSettings(config);
@@ -371,7 +373,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         // The early scan is used when it saw the same folders (the usual case), so no DLL is read twice.
         var watch = Stopwatch.StartNew();
         Keel.Plugins.AddRange(scan?.UseFor(enabled, Warn, skippedDlls)
-                              ?? Scanner.Scan(enabled, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory));
+                              ?? Scanner.Scan(enabled, gameBuild, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory));
         log.LogInfo($"Found {Keel.Plugins.Count} plugin(s) in {Keel.Plugins.Select(p => p.Dll).Distinct().Count()} DLL(s) ({watch.ElapsedMilliseconds} ms).");
         Window?.Found(Keel.Plugins.Count);
         foreach (SkippedDll d in skippedDlls)
@@ -416,7 +418,7 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             disk = ModFolders.FromDisk();
-            scan = EarlyScan.Of(disk.Where(f => f.Enabled).ToList(), Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+            scan = EarlyScan.Of(disk.Where(f => f.Enabled).ToList(), gameBuild, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
         }
         catch (Exception ex)
         {
@@ -517,7 +519,7 @@ internal sealed partial class KeelHost : MonoBehaviour
 
     private Runner NewRunner(List<ModFolder> enabled)
     {
-        var runner = new Runner(log, gameObject, enabled);
+        var runner = new Runner(log, gameObject, enabled, skippedDlls);
         if (keelLog != null)
             keelLog.OwnerOf = runner.OwnerOf;
         // Unity hands exceptions to BepInEx without saying which mod threw; Keel adds a line that does, with the stack trace,
@@ -729,7 +731,6 @@ internal sealed partial class KeelHost : MonoBehaviour
         var fresh = new List<PluginEntry>();
         if (added.Count > 0)
         {
-            liveRunner.AddFolders(added);
             pass.Running = new HashSet<string>(Keel.Plugins.Where(p => ReportFormat.IsRunning(p.State)).Select(p => p.Guid));
             fresh = ScanAdded(added, pass.Running);
             RuleAnchorChain(now, liveRunner);
@@ -775,7 +776,11 @@ internal sealed partial class KeelHost : MonoBehaviour
     // Folders switched on in the Mods menu: their plugins, minus those already running and those switched off earlier in this game.
     private List<PluginEntry> ScanAdded(List<ModFolder> added, HashSet<string> running)
     {
-        List<PluginEntry> fresh = Scanner.Scan(added, Warn, skippedDlls, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+        var scanSkipped = new List<SkippedDll>();
+        List<PluginEntry> fresh = Scanner.Scan(added, gameBuild, Warn, scanSkipped, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+        skippedDlls.RemoveAll(old => added.Any(folder => SameFolder(folder, old.Folder)));
+        skippedDlls.AddRange(scanSkipped);
+        liveRunner.AddFolders(added, scanSkipped);
         foreach (PluginEntry p in fresh)
         {
             if (running.Contains(p.Guid))

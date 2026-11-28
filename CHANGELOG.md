@@ -4,6 +4,9 @@
 
 Merged since 0.8.0, ships with the next release ([how releases work](docs/community/releases.md)): start early, the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
 
+- **Select mod DLLs by game build** ([mod author guide](docs/for-mod-authors.md#select-dlls-by-game-build))
+  - Optional `[GameVersions]` rules in `keel.ini` match exact versions, release ranges or the SHA-256 of `Seapower-Scripts.dll`, including beta updates that reuse a version string.
+  - Older `globe` and `flat` rules still work and produce a deprecation note. Keel reports why it skipped each DLL.
 - **New name: just Keel** (Steam title *Keel - Sea Power Mod Loader*): shown as Keel in the game, the Mods list, the cards, the report, window titles and message boxes
   - why: the loader is for every Sea Power modder, not only the R.A.T.S. mods
   - plugin ids, folders and DLL names stay, so nothing changes for installs

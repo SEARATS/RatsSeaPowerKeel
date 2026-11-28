@@ -75,6 +75,8 @@ internal static class SelfTest
             Console.WriteLine("Harmony method history and its disk cache");
             MethodHistoryChecks.Run(tmp, core, ThisDll, Check);
             ScannerExclusions(tmp, managed, core);
+            Console.WriteLine("keel.ini: version and game assembly hash rules");
+            GameBuildManifests(tmp, managed, core);
             Console.WriteLine("Scanner: Anchor Chain plugin classes must be public (exported)");
             ExportedTypes(tmp, managed, core);
             Console.WriteLine("Entry point through the interface");
@@ -613,7 +615,7 @@ internal static class SelfTest
               "blocking start: A blocks; B needs C, which does not block, so B starts early without holding the game; all three start early");
         string nowhere = Path.Combine(Path.GetTempPath(), "keel-selftest-nowhere");
         var diskFolder = new ModFolder { Path = nowhere + Path.DirectorySeparatorChar, Name = "x", Enabled = true };
-        EarlyScan early = EarlyScan.Of(new List<ModFolder> { diskFolder });
+        EarlyScan early = EarlyScan.Of(new List<ModFolder> { diskFolder }, new GameBuild(null, diskFolder.Path));
         var gameFolder = new ModFolder { Path = nowhere.ToUpperInvariant(), Name = "x", Enabled = true };
         var otherFolder = new ModFolder { Path = nowhere + "-other", Name = "y", Enabled = true };
         Check(early.UseFor(new List<ModFolder> { otherFolder }, _ => { }, new List<SkippedDll>()) == null
@@ -987,7 +989,7 @@ internal static class SelfTest
         File.Copy(ThisDll, Path.Combine(dir, "sub", "AnchorChain.dll"), true);   // the exact name also counts in a sub folder
         var skipped = new List<SkippedDll>();
         var notes = new List<string>();
-        List<PluginEntry> found = Scanner.Scan(new[] { Folder(dir) }, notes.Add, skipped, managed, core);
+        List<PluginEntry> found = Scanner.Scan(new[] { Folder(dir) }, new GameBuild(null, managed), notes.Add, skipped, managed, core);
         string[] skippedNames = skipped.Select(s => Path.GetFileName(s.Path)).OrderBy(n => n).ToArray();
         Check(string.Join(",", skippedNames) == "AnchorChain.dll,AnchorChain.dll,AnchorChain.Preloader.dll,SeaPowerKeel.dll",
               "left out: " + string.Join(", ", skippedNames));
@@ -1004,12 +1006,79 @@ internal static class SelfTest
         Check(Report.Text(found, "h", notes).IndexOf("DLLs left out", StringComparison.Ordinal) < 0, "no section when nothing was left out (no list given)");
     }
 
+    private static void GameBuildManifests(string tmp, string managed, string core)
+    {
+        string dir = MakeFolder(tmp, "build-rules", "Earlier.dll", "Later.dll", "Shared.dll", "Ungated.dll", "Flat.dll",
+                                "Both.dll", "Moved.dll", "Bad.dll", "HashA.dll", "HashB.dll");
+        Directory.CreateDirectory(Path.Combine(dir, "variants"));
+        File.Copy(ThisDll, Path.Combine(dir, "variants", "Other.dll"));
+        string gameA = Path.Combine(tmp, "game-a"), gameB = Path.Combine(tmp, "game-b");
+        string hashA = FakeGameAssembly(gameA, "original"), hashB = FakeGameAssembly(gameB, "beta update");
+        File.WriteAllText(Path.Combine(dir, Manifest.FileName), $"""
+            [GameVersions]
+            Earlier.dll = 0.9.3-261116
+            Later.dll = 0.9.3-261123b
+            Shared.dll = >=0.9.3 <0.9.4, 0.10.1
+            Other.dll = 0.9.0
+            variants/Other.dll = 0.9.3
+            Moved.dll = 0.9.3
+            Bad.dll = >=bad
+            HashA.dll = sha256:{hashA.ToLowerInvariant()}
+            HashB.dll = sha256:{hashB}
+            [Keel]
+            flat = Flat.dll, Both.dll, Moved.dll
+            globe = Both.dll
+            """);
+
+        List<PluginEntry> Scan(string version, string game, List<string> notes, List<SkippedDll> skipped) =>
+            Scanner.Scan(new[] { Folder(dir) }, new GameBuild(version, game), notes.Add, skipped, managed, core);
+
+        var notes = new List<string>();
+        var skipped = new List<SkippedDll>();
+        List<PluginEntry> first = Scan("0.9.3-261116", gameA, notes, skipped);
+        var names = first.Select(p => Path.GetFileName(p.Dll)).ToHashSet();
+        Check(names.SetEquals(new[] { "Earlier.dll", "Shared.dll", "Ungated.dll", "Both.dll", "Moved.dll", "Other.dll", "HashA.dll" }),
+              "scan honors exact tags, release ranges, relative paths, legacy rules and unlisted DLLs");
+        Check(skipped.Count == 4 && skipped.All(d => d.VersionFiltered), "all ineligible DLLs are reported and withheld from library lookup");
+        Check(skipped.Any(d => d.Path.EndsWith("Later.dll") && d.Reason.Contains("0.9.3-261123b") && d.Reason.Contains("0.9.3-261116")),
+              "a version skip names the required and running build");
+        Check(skipped.Any(d => d.Path.EndsWith("HashB.dll") && d.Reason.Contains(hashB, StringComparison.OrdinalIgnoreCase) && d.Reason.Contains(hashA, StringComparison.OrdinalIgnoreCase)),
+              "a hash skip names the required and running hashes");
+        Check(notes.Count(n => n.Contains("deprecated")) == 1, "legacy keys produce one deprecation note per manifest");
+        Check(notes.Any(n => n.Contains("invalid [GameVersions] rule for Bad.dll")), "invalid rules are reported");
+
+        List<PluginEntry> sameVersion = Scan("0.9.3-261116", gameB, new(), new());
+        Check(sameVersion.Any(p => Path.GetFileName(p.Dll) == "HashB.dll") &&
+              sameVersion.All(p => Path.GetFileName(p.Dll) != "HashA.dll"), "same game version with different assembly bytes selects the other DLL");
+        List<PluginEntry> later = Scan("0.9.3-261123b", gameA, new(), new());
+        Check(later.Any(p => Path.GetFileName(p.Dll) == "Later.dll") &&
+              later.All(p => Path.GetFileName(p.Dll) != "Earlier.dll"), "only one of the same-ID versioned variants reaches the planner");
+        Check(Scan("0.9.4-261127", gameB, new(), new()).All(p => Path.GetFileName(p.Dll) != "Shared.dll"),
+              "an exclusive upper release bound also excludes its tagged builds");
+        Check(Scan("0.10.1-261128", gameB, new(), new()).Any(p => Path.GetFileName(p.Dll) == "Shared.dll"),
+              "a later comma-separated release rule can match");
+        Check(Scan(null, gameA, new(), new()).Any(p => Path.GetFileName(p.Dll) == "HashA.dll"),
+              "a hash rule works without a reported game version");
+        var missingHash = new List<SkippedDll>();
+        Scan("0.9.3-261116", tmp, new(), missingHash);
+        Check(missingHash.Any(d => d.Path.EndsWith("HashA.dll") && d.Reason.Contains("SHA-256 unavailable")),
+              "a missing game assembly leaves hash-targeted DLLs out and gives a reason");
+    }
+
+    private static string FakeGameAssembly(string managed, string content)
+    {
+        Directory.CreateDirectory(managed);
+        string assembly = Path.Combine(managed, "Seapower-Scripts.dll");
+        File.WriteAllText(assembly, content);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(assembly)));
+    }
+
     // ---- exported types ----
 
     private static void ExportedTypes(string tmp, string managed, string core)
     {
         string dir = MakeFolder(tmp, "exp", "Mods.dll");
-        List<PluginEntry> found = Scanner.Scan(new[] { Folder(dir) }, _ => { }, null, managed, core);
+        List<PluginEntry> found = Scanner.Scan(new[] { Folder(dir) }, new GameBuild(null, managed), _ => { }, null, managed, core);
         PluginEntry Get(string guid) => found.Single(p => p.Guid == guid);
         Check(Get("test.public").State == PluginState.Pending && Get("test.public").Exported, "public class: a plugin");
         Check(Get("test.nested.public").State == PluginState.Pending, "public class nested in a public class: a plugin (exported)");
