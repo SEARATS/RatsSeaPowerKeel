@@ -49,12 +49,11 @@ The same result as the setup, without running any `.exe`:
 6. Start the game. Anchor Chain or Alpine was installed: restart once.
 7. Ctrl+Shift+K shows Keel's report.
 
-- Loader updates come through the Workshop. Copy the current starter file when an update requires a newer stub.
+- Updates come through the Workshop as on Windows; the hand-copied starter file never needs replacing.
 - Undo: delete `BepInEx/plugins/SeaPowerKeel.Stub.dll` and `BepInEx/patchers/SeaPowerKeel.Patcher.dll`. Remove the launch option if no other BepInEx mod needs it.
 
 ## After installing
 
-- Mods that opt into `[Keel] Preload=` require stub 1.1.0 or later. Rerun KeelSetup or replace `BepInEx/plugins/SeaPowerKeel.Stub.dll` with the file under `copy-to-BepInEx-plugins` while the game is closed.
 - The stub runs once, while the game starts, and reads the mod list then. Restart after every change to the mod list.
 - Or let Keel follow: after the game's *Reload* in the Mods menu (Mods, Apply), Keel starts the code mods you switched on and takes switched-off ones out as far as the running game allows.
   - Their patches come off and a BepInEx plugin is stopped.

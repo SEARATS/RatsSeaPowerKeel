@@ -22,12 +22,6 @@ dotnet run -c Release --project tools/offline-check -- --selftest "<Managed>" "<
 dotnet run -c Release --project tools/offline-check -- --inicheck "<Managed>"
 ```
 
-The self-test covers the current stub's explicit preloader opt-in and both Keel boot signatures. To check the previous released stub and the current Anchor Chain preload and loader DLLs alongside those tests, extract their release archives and run this separate check.
-
-```powershell
-dotnet run -c Release --project tools/offline-check -- --preloader-compat "<Managed>" "<previous Keel stub DLL>" "<current Anchor Chain preloader DLL>" "<current Anchor Chain loader DLL>"
-```
-
 ## Layout
 
 | Path | What |

@@ -14,7 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SeaPowerKeel\SeaPowerKeel.csproj" />
-    <ProjectReference Include="..\..\src\SeaPowerKeel.Stub\SeaPowerKeel.Stub.csproj" Aliases="KeelStub" />
     <Compile Include="..\..\src\SeaPowerKeel.Setup\SetupCore.cs" Link="SetupCore.cs" />
     <Reference Include="Mono.Cecil"><HintPath>$(BepInExCore)\Mono.Cecil.dll</HintPath></Reference>
     <Reference Include="BepInEx"><HintPath>$(BepInExCore)\BepInEx.dll</HintPath></Reference>
