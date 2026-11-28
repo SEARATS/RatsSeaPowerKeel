@@ -51,7 +51,7 @@ public static class Keel
 
     /// <summary>
     /// For a mod with a preparation DLL (<c>[Keel] Prepare=</c> in its _info.ini): finishes when its preparation is done, failed
-    /// or was skipped. Already finished for a folder without one. Yield until it completes before using prepared data.
+    /// or was skipped. A folder without helpers completes as soon as discovery finishes.
     /// </summary>
     public static Task WhenPrepared(string modFolder) => Preparation.For(modFolder);
 
@@ -67,7 +67,11 @@ public static class Keel
         Plugins.Any(p => p.Guid == guid && p.State is PluginState.Running or PluginState.RunningWithErrors);
 
     /// <summary>Called by the stub (any version) with its own version and the path of this DLL.</summary>
-    public static void Boot(string stubVersion, string path)
+    public static void Boot(string stubVersion, string path) => BootWithPreloaders(stubVersion, path, null, null);
+
+    /// <summary>Called by newer stubs with their startup preloader discovery and execution callbacks.</summary>
+    public static void BootWithPreloaders(string stubVersion, string path, Func<string, string[]> findPreloaders,
+        Func<string, Action<string, string[], Action<string>>> openPreloader)
     {
         const string marker = Guid + ".booted";
         if (AppDomain.CurrentDomain.GetData(marker) != null)
@@ -76,6 +80,8 @@ public static class Keel
         // Awake runs inside AddComponent, so what it needs is handed over first.
         KeelHost.PendingStubVersion = stubVersion;
         KeelHost.PendingPath = path;
+        KeelHost.FindPreloaders = openPreloader == null ? null : findPreloaders;
+        KeelHost.OpenPreloader = openPreloader;
         var go = new GameObject(Name);
         UnityEngine.Object.DontDestroyOnLoad(go);
         go.AddComponent<KeelHost>();
@@ -106,6 +112,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         catch (Exception ex) { return $"Keel could not build the report: {ex.Message}"; }
     }
     internal static string PendingStubVersion, PendingPath;
+    internal static Func<string, string[]> FindPreloaders;
+    internal static Func<string, Action<string, string[], Action<string>>> OpenPreloader;
     public string StubVersion = PendingStubVersion;
     public string OwnPath = PendingPath;
     private bool noticeArmed;
@@ -448,7 +456,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             Preparation.Start(enabled, Paths.BepInExRootPath, Application.streamingAssetsPath, Application.version,
-                holdCrashers.Value, Loading.LoadingWindow.ReportPreparation, log.LogInfo, log.LogWarning).ForEach(Warn);
+                holdCrashers.Value, Loading.LoadingWindow.ReportPreparation, log.LogInfo, log.LogWarning,
+                FindPreloaders, OpenPreloader).ForEach(Warn);
         }
         catch (Exception ex)
         {

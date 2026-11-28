@@ -8,10 +8,9 @@ namespace SeaPowerKeel.Stub;
 
 /// <summary>
 /// The only part of Keel that goes into <c>BepInEx\plugins</c>. It finds <c>SeaPowerKeel.dll</c> in the game's
-/// enabled mod folders (newest version wins) and starts it. It knows nothing about the game, so it is the same file for
-/// every game build and should never need replacing: the loader itself comes and updates through the Workshop.
+/// enabled mod folders (newest version wins), and discovers and loads startup helpers for Keel's worker.
 /// </summary>
-[BepInPlugin(Guid, "R.A.T.S. Keel stub", "1.0.0")]
+[BepInPlugin(Guid, "Keel stub", "1.1.0")]
 public class Stub : BaseUnityPlugin
 {
     public const string Guid = KeelNames.StubGuid;
@@ -51,14 +50,9 @@ public class Stub : BaseUnityPlugin
                 candidates.OrderByDescending(c => c.version).ThenBy(c => c.folder.Order).First();
             Logger.LogInfo($"Starting R.A.T.S. Keel {pick.version} from {pick.folder.Label} ({pick.path})");
             Assembly loader = Assembly.LoadFrom(pick.path);
-            MethodInfo boot = loader.GetType(LoaderType, throwOnError: true)
-                                    .GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
-            if (boot == null)
-            {
+            Type keel = loader.GetType(LoaderType, throwOnError: true);
+            if (!StartupPreloaders.Boot(keel, Info.Metadata.Version.ToString(), pick.path))
                 Logger.LogError($"{pick.path} has no {LoaderType}.Boot: not a Keel loader this stub can start.");
-                return;
-            }
-            boot.Invoke(null, new object[] { Info.Metadata.Version.ToString(), pick.path });
         }
         catch (Exception ex)
         {

@@ -91,14 +91,16 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 
 Use preparation to read, parse, or index files while the splash screen is up. Keep Unity calls, game APIs, Harmony patches, and UI work in your normal plugin. A preparation helper and the plugin can start independently.
 
-Put the helper DLL beside your mod's `_info.ini` and name it there.
+With Keel stub 1.1.0 or later, name the helper `MyMod.Preloader.dll` or `MyModPreloader.dll`. The stub searches enabled mod folders and their subfolders for names ending in `Preloader.dll`. Keel handles Anchor Chain's own starter through the existing loader settings.
+
+You can also name a DLL at the top level in your mod's `_info.ini`. This works with the older stub too.
 
 ```ini
 [Keel]
 Prepare=MyMod.Prepare.dll
 ```
 
-The helper can target `netstandard2.1` with no game or loader references. Give one public type a method with this signature.
+Keel runs a file listed both ways once. Either way, the helper can target `netstandard2.1` with no game or loader references. Give one public type a method with this signature.
 
 ```csharp
 using System;

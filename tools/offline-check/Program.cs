@@ -22,6 +22,8 @@ internal static class Program
             Console.WriteLine($"Wrote {snapshot.Methods.Count:N0} methods for Sea Power {snapshot.Build} to {path}");
             return 0;
         }
+        if (args.Length == 5 && args[0] == "--preloader-compat")
+            return SelfTest.CheckReleasedPreloaders(args[1], args[2], args[3], args[4]);
         if (args.Length > 0 && args[0] == "--selftest")
             return SelfTest.Run(args.Skip(1).ToArray());
         if (args.Length > 0 && args[0] == "--inicheck")
@@ -31,6 +33,7 @@ internal static class Program
             Console.WriteLine("usage: SeaPowerKeel.OfflineCheck <Managed> <BepInEx core> <mod folder | folder of mod folders> ...");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --selftest <Managed> <BepInEx core>      (Keel's own tests; exit code 1 when one fails)");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --inicheck <Managed> [<Managed> ...]     (do the game's IniHandler members [ACConfig] needs exist?)");
+            Console.WriteLine("       SeaPowerKeel.OfflineCheck --preloader-compat <Managed> <previous Keel stub DLL> <Anchor Chain preloader DLL> <Anchor Chain loader DLL>");
             Console.WriteLine("       SeaPowerKeel.OfflineCheck --snapshot-methods <game build version> <Managed> <history directory>");
             return 2;
         }

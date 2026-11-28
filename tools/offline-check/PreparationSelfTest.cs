@@ -1,10 +1,16 @@
+extern alias KeelStub;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using TypeAttributes = Mono.Cecil.TypeAttributes;
+using MethodAttributes = Mono.Cecil.MethodAttributes;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using SeaPowerKeel;
+using StartupPreloaders = KeelStub::SeaPowerKeel.Stub.StartupPreloaders;
 
 // Preparation DLLs and the compatibility checks made on a worker during the splash (PR #16, reworked).
 internal static partial class SelfTest
@@ -14,9 +20,9 @@ internal static partial class SelfTest
         Console.WriteLine("Preparation DLLs: opt-in by [Keel] Prepare=, run on a worker, held after a crash inside one");
         Check(EarlyStart.ValueInInfoIni(["[Language_en]", "Prepare=No.dll", "[Keel]", "Prepare = My.Prepare.dll ; note"], Preparation.InfoKey) == "My.Prepare.dll"
               && EarlyStart.ValueInInfoIni(["[Keel]", "StartEarly=true"], Preparation.InfoKey) == null,
-              "prepare: only [Keel] Prepare= counts, value trimmed, comments cut");
-        Check(Preparation.Forbidden("UnityEngine.CoreModule") && Preparation.Forbidden("Assembly-CSharp") && Preparation.Forbidden("0Harmony")
-              && Preparation.Forbidden("SeaPowerKeel") && !Preparation.Forbidden("System.Runtime") && !Preparation.Forbidden("Newtonsoft.Json"),
+              "prepare: the manifest parser reads Prepare= in [Keel] and trims comments");
+        Check(PreparationEntry.Forbidden("UnityEngine.CoreModule") && PreparationEntry.Forbidden("Assembly-CSharp") && PreparationEntry.Forbidden("0Harmony")
+              && PreparationEntry.Forbidden("SeaPowerKeel") && !PreparationEntry.Forbidden("System.Runtime") && !PreparationEntry.Forbidden("Newtonsoft.Json"),
               "prepare: game, Unity, loaders and Harmony are refused as references; the runtime and plain libraries are not");
 
         string mod = Path.Combine(tmp, "prep-mod");
@@ -81,6 +87,8 @@ internal static partial class SelfTest
               && warned.Count == 1 && warned[0].Contains("Broken.dll") && steps.Count == 2,
               "prepare: a broken helper completes, the next enabled helper runs off-thread and the disabled helper stays out");
 
+        StubPreloaderChecks(tmp, root);
+
         Console.WriteLine("Compatibility checks made on a worker during the splash");
         string checkDir = Path.Combine(tmp, "prep-check");
         Directory.CreateDirectory(checkDir);
@@ -96,6 +104,110 @@ internal static partial class SelfTest
         Check(prepared.Take(changed) == null, "prepared check: an updated DLL falls back to the regular check");
         Check(prepared.Take(outdated) == null, "prepared check: declared mismatches go through the method-history path");
         Check(prepared.Take(Path.Combine(checkDir, "Other.dll")) == null, "prepared check: a DLL absent from the disk scan falls back");
+    }
+
+    // Run separately from the stand-in tests so the release assemblies resolve to their real interfaces.
+    public static int CheckReleasedPreloaders(string managed, string previousStub, string anchorPreloader, string anchorLoader)
+    {
+        Program.ResolveFrom(managed);
+        using var previous = AssemblyDefinition.ReadAssembly(previousStub);
+        MethodDefinition awake = previous.MainModule.GetType("SeaPowerKeel.Stub.Stub").Methods.Single(m => m.Name == "Awake");
+        string[] names = awake.Body.Instructions.Where(i => i.OpCode.Code == Code.Ldstr).Select(i => (string)i.Operand).ToArray();
+        MethodInfo boot = typeof(Keel).GetMethod("Boot", BindingFlags.Public | BindingFlags.Static);
+        Check(boot != null && names.Contains(typeof(Keel).FullName) && names.Contains(boot.Name) && boot.ReturnType == typeof(void)
+              && boot.GetParameters().Select(p => p.ParameterType).SequenceEqual([typeof(string), typeof(string)]),
+              $"preloader: released Keel stub {previous.Name.Version.ToString(3)} resolves the legacy boot signature");
+
+        Assembly preloader = Assembly.LoadFrom(Path.GetFullPath(anchorPreloader));
+        Assembly loader = Assembly.LoadFrom(Path.GetFullPath(anchorLoader));
+        Type loaderType = loader.GetType(AcLoaderShim.LoaderType, throwOnError: true);
+        Type contract = preloader.GetType("AnchorChain.Preloader.IPluginLoader", throwOnError: true);
+        Check(contract.IsAssignableFrom(loaderType) && contract.GetMethod("LoadPlugins")?.ReturnType == typeof(void),
+              $"preloader: Anchor Chain {loader.GetName().Version.ToString(3)} binds to the current preloader's LoadPlugins interface");
+        string reason = AcLoaderShim.Prime(loader, [], Path.GetTempPath());
+        Check(reason == null, reason ?? "preloader: Keel can prime the released Anchor Chain loader for its mods");
+        return failures == 0 ? 0 : 1;
+    }
+
+    private class CurrentBoot
+    {
+        public static Func<string, string[]> Find;
+        public static Func<string, Action<string, string[], Action<string>>> Open;
+
+        public static void BootWithPreloaders(string version, string path, Func<string, string[]> find,
+            Func<string, Action<string, string[], Action<string>>> open)
+        {
+            Find = find;
+            Open = open;
+        }
+
+        public static void Boot(string version, string path) => throw new InvalidOperationException("Expected preloader callbacks.");
+    }
+
+    private class LegacyBoot
+    {
+        public static string Path;
+
+        public static void Boot(string version, string path) => Path = path;
+    }
+
+    private static void StubPreloaderChecks(string tmp, string root)
+    {
+        Console.WriteLine("Stub preloader discovery and boot compatibility");
+        Check(StartupPreloaders.Boot(typeof(LegacyBoot), "1.1.0", "legacy.dll") && LegacyBoot.Path == "legacy.dll",
+              "preloader: the new stub still calls Boot on an older Keel");
+        Check(StartupPreloaders.Boot(typeof(CurrentBoot), "1.1.0", "keel.dll")
+              && CurrentBoot.Find != null && CurrentBoot.Open?.Method.DeclaringType?.Assembly == typeof(StartupPreloaders).Assembly,
+              "preloader: the new Keel boot receives the stub's discovery and execution callbacks");
+        Check(typeof(Keel).GetMethod("Boot")?.GetParameters().Length == 2,
+              "preloader: older stubs still have the original unambiguous boot entry");
+
+        string folder = Path.Combine(tmp, "preloaders"), nested = Path.Combine(folder, "code", "helpers");
+        Directory.CreateDirectory(nested);
+        string direct = Path.Combine(folder, "DirectPreloader.dll"), deep = Path.Combine(nested, "Nested.PreLoader.DLL");
+        string legacy = Path.Combine(folder, KeelNames.AnchorChainPreloaderFile), similar = Path.Combine(folder, "Extra.Preloader.dll.bak");
+        WritePrepareDll(direct, "DirectPreloaderFixture");
+        WritePrepareDll(deep, "NestedPreloaderFixture");
+        File.WriteAllText(legacy, "reserved loader");
+        File.WriteAllText(similar, "backup");
+        File.WriteAllText(Path.Combine(folder, "_info.ini"), "[Keel]\nPrepare=DirectPreloader.dll\n");
+        Check(CurrentBoot.Find(folder).OrderBy(x => x).SequenceEqual(new[] { direct, deep }.OrderBy(x => x)),
+              "preloader: suffix discovery is recursive, case-insensitive and leaves out Anchor Chain and backup files");
+
+        string disabled = Path.Combine(tmp, "preloaders-off");
+        Directory.CreateDirectory(disabled);
+        WritePrepareDll(Path.Combine(disabled, "OffPreloader.dll"), "DisabledPreloaderFixture");
+        string outdated = Path.Combine(tmp, "preloaders-outdated");
+        Directory.CreateDirectory(outdated);
+        WritePrepareDll(Path.Combine(outdated, "OldPreloader.dll"), "OutdatedPreloaderFixture");
+        File.WriteAllText(Path.Combine(outdated, "_info.ini"), "[Compatibility]\nExactVersion=0.9.2\n");
+        ModFolder[] folders = [Folder(folder), Folder(disabled), Folder(outdated)];
+        folders[0].Enabled = true;
+        folders[1].Enabled = false;
+        folders[2].Enabled = true;
+        var ran = new List<string>();
+        var warned = new List<string>();
+
+        Action<string, string[], Action<string>> Open(string path)
+        {
+            ran.Add(path);
+            return CurrentBoot.Open(path);
+        }
+        int reports = 0;
+        Preparation.Start(folders, root, tmp, "0.9.3", true, message => { if (message != null) reports++; },
+            _ => { }, warned.Add, CurrentBoot.Find, Open);
+        Check(Preparation.For(folder).Wait(10000) && ran.SequenceEqual(CurrentBoot.Find(folder))
+              && reports == 2 && warned.Count == 0 && Preparation.For(disabled).IsCompleted && Preparation.For(outdated).IsCompleted,
+              "preloader: both helpers run once through the stub, even with a matching Prepare entry, and other folders stay out");
+
+        string state = Path.Combine(root, KeelNames.PrepareFile);
+        File.WriteAllText(state, $"running\t{deep}\t{CrashGuard.Stamp(deep)}\n");
+        ran.Clear();
+        warned.Clear();
+        Preparation.Start(folders, root, tmp, "0.9.3", true, _ => { }, _ => { }, warned.Add, CurrentBoot.Find, Open);
+        Check(Preparation.For(folder).Wait(10000) && ran.SequenceEqual([direct]) && warned.Count == 1
+              && warned[0].Contains("Nested.PreLoader.DLL") && File.ReadAllText(state).StartsWith("held\t"),
+              "preloader: the crash holdout applies to an automatically discovered helper");
     }
 
     // A preparation DLL written with Cecil: Prepare(streamingAssets, folders, report) reports "prepared <first folder's name>".
