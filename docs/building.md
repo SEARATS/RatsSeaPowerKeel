@@ -8,6 +8,7 @@ dotnet build src/SeaPowerKeel.Stub/SeaPowerKeel.Stub.csproj -c Release
 - `-p:GameDir=...` for another install.
 - Run `git submodule update --init` before packaging to include the [method history snapshots](method-history.md).
 - `tools/package.ps1` (or `python tools/modtool.py package keel --yes` in the workspace) stages `dist\SeaPowerKeel\` for the Workshop. Page text and picture are in `workshop/`.
+- Release packaging uses pinned public references for BepInEx, Unity, and Noesis. Sea Power supplies Noesis at runtime.
 - `tools/offline-check` runs Keel's scanner, game-version check and planner over mod folders on disk against a game build's `Managed` folder, without the game:
 
 ```
