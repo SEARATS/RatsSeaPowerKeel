@@ -56,7 +56,7 @@ internal sealed class Progress
         public bool HasProblems => WithErrors + NotStarted + OrderWarnings > 0;
 
         // The summary card's lines, the same on the loading window's card and the game-drawn one.
-        public string Title => "R.A.T.S. KEEL" + (string.IsNullOrEmpty(KeelVersion) ? "" : " " + KeelVersion);
+        public string Title => "KEEL" + (string.IsNullOrEmpty(KeelVersion) ? "" : " " + KeelVersion);
         public string ReadyLine => $"{Running} running · Game ready in {Clock(DoneElapsed > 0 ? DoneElapsed : Elapsed)}" + (Skipped > 0 ? $" · {Skipped} skipped" : "");
 
         public string SummaryLine(string alert)

@@ -41,7 +41,9 @@ internal static class Scanner
         foreach (ModFolder folder in folders)
         {
             Manifest manifest = Manifest.Read(folder.Path, warn);
-            bool folderEarly = EarlyStart.FolderAsks(folder.Path), folderBlocking = EarlyStart.FolderBlocks(folder.Path);
+            string[] info = folder.InfoLines;
+            bool folderEarly = EarlyStart.InInfoIniLines(info, EarlyStart.InfoKey);
+            bool folderBlocking = EarlyStart.InInfoIniLines(info, EarlyStart.BlockingInfoKey);
             List<RequiredItem> required = RequiredItems.OfFolder(folder.Path);
             List<string> dlls;
             try

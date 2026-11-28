@@ -1,10 +1,37 @@
 # Changelog
 
-## 0.8.1 - unreleased - start early: the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
+## Unreleased
 
+Merged since 0.8.0, ships with the next release ([how releases work](docs/community/releases.md)): start early, the game waits only for blocking mods; the report groups plugins by mod; runtime activity diagnostics; recover from broken mod starts
+
+- **New name: just Keel** (Steam title *Keel - Sea Power Mod Loader*): shown as Keel in the game, the Mods list, the cards, the report, window titles and message boxes
+  - why: the loader is for every Sea Power modder, not only the R.A.T.S. mods
+  - plugin ids, folders and DLL names stay, so nothing changes for installs
+- **Keel has its own tab in the game's Options menu** (Keel)
+  - the settings players change: version question, game version check, broken patches, crashers, What's new, notices, report size, loading window, log
+  - most apply at the next start (Keel reads them while the game starts); the rest stays in the config file
+- **The game's version question no longer stops every start** (new setting `Loading.VersionQuestion`, default `Auto`)
+  - why: most mods never update their `_info.ini` version line, so players clicked Ignore at every start
+  - `Auto`: Keel answers Ignore when every listed mod is a code mod; Keel checks those DLLs against the running build and leaves out what does not fit
+  - a data mod on the list (units, sounds, missions): the game still asks, Keel cannot check those
+  - `Skip`: always Ignore; `Ask`: the game always asks, as before
+  - the report names the mods Keel answered for
+  - a Workshop item whose metadata misses the game version still gets no updates from the game: only its author can fix that
+- **Keel names game methods that changed under an out-of-date Harmony mod** ([method history](docs/method-history.md))
+  - why: a mod whose `_info.ini` names an older game version may patch code that changed since; the report says which targets and lookups
+  - compares the installed `Seapower-Scripts.dll` with a bundled snapshot of that older build (first one: 0.9.3-261116, from SEARATS/binaries)
+  - names a changed method body, changed callers or changed callees; Standard and Strict still decide whether the mod starts
+  - the result is cached per mod DLL and game build, so later starts skip the scan
 - **`BlockingStart=true`** (`_info.ini` `[Keel]`, or `AssemblyMetadata("Keel.BlockingStart", "true")` in the DLL; rgreat, PR #9): the mod starts right before the game's first load screen, and the game waits for it
   - why: a mod that replaces the load-screen pictures must run before the first one shows
   - implies `StartEarly`
+- **The report shows each DLL's SHA-256**: short in the report window, full in `Keel-report.txt`
+  - why: players can match a file with the checksum list of its release (`SHA256SUMS.txt`, GitHub release notes)
+- **Builds come out byte for byte the same**: deterministic build settings and a pinned .NET SDK (`global.json`)
+  - why: anyone can rebuild a release and compare the checksums
+- **GitHub checks every release by itself**: it rebuilds Keel from the release's source, compares every file with the zip, checks them on VirusTotal and writes the result into the release notes
+  - signed build proof per file: `gh attestation verify <file> --repo SEARATS/RatsSeaPowerKeel`
+  - Keel now compiles against the official BepInEx release and Unity's public reference files, pinned by hash, on every PC alike
 - **`StartEarly` mods start in the game's first frames**, one per frame, next to the game (they no longer hold it up)
 - **The early opt-in is seen in the DLL too**: Keel looks at the plugins of the mod list on disk before the game's first frame
   - the same scan serves the start when the game's list matches it, so no DLL is read twice
@@ -15,16 +42,9 @@
   - the menu is measured on a screen-size change or a new scene, then every 10 s (a mod may add an entry later)
   - where the game's UI root has no size, the menu view is the frame
 - 3 new self-test checks
-- **Mods can prepare data during the splash** (`[Keel] Prepare=<dll>` in `_info.ini`; agm-114, PR #16)
-  - Keel runs the DLL's `Prepare` on a worker, one mod after another, while the game shows its splash
-  - opt-in by that key only, top of the mod folder only: no file-name rule, no folder walk
-  - the plugin asks `Keel.WhenPrepared(folder)`; a line of its progress shows in the loading window
-  - a preparation the game died in is held until the mod is updated (`Keel-prepare.txt`, `HoldOutCrashers`)
-  - run by Keel, not the stub: the stub stays 1.0.0 and needs no update
-- **The game-version check of the mods on disk runs on a worker during the splash** (agm-114, PR #16)
-  - the main thread no longer spends a frame per DLL; a DLL that changed since is checked again
-- **`Keel.HandOffStartupWindow()`**: a mod that draws its own start-up progress hides Keel's loading window; the summary card still comes
-- 16 new self-test checks
+- Code mods can use `[Keel] Prepare=<dll>` to read or index data on a worker during the splash. See the [startup preparation guide](docs/for-mod-authors.md#prepare-startup-data).
+- Keel uses background compatibility results as they finish and checks the DLL hash before reusing them. Pending or changed DLLs use the regular check.
+- Mods with their own startup progress can hide Keel's loading window with `Keel.HandOffStartupWindow()`. Keel still shows the summary card.
 - **The in-game report groups plugins by mod** (PR #13 by agm-114)
   - a mod with one DLL: one compact row
   - a pack with several DLLs: one header row that opens to its plugins; only packs with issues open by themselves
@@ -53,6 +73,16 @@
   - a mod that merely called a patched game method no longer hides the mod whose patch broke
   - mods sharing one DLL can use their plugin ID as Harmony ID so Keel tells their patches apart
 - **The compatibility check reads Harmony's ref, out and pointer argument kinds** when matching overloads (false warning on UNREP's speed patch)
+- **Every crash leaves `BepInEx\Keel-crash.json`** next to `Keel-crash.txt`, and *Save logs* / *Send report* pack it
+  - the crash as fields: exception or native module and code, managed frames, the mod it is pinned on, Keel's step, the scene
+  - why: the feedback board groups reports by these fields instead of guessing from log text
+  - no paths, no arguments, no user names ([docs/crash-json.md](docs/crash-json.md))
+- **Send report shows the board's answer** under the report number: a known problem and the version that fixes it, or a new one
+- **Send report says first when a fix is out**: "Known problem, fixed in <mod> <version>: please update"
+  - only when the crash is pinned on a mod and the board lists a fix newer than the installed version; sending stays possible
+  - only the mod's name goes out for that; offline or slow (4 s) means no hint
+- `Keel-mods.txt` (the watcher's list) carries each mod's version
+- 12 new self-test checks
 
 ## 0.8.0 - 2026-11-21 - the loader only: the shared mod skeleton leaves, the 0.8.7 paths go
 

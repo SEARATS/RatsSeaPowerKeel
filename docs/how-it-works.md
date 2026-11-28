@@ -1,4 +1,4 @@
-# R.A.T.S. Keel: how it works and takeover
+# Keel: how it works and takeover
 
 ## How it works
 
@@ -11,13 +11,13 @@
 
 For mod authors: your mod loads as built, nothing to recompile or add.
 
-- List R.A.T.S. Keel as your Workshop item's required item (3835527459). Keel brings Anchor Chain's library, so your players need no Anchor Chain item.
+- List Keel as your Workshop item's required item (3835527459). Keel brings Anchor Chain's library, so your players need no Anchor Chain item.
 - When a game update breaks a mod, Keel's report names the missing method, field or type.
 - How to write one (BepInEx plugins, Anchor Chain mods, start early, `keel.ini` for mods with one DLL per game build): [docs/for-mod-authors.md](for-mod-authors.md).
 
 ## Takeover
 
-While R.A.T.S. Keel is switched on in the game's Mods menu, it is the only mod loader that runs. Other loaders that are still
+While Keel is switched on in the game's Mods menu, it is the only mod loader that runs. Other loaders that are still
 installed (Anchor Chain's preloader, Alpine's Mod Loader) are kept from starting, so every mod is started once, by Keel.
 
 - **How:** Keel keeps a small BepInEx patcher, `BepInEx\patchers\SeaPowerKeel.Patcher.dll`. BepInEx runs patchers before any

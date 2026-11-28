@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -27,6 +25,9 @@ internal sealed class Preflight : IDisposable
         public readonly List<string> Lookups = new();
         /// <summary>Harmony patches whose parameters do not fit the game method: they read or write the wrong kind of memory, which can take the game down.</summary>
         public readonly List<string> Fatal = new();
+        public bool PatchCheckIncomplete;
+        public readonly HashSet<string> PatchTargets = new(StringComparer.Ordinal);
+        public readonly HashSet<string> LookupTargets = new(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -111,69 +112,14 @@ internal sealed class Preflight : IDisposable
         resolver.AddSearchDirectory(bepInExCore);
     }
 
-    /// <summary>
-    /// The checks of the DLLs the early scan found, made on a worker while the game shows its splash (agm-114, PR #16), so the
-    /// main thread does not spend a frame per DLL later. Each result keeps a hash of the bytes it read: the Workshop can replace a
-    /// DLL in between, and a changed file is checked again on the main thread.
-    /// </summary>
-    internal sealed class Prepared
+    public Result Check(string dll, byte[] image = null)
     {
-        private readonly Dictionary<string, (byte[] Hash, Result Result)> checks = new(StringComparer.OrdinalIgnoreCase);
-
-        internal static Task<Prepared> Start(string managedDir, string bepInExCore, string[] files) => Task.Run(() =>
-        {
-            var batch = new Prepared();
-            try
-            {
-                using var reader = new Preflight(managedDir, bepInExCore);
-                using var sha = SHA256.Create();
-                foreach (string file in files)
-                {
-                    try
-                    {
-                        byte[] bytes = File.ReadAllBytes(file);
-                        batch.checks[Path.GetFullPath(file)] = (sha.ComputeHash(bytes), reader.Check(file, bytes));
-                    }
-                    catch (Exception)
-                    {
-                        // the main thread's own check reports an unreadable DLL
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // no reader: the main thread checks every DLL as before
-            }
-            return batch;
-        });
-
-        /// <summary>The worker's result for <paramref name="file"/> when the file is still the same; else null.</summary>
-        internal Result For(string file)
-        {
-            try
-            {
-                if (!checks.TryGetValue(Path.GetFullPath(file), out var check))
-                    return null;
-                using var sha = SHA256.Create();
-                using FileStream input = File.OpenRead(file);
-                return sha.ComputeHash(input).SequenceEqual(check.Hash) ? check.Result : null;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-    }
-
-    public Result Check(string dll) => Check(dll, null);
-
-    private Result Check(string dll, byte[] bytes)
-    {
-        if (byDll.TryGetValue(dll, out Result cached))
+        if (image == null && byDll.TryGetValue(dll, out Result cached))
             return cached;
         var r = new Result();
-        byDll[dll] = r;
-        using var stream = new MemoryStream(bytes ?? File.ReadAllBytes(dll));
+        if (image == null)
+            byDll[dll] = r;   // a caller with its own image (the method history) keeps the result itself
+        using var stream = new MemoryStream(image ?? File.ReadAllBytes(dll), writable: false);
         using ModuleDefinition mod = ModuleDefinition.ReadModule(stream, new ReaderParameters { AssemblyResolver = resolver, ReadSymbols = false });
         var classLoad = new SortedSet<string>();
         var uses = new SortedSet<string>();
@@ -190,11 +136,11 @@ internal sealed class Preflight : IDisposable
         var patches = new SortedSet<string>();
         try
         {
-            CheckPatches(mod, patches, r.Fatal);
+            CheckPatches(mod, patches, r);
         }
         catch (Exception)
         {
-            // The patch check is an extra; whatever it cannot read stays unchecked, as before it existed.
+            r.PatchCheckIncomplete = true;
         }
         r.ClassLoad.AddRange(classLoad);
         r.Uses.AddRange(uses.Except(classLoad));
@@ -291,7 +237,7 @@ internal sealed class Preflight : IDisposable
     // Not checked: names built at run time, TargetMethod(), and whether a transpiler's code still matches the target's IL.
 
     /// <summary>HarmonyLib.MethodType, by its numbers (Keel does not reference Harmony's enum in the attribute data it reads).</summary>
-    private enum MethodKind { Normal = 0, Getter = 1, Setter = 2, Constructor = 3, StaticConstructor = 4, Enumerator = 5 }
+    private enum MethodKind { Normal = 0, Getter = 1, Setter = 2, Constructor = 3, StaticConstructor = 4, Enumerator = 5, Async = 6 }
 
     private sealed class PatchSpec
     {
@@ -316,6 +262,7 @@ internal sealed class Preflight : IDisposable
             MethodKind.Getter => "get_" + Name,
             MethodKind.Setter => "set_" + Name,
             MethodKind.Constructor => ".ctor",
+            MethodKind.StaticConstructor => ".cctor",
             _ => Name,
         };
 
@@ -323,7 +270,7 @@ internal sealed class Preflight : IDisposable
         public IEnumerable<MethodDefinition> Candidates(TypeDefinition target)
         {
             IEnumerable<MethodDefinition> found = target.Methods.Where(m => m.Name == MethodName);
-            if (Args == null || Kind == MethodKind.Enumerator)
+            if (Args == null)
                 return found;
             var wanted = Args.Select(a => a?.FullName).ToList();
             return found.Where(m => m.Parameters.Select(p => p.ParameterType.FullName).SequenceEqual(wanted));
@@ -385,7 +332,7 @@ internal sealed class Preflight : IDisposable
         return spec;
     }
 
-    private void CheckPatches(ModuleDefinition mod, SortedSet<string> into, List<string> fatal)
+    private void CheckPatches(ModuleDefinition mod, SortedSet<string> into, Result result)
     {
         foreach (TypeDefinition type in mod.GetTypes())
         {
@@ -401,8 +348,16 @@ internal sealed class Preflight : IDisposable
                 string problem = MissingTarget(spec);
                 if (problem != null)
                     into.Add(problem);
-                else
-                    CheckSignature(method, spec, fatal);
+                else if (Target(spec) is TypeDefinition target && spec.MethodName != null)
+                {
+                    MethodDefinition[] candidates = spec.Candidates(target).Take(2).ToArray();
+                    if (candidates.Length != 1)
+                        continue;
+                    MethodDefinition original = candidates[0];
+                    RememberTarget(result.PatchTargets, PatchedMethod(original, spec.Kind));
+                    if (spec.Kind is not (MethodKind.StaticConstructor or MethodKind.Enumerator or MethodKind.Async))
+                        CheckSignature(method, target, original, result.Fatal);
+                }
             }
         }
         // Twice: the first pass learns which static fields hold a Type found by name, the second reports.
@@ -410,7 +365,8 @@ internal sealed class Preflight : IDisposable
         for (int pass = 0; pass < 2; pass++)
             foreach (TypeDefinition type in mod.GetTypes())
                 foreach (MethodDefinition method in type.Methods.Where(m => m.HasBody))
-                    new LookupScan(this, method, pass == 1 ? into : new SortedSet<string>(), fieldTypes).Run();
+                    new LookupScan(this, method, pass == 1 ? into : new SortedSet<string>(), fieldTypes,
+                        pass == 1 ? result.LookupTargets : null).Run();
     }
 
     // ---- Do a patch's parameters fit the method it patches? ----
@@ -449,22 +405,31 @@ internal sealed class Preflight : IDisposable
     private TypeDefinition Target(PatchSpec spec) =>
         spec.Type != null ? (Game(spec.Type) ? ResolveType(spec.Type) : null) : spec.TypeName != null ? FindType(spec.TypeName) : null;
 
-    private void CheckSignature(MethodDefinition patch, PatchSpec spec, List<string> fatal)
+    private static void RememberTarget(HashSet<string> targets, MethodDefinition method)
     {
-        if (!patch.HasParameters || spec.Kind is MethodKind.StaticConstructor or MethodKind.Enumerator)
-            return;
-        TypeDefinition type = Target(spec);
-        if (type == null || spec.MethodName == null)
-            return;
-        List<MethodDefinition> found = spec.Candidates(type).ToList();
-        if (found.Count != 1)
-            return;   // Harmony's choice among overloads is not Keel's to guess
-        MethodDefinition target = found[0];
+        if (targets != null && method?.Module.Assembly?.Name.Name == MethodSnapshot.AssemblyName)
+            targets.Add(MethodSnapshot.Id(method));
+    }
+
+    private static MethodDefinition PatchedMethod(MethodDefinition original, MethodKind kind)
+    {
+        if (kind is not (MethodKind.Enumerator or MethodKind.Async))
+            return original;
+        string attribute = kind == MethodKind.Enumerator ? "IteratorStateMachineAttribute" : "AsyncStateMachineAttribute";
+        CustomAttribute marker = original.CustomAttributes.FirstOrDefault(a =>
+            a.AttributeType.FullName == "System.Runtime.CompilerServices." + attribute);
+        if (marker?.ConstructorArguments.FirstOrDefault().Value is TypeReference machine)
+            return ResolveType(machine)?.Methods.FirstOrDefault(m => m.Name == "MoveNext" && !m.HasParameters);
+        return null;
+    }
+
+    private static void CheckSignature(MethodDefinition patch, TypeDefinition type, MethodDefinition target, List<string> fatal)
+    {
         foreach (ParameterDefinition p in patch.Parameters)
         {
             TypeReference other = Injected(p.Name, type, target);
             if (other != null && !Fits(p.ParameterType, other))
-                fatal.Add($"{patch.DeclaringType.Name}.{patch.Name} takes '{p.Name}' as {Plain(p.ParameterType).Name}, but {type.Name}.{spec.MethodName} has {Plain(other).Name}");
+                fatal.Add($"{patch.DeclaringType.Name}.{patch.Name} takes '{p.Name}' as {Plain(p.ParameterType).Name}, but {type.Name}.{target.Name} has {Plain(other).Name}");
         }
     }
 
@@ -496,7 +461,8 @@ internal sealed class Preflight : IDisposable
             return spec.Type != null || IsGameName(typeName) ? typeName : null;
         if (spec.Kind == MethodKind.StaticConstructor)
             return target.Methods.Any(m => m.Name == ".cctor") ? null : $"{typeName}::.cctor";
-        if (spec.MethodName == null || spec.Candidates(target).Any())
+        if (spec.MethodName == null || (spec.Kind == MethodKind.Enumerator
+            ? target.Methods.Any(m => m.Name == spec.MethodName) : spec.Candidates(target).Any()))
             return null;   // no method named (TargetMethod() or an incomplete attribute): nothing to compare with this build
         string args = spec.Args != null ? string.Join(", ", spec.Args.Select(a => a?.Name)) : "";
         return $"{typeName}::{spec.MethodName}({args})";
@@ -612,15 +578,17 @@ internal sealed class Preflight : IDisposable
         private readonly Mono.Collections.Generic.Collection<Instruction> ins;
         private readonly SortedSet<string> into;
         private readonly Dictionary<string, string> fieldTypes;                                 // static fields holding a Type found by a literal name
+        private readonly HashSet<string> targets;
         private readonly Dictionary<VariableDefinition, string> locals = new();                // locals holding one
 
-        public LookupScan(Preflight owner, MethodDefinition method, SortedSet<string> into, Dictionary<string, string> fieldTypes)
+        public LookupScan(Preflight owner, MethodDefinition method, SortedSet<string> into, Dictionary<string, string> fieldTypes, HashSet<string> targets)
         {
             this.owner = owner;
             this.method = method;
             ins = method.Body.Instructions;
             this.into = into;
             this.fieldTypes = fieldTypes;
+            this.targets = targets;
         }
 
         public void Run()
@@ -674,7 +642,17 @@ internal sealed class Preflight : IDisposable
             string memberName = shape == "PropertyGetter" ? "get_" + member : shape == "PropertySetter" ? "set_" + member : member;
             bool found = false;
             for (TypeDefinition t = def; t != null && !found; t = declaredOnly ? null : Base(t))
-                found = shape == "Field" ? t.Fields.Any(f => f.Name == member) : t.Methods.Any(m => m.Name == memberName);
+            {
+                if (shape == "Field")
+                    found = t.Fields.Any(f => f.Name == member);
+                else
+                {
+                    MethodDefinition[] candidates = t.Methods.Where(m => m.Name == memberName).Take(2).ToArray();
+                    found = candidates.Length != 0;
+                    if (candidates.Length == 1)
+                        RememberTarget(targets, candidates[0]);
+                }
+            }
             if (!found)
                 into.Add($"{typeName}::{memberName}");
         }

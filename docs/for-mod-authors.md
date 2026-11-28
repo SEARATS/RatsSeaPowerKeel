@@ -1,11 +1,11 @@
-# Writing a mod for R.A.T.S. Keel
+# Writing a mod for Keel
 
 Keel runs two kinds of plugins from the game's mod folders (Workshop items and `Sea Power_Data\StreamingAssets\<folder>`).
-You do not need to reference Keel.
+You do not need to reference Keel for ordinary plugins. See [Prepare startup data](#prepare-startup-data) if your mod reads or indexes files at launch.
 
 **Your mod loads as built.** Nothing to recompile, nothing to add.
 
-- **List R.A.T.S. Keel as your Workshop item's required item** (Steam: your item, *Add/Remove Required Items*, Workshop item
+- **List Keel as your Workshop item's required item** (Steam: your item, *Add/Remove Required Items*, Workshop item
   3835527459). Keel brings Anchor Chain's library, so your players need no Anchor Chain item and none of its manual install
   steps: subscribe, run `KeelSetup.exe` once, play.
 - **Anchor Chain mods and plain BepInEx plugins run as they are** (sections 1 and 2).
@@ -87,32 +87,56 @@ from loading or crash in Noesis). If your mod is safe there and needs to run whi
 - **Seen in the report and log:** "Started before the load screen ended (the mod asked for it): ...".
 - **Load-screen hooks:** an early mod sees the real end of the load screen (Keel does not call its postfix again).
 
-## Prepare data during the splash (opt-in)
+## Prepare startup data
 
-For slow work that needs nothing of the game (reading, converting or indexing your own files): Keel runs it on a worker while the
-game shows its splash, so your plugin finds it done instead of doing it on the main thread (agm-114, PR #16).
+Use preparation to read, parse, or index files while the splash screen is up. Keep Unity calls, game APIs, Harmony patches, and UI work in your normal plugin. A preparation helper and the plugin can start independently.
 
-- **Ask for it** in `_info.ini`:
-  ```ini
-  [Keel]
-  Prepare=MyMod.Prepare.dll
-  ```
-  - the file sits at the top of your mod folder (no subfolder)
-  - Keel reads only this key: no other DLL runs this way, whatever its name
-- **The DLL** has one public static method:
-  ```csharp
-  public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)
-  ```
-  - `report("Indexing 1200 voices")` shows a line in Keel's loading window; `report(null)` clears it
-  - it must not reference Unity, the game, BepInEx, Harmony, Anchor Chain or Keel: it runs off the main thread, before they are ready
-  - keep it in its own small DLL, apart from your plugin
-- **Your plugin waits for it** with `Keel.WhenPrepared(<your mod folder>)`: a `Task` that is done when the preparation finished, failed
-  or was skipped (done at once without one). Check `IsCompleted` in `Update`; never block the main thread on it.
-- **One after another:** preparations run one at a time, in mod-list order, on one worker.
-- **A crash during it:** if the game dies while your preparation runs, Keel names it at the next start and skips it until your mod is
-  updated (`BepInEx\Keel-prepare.txt`; off with `HoldOutCrashers=false`). Your plugin still starts; `WhenPrepared` is done at once.
-- **Your own progress:** a mod that draws its own start-up progress calls `Keel.HandOffStartupWindow()`; Keel's loading window then
-  hides and comes back as the summary card when Keel is done.
+Put the helper DLL beside your mod's `_info.ini` and name it there.
+
+```ini
+[Keel]
+Prepare=MyMod.Prepare.dll
+```
+
+The helper can target `netstandard2.1` with no game or loader references. Give one public type a method with this signature.
+
+```csharp
+using System;
+using System.IO;
+
+public static class StartupData
+{
+    public static string[] DefinitionFiles { get; private set; }
+
+    public static void Prepare(string streamingAssets, string[] enabledModFolders, Action<string> report)
+    {
+        report("Indexing loadout definitions");
+        string folder = Path.GetDirectoryName(typeof(StartupData).Assembly.Location);
+        DefinitionFiles = Directory.GetFiles(Path.Combine(folder, "definitions"), "*.ini");
+    }
+}
+```
+
+The two arguments give you the game's StreamingAssets directory and the enabled mod directories in load order. Keel runs one helper at a time. `report` updates the loading window and accepts `null` to clear the line.
+
+If the plugin needs the prepared data, let its Unity coroutine yield while the helper runs. For example, a BepInEx plugin can do this in `Start`.
+
+```csharp
+private IEnumerator Start()
+{
+    string folder = Path.GetDirectoryName(GetType().Assembly.Location);
+    var preparation = SeaPowerKeel.Keel.WhenPrepared(folder);
+    while (!preparation.IsCompleted)
+        yield return null;
+
+    var files = StartupData.DefinitionFiles ?? ReadDefinitions();
+    ApplyDefinitions(files);
+}
+```
+
+`WhenPrepared` completes when the helper finishes, fails, or is skipped. Check that the data exists before using it. The plugin keeps its usual `StartEarly` or `BlockingStart` setting, and a startup helper runs once per game launch. Keel names failed helpers in `Keel-log.txt`. If the game ends while a helper is running, `HoldOutCrashers` holds it until its DLL changes or you remove `BepInEx/Keel-prepare.txt`.
+
+A plugin with its own startup progress window can call `Keel.HandOffStartupWindow()`. Keel hides its full loading window and still shows the summary card.
 
 ## Required Workshop items
 
@@ -136,6 +160,9 @@ Requires=3840000000, com.you.library, My Library
 
 ## The game-version check
 
+- Your `_info.ini` names an older game version: the report can also name your Harmony targets and lookups whose game code changed ([method history](method-history.md))
+- Check those lines first when you update a patch for a new game build
+
 Before a DLL is loaded, Keel checks every type, method and field it uses from the game's assemblies against the running
 build (the same check as `modtool compat`):
 
@@ -155,7 +182,7 @@ Players can switch to `Strict` (any missing use or patch target keeps the DLL ou
 
 ## Errors
 
-Keel 0.8.1 adds optional runtime diagnostic scopes:
+Keel's next release adds optional runtime diagnostic scopes (on `main` now):
 
 ```csharp
 var plugin = Keel.ForPlugin(new PluginId("your.plugin.guid"));

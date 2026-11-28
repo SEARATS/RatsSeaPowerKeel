@@ -66,7 +66,7 @@ internal sealed class Overlay
         {
             try { Run(); }
             catch (Exception ex) { warn?.Invoke("Loading window stopped: " + ex.Message); }
-        }) { IsBackground = true, Name = "R.A.T.S. Loading window" };
+        }) { IsBackground = true, Name = "Keel loading window" };
         thread.Start();
     }
 
@@ -96,7 +96,7 @@ internal sealed class Overlay
 
         // Not topmost: that put it above every program. The game's window becomes its owner as soon as that exists (see FindOwner).
         hwnd = Native.CreateWindowExW(Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE | Native.WS_EX_LAYERED,
-            ClassName, "R.A.T.S. Keel Loading", Native.WS_POPUP, full.Left, full.Top, full.Right - full.Left, full.Bottom - full.Top,
+            ClassName, "Keel Loading", Native.WS_POPUP, full.Left, full.Top, full.Right - full.Left, full.Bottom - full.Top,
             IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
         if (hwnd == IntPtr.Zero) throw new InvalidOperationException("CreateWindow failed");
         SetAlpha(options.Opacity);
@@ -225,7 +225,11 @@ internal sealed class Overlay
             Native.ShowWindow(hwnd, Native.SW_HIDE);
         }
         if (!s.Done)
+        {
+            if (s.Elapsed > options.MaxSeconds)
+                Begin(Stage.Fading);
             return false;
+        }
         Begin(Stage.Summary);
         summaryStartTicks = DateTime.UtcNow.Ticks;
         summary = s;
@@ -497,7 +501,7 @@ internal sealed class Overlay
         int pad = S(10), y = 0;
 
         Fill(dc, 0, 0, w, S(28), Header);
-        Put(dc, fontSmall, Dim, "R.A.T.S. KEEL  ·  STARTUP", pad, y, w - 2 * pad - S(70), S(28), 0);
+        Put(dc, fontSmall, Dim, "KEEL  ·  STARTUP", pad, y, w - 2 * pad - S(70), S(28), 0);
         Put(dc, fontSmall, Dim, Progress.Clock(s.Elapsed), pad, y, w - 2 * pad, S(28), Native.DT_RIGHT);
         y += S(36);
 

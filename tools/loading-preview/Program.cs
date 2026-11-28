@@ -21,12 +21,12 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        if (args.Length == 1 && args[0] == "live") return Live();
-        if (args.Length < 2) { Console.WriteLine("usage: preview <Keel-log.txt> <out folder> [scale]  |  preview live"); return 1; }
+        if (args.Length == 1 && args[0] is "live" or "live-handoff") return Live(args[0] == "live-handoff");
+        if (args.Length < 2) { Console.WriteLine("usage: preview <Keel-log.txt> <out folder> [scale]  |  preview live | preview live-handoff"); return 1; }
         float scale = args.Length > 2 ? float.Parse(args[2], CultureInfo.InvariantCulture) : 1f;
         Directory.CreateDirectory(args[1]);
 
-        // "21:14:45.141 +41.826s [Info    : R.A.T.S. Keel] RUNNING: ..."
+        // "21:14:45.141 +41.826s [Info    : Keel] RUNNING: ..."
         var line = new Regex(@"^\d\d:\d\d:\d\d\.\d+ \+(\d+\.\d+)s \[(\w+)\s*: (.+?)\] (.*)$");
         double now = 0;
         var progress = new Progress(() => now);
@@ -65,7 +65,7 @@ internal static class Program
         return 0;
     }
 
-    private const string KeelSource = "R.A.T.S. Keel";
+    private const string KeelSource = "Keel";
     private static readonly Regex Result = new(@"^([A-Z][A-Z ]+): (.+?) \(");
     private static readonly Regex Starting = new(@"^STARTING (\d+)/(\d+): (.+?) \(");
     private static readonly Regex Found = new(@"^Found (\d+) plugin");
@@ -88,7 +88,7 @@ internal static class Program
     }
 
     /// <summary>Smoke test of the real window thread: opens it far off every monitor, feeds a few lines, ends it with Keel's "Done" line.</summary>
-    private static int Live()
+    private static int Live(bool handOff)
     {
         var start = DateTime.Now;
         var progress = new Progress(() => (DateTime.Now - start).TotalSeconds);
@@ -99,11 +99,16 @@ internal static class Program
         Console.WriteLine("opened: " + overlay.Opened + (warning != null ? "  warning: " + warning : ""));
         progress.Found(3);
         progress.Result("Test Mod 1.0", PluginState.Running);
+        if (handOff)
+        {
+            LoadingWindow.PreparationStatus = "Indexing loadout definitions";
+            LoadingWindow.ExternalProgress = true;
+        }
         System.Threading.Thread.Sleep(1500);
         progress.Done("Done: 3 running. Report: x");
         for (int i = 0; i < 100 && !overlay.Closed; i++) System.Threading.Thread.Sleep(100);     // linger, move to the corner, summary, fade
         Console.WriteLine("moved to the corner, faded and closed by itself after Done: " + overlay.Closed);
-        return overlay.Opened && overlay.Closed ? 0 : 2;
+        return overlay.Opened && overlay.Closed && (!handOff || LoadingWindow.SummaryReady) ? 0 : 2;
     }
 
     // KEEL_ALERT: to see the card as it looks after a crash.
@@ -149,6 +154,6 @@ internal static class LoadingWindow
     public static bool SummaryReady, GameDrawsSummary, OverlayGone;
     public static int SummaryX, SummaryY, SummaryW, SummaryH;
     public static float SummaryScale;
-    public static bool ExternalProgress;
-    public static string PreparationStatus;
+    public static volatile bool ExternalProgress;
+    public static volatile string PreparationStatus;
 }

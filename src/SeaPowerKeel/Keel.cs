@@ -14,7 +14,7 @@ using UnityEngine;
 namespace SeaPowerKeel;
 
 /// <summary>
-/// R.A.T.S. Keel: a mod loader for Sea Power. Started by the stub in BepInEx\plugins (see <see cref="Boot"/>), it reads the
+/// Keel: a mod loader for Sea Power. Started by the stub in BepInEx\plugins (see <see cref="Boot"/>), it reads the
 /// game's mod list, finds the plugins in the enabled mod folders without loading them, checks each DLL against the
 /// running game build, works out dependencies, conflicts and start order, and starts the plugins one by one, each on its
 /// own so that one broken mod cannot stop the rest. It runs plain BepInEx plugins and Anchor Chain mods (the latter only
@@ -23,7 +23,7 @@ namespace SeaPowerKeel;
 public static class Keel
 {
     public const string Guid = "dev.sewerlabs.seapowerkeel";
-    public const string Name = "R.A.T.S. Keel";
+    public const string Name = "Keel";
     public static readonly string Version = typeof(Keel).Assembly.GetName().Version.ToString(3);
 
     internal static readonly List<PluginEntry> Plugins = new();
@@ -51,7 +51,7 @@ public static class Keel
 
     /// <summary>
     /// For a mod with a preparation DLL (<c>[Keel] Prepare=</c> in its _info.ini): finishes when its preparation is done, failed
-    /// or was skipped. Already finished for a folder without one. Check <c>IsCompleted</c> each frame; never block the main thread on it.
+    /// or was skipped. Already finished for a folder without one. Yield until it completes before using prepared data.
     /// </summary>
     public static Task WhenPrepared(string modFolder) => Preparation.For(modFolder);
 
@@ -118,6 +118,8 @@ internal sealed partial class KeelHost : MonoBehaviour
     private string takeoverInstall;            // "installed", "updated", "current" or why not
     private bool restartForTakeover;            // the patcher arrived this start while another loader runs: one restart finishes it
     private ConfigEntry<string> versionCheck;
+    private ConfigEntry<string> versionQuestion;
+    private ConfigFile config;                  // for Keel's Options tab
     private ConfigEntry<string> disabled;
     private ConfigEntry<string> hotkey;
     private ConfigEntry<bool> notice;
@@ -147,12 +149,12 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         Current = this;
         log = Keel.Log;
-        var config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
+        config = new ConfigFile(Path.Combine(Paths.ConfigPath, Takeover.ConfigFile), true);
         BindSettings(config);
         InstallTakeover();
         // As early as possible: a crash in the game's own start-up load is caught too, and the files it opens are on the list.
         InstallCrashCatchers();
-        string compat = CompatDialog.Install();
+        string compat = CompatDialog.Install(versionQuestion.Value);
         if (compat != null)
             log.LogInfo($"Game version dialog stays the game's own: {compat}");
         string loadEnd = LoadScreenEnd.Install();
@@ -183,6 +185,11 @@ internal sealed partial class KeelHost : MonoBehaviour
             "Standard: a DLL that would stop missions from loading on this game build (a type of it is built on something this build " +
             "lacks) is not loaded; other missing parts are a warning. Strict: any missing part keeps the DLL from loading. Off: no check.",
             new AcceptableValueList<string>("Standard", "Strict", "Off")));
+        versionQuestion = config.Bind(Takeover.ConfigSection, "VersionQuestion", CompatDialog.Auto, new ConfigDescription(
+            "The game's question at start-up about mods whose _info.ini names another game version. Auto: Keel answers Ignore when every " +
+            "listed mod is a code mod (Keel checks its DLLs against this game build and leaves out what does not fit); with a data mod on the " +
+            "list the game asks. Skip: Keel always answers Ignore and lists the mods in its report. Ask: the game always asks.",
+            new AcceptableValueList<string>(CompatDialog.Auto, CompatDialog.Skip, CompatDialog.Ask)));
         Runner.GuardPatches = config.Bind(Takeover.ConfigSection, "RemoveBrokenPatches", true,
             "When a mod's Harmony patch throws a missing-method, missing-field or missing-type exception for something this game build lacks, Keel removes that mod's patch " +
             "from the failing method when ownership is unambiguous, names the mod in the report and lets the game continue. Off: Keel only names the mod.").Value;
@@ -418,8 +425,9 @@ internal sealed partial class KeelHost : MonoBehaviour
         try
         {
             disk = ModFolders.FromDisk();
-            StartPreparations(disk.Where(f => f.Enabled).ToList());
-            scan = EarlyScan.Of(disk.Where(f => f.Enabled).ToList(), Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
+            List<ModFolder> enabled = disk.Where(f => f.Enabled).ToList();
+            StartPreparations(enabled);
+            scan = EarlyScan.Of(enabled, Paths.ManagedPath, Paths.BepInExAssemblyDirectory);
         }
         catch (Exception ex)
         {
@@ -439,13 +447,8 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         try
         {
-            List<string> said = Preparation.Start(enabled, Paths.BepInExRootPath, Application.streamingAssetsPath, Application.version,
-                holdCrashers.Value, Loading.LoadingWindow.ReportPreparation, log.LogInfo, log.LogWarning);
-            foreach (string note in said)
-            {
-                notes.Add(note);
-                log.LogWarning(note);
-            }
+            Preparation.Start(enabled, Paths.BepInExRootPath, Application.streamingAssetsPath, Application.version,
+                holdCrashers.Value, Loading.LoadingWindow.ReportPreparation, log.LogInfo, log.LogWarning).ForEach(Warn);
         }
         catch (Exception ex)
         {
@@ -700,6 +703,8 @@ internal sealed partial class KeelHost : MonoBehaviour
     {
         crash?.Mark("done", "");
         done = true;
+        if (CompatDialog.SkipNote != null)
+            notes.Add(CompatDialog.SkipNote);
         UpdateLoadOrderWarnings();
         log.LogInfo($"Started {pass.Started} plugin(s) in {pass.Ms} ms, one per frame.");
         Window?.StartedIn(pass.Ms);
@@ -989,29 +994,30 @@ internal sealed partial class KeelHost : MonoBehaviour
     // An early start checks in up to three steps (blocking mods, early mods, the rest): one Preflight, and so one index of the
     // game's type names, serves them all instead of one built on the main thread per step. Kept until a step passes keep: false.
     private Preflight keptPreflight;
+    private HistoryPreflight keptHistory;
     private readonly Dictionary<string, Preflight.Result> keptResults = new(StringComparer.OrdinalIgnoreCase);
-    private Task<Preflight.Prepared> preparedChecks;
+    private PreparedPreflight preparedChecks;
 
-    // The early scan's DLLs are checked on a worker while the game shows its splash; Check takes those results when ready.
     private void PrepareChecks(IEnumerable<PluginEntry> plugins)
     {
         if (versionCheck.Value == "Off")
             return;
-        string[] files = plugins.Where(p => p.State == PluginState.Pending).Select(p => p.Dll)
-                                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (files.Length > 0)
-            preparedChecks = Preflight.Prepared.Start(Paths.ManagedPath, Paths.BepInExAssemblyDirectory, files);
+        var files = plugins.Where(p => p.State == PluginState.Pending)
+            .OrderByDescending(p => p.BlockingStart).ThenByDescending(p => p.StartEarly)
+            .GroupBy(p => p.Dll, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Dll: g.Key, Compatibility: g.First().Folder?.InfoLines ?? [])).ToArray();
+        if (files.Length != 0)
+            preparedChecks = new PreparedPreflight(Paths.ManagedPath, Paths.BepInExAssemblyDirectory, Application.version, files);
     }
-
-    // Only a finished worker counts: the main thread never waits for it.
-    private Preflight.Result PreparedCheck(string dll) =>
-        preparedChecks is { Status: TaskStatus.RanToCompletion } done ? done.Result.For(dll) : null;
 
     private IEnumerator Check(Func<PluginEntry, bool> only = null, bool keep = false)
     {
         string mode = versionCheck.Value;
         if (mode == "Off")
+        {
+            StopPreparingChecks();
             yield break;
+        }
         Preflight preflight = keptPreflight;
         try
         {
@@ -1019,39 +1025,32 @@ internal sealed partial class KeelHost : MonoBehaviour
         }
         catch (Exception ex)
         {
+            StopPreparingChecks();
             Warn($"Game version check unavailable: {ex.Message}");
             yield break;
         }
         keptPreflight = keep ? preflight : null;
+        string appVersion = Application.version;
+        var history = keptHistory ?? new HistoryPreflight(Paths.ManagedPath, Paths.BepInExAssemblyDirectory,
+            Path.Combine(Path.GetDirectoryName(typeof(Keel).Assembly.Location) ?? "", "lib", MethodSnapshot.DirectoryName),
+            Path.Combine(Paths.BepInExRootPath, "cache", MethodSnapshot.DirectoryName), appVersion, message => log.LogDebug(message));
+        keptHistory = keep ? history : null;
         try
         {
             List<IGrouping<string, PluginEntry>> dlls = Keel.Plugins.Where(p => p.State == PluginState.Pending && (only == null || only(p))).GroupBy(p => p.Dll).ToList();
-            Dictionary<string, Preflight.Result> results = keptResults;
+            var checks = new Dictionary<string, (string Declared, string[] Warnings)>(StringComparer.OrdinalIgnoreCase);
+            foreach (IGrouping<string, PluginEntry> dll in dlls)
+                yield return CheckDll(preflight, history, dll, appVersion, checks);
             foreach (IGrouping<string, PluginEntry> dll in dlls)
             {
-                Preflight.Result ready = PreparedCheck(dll.Key);
-                if (ready != null)
-                {
-                    results[dll.Key] = ready;      // checked on the worker during the splash: no frame spent here
+                if (!keptResults.TryGetValue(dll.Key, out Preflight.Result r) || !checks.TryGetValue(dll.Key, out var check))
                     continue;
-                }
-                try
-                {
-                    results[dll.Key] = preflight.Check(dll.Key);
-                }
-                catch (Exception ex)
-                {
-                    Warn($"Could not check {dll.Key}: {ex.Message}");
-                }
-                yield return null;
-            }
-            foreach (IGrouping<string, PluginEntry> dll in dlls)
-            {
-                if (!results.TryGetValue(dll.Key, out Preflight.Result r))
-                    continue;
-                string matching = Preflight.MatchingMapBuild(dll.Key, r, results);
+                string matching = Preflight.MatchingMapBuild(dll.Key, r, keptResults);
                 foreach (PluginEntry p in dll)
-                    Preflight.Judge(p, r, matching, mode == "Strict", InfoVersion.MismatchInFolder(p.Folder?.Path, Application.version));
+                {
+                    Preflight.Judge(p, r, matching, mode == "Strict", check.Declared);
+                    p.Warnings.AddRange(check.Warnings);
+                }
             }
         }
         finally
@@ -1062,8 +1061,55 @@ internal sealed partial class KeelHost : MonoBehaviour
                     log.LogInfo($"Index of the game's type names for by-name lookups: {preflight.IndexMs} ms.");
                 preflight.Dispose();
                 keptResults.Clear();
+                StopPreparingChecks();
             }
         }
+    }
+
+    private void StopPreparingChecks()
+    {
+        preparedChecks?.Discard();
+        preparedChecks = null;
+    }
+
+    // One DLL of a Check step. The method history scan reads the whole game assembly the first time, so it runs on a worker and
+    // the coroutine waits frame by frame: the game keeps drawing, and a blocking start that pumps the coroutine just waits for it.
+    private IEnumerator CheckDll(Preflight preflight, HistoryPreflight history, IGrouping<string, PluginEntry> dll, string appVersion,
+        Dictionary<string, (string Declared, string[] Warnings)> checks)
+    {
+        string declared = null;
+        string[] baselines = [];
+        try
+        {
+            string[] compatibility = InfoVersion.ReadFolder(dll.First().Folder?.Path);
+            declared = InfoVersion.Mismatch(compatibility, appVersion);
+            if (declared != null)
+                baselines = history.Baselines(compatibility);
+        }
+        catch (Exception ex)
+        {
+            log.LogDebug($"Could not find method history for {dll.Key}: {ex.Message}");
+        }
+        if (preparedChecks?.Take(dll.Key, useResult: baselines.Length == 0) is Preflight.Result ready)
+        {
+            keptResults[dll.Key] = ready;
+            checks[dll.Key] = (declared, []);
+            yield break;
+        }
+        Task<HistoryPreflight.Review> task = baselines.Length == 0 ? null : Task.Run(() => history.Check(preflight, dll.Key, baselines));
+        while (task != null && !task.IsCompleted)
+            yield return null;
+        try
+        {
+            HistoryPreflight.Review review = task?.GetAwaiter().GetResult();
+            keptResults[dll.Key] = review?.Result ?? preflight.Check(dll.Key);
+            checks[dll.Key] = (declared, review?.Warnings ?? []);
+        }
+        catch (Exception ex)
+        {
+            Warn($"Could not check {dll.Key}: {ex.Message}");
+        }
+        yield return null;
     }
 
     private static Loading.Progress Window => Loading.LoadingWindow.Progress;
@@ -1321,6 +1367,9 @@ internal sealed partial class KeelHost : MonoBehaviour
             log.LogWarning($"No Restart button in the Mods menu: {why}");
         else
             log.LogInfo("Mods menu: Restart button and Reload follow-up ready.");
+        string options = KeelOptions.Install(config);
+        if (options != null)
+            log.LogWarning($"No Keel tab in the Options menu, the settings are only in the config file: {options}");
     }
 
     private void OnApplicationQuit()
@@ -1944,8 +1993,8 @@ internal sealed partial class KeelHost : MonoBehaviour
         GUILayout.Label(new GUIContent(label, tooltip), nameStyle, GUILayout.Width(NameWidth));
         if (source != null)
             GUILayout.Label(source, sourceStyle, GUILayout.Width(SourceWidth));
-        if (showDll)
-            GUILayout.Label(Path.GetFileName(p.Dll), fileStyle, GUILayout.ExpandWidth(true));
+        if (showDll)    // the short checksum lets a player match the file with the release's list by eye; the full one is in Keel-report.txt
+            GUILayout.Label(Path.GetFileName(p.Dll) + (p.Sha256.Length > 0 ? "  ·  SHA-256 " + FileHash.Short(p.Sha256) : ""), fileStyle, GUILayout.ExpandWidth(true));
         GUILayout.EndHorizontal();
         if (!string.IsNullOrEmpty(p.Reason))
             GUILayout.Label(p.Reason, bodyStyle);
@@ -2048,7 +2097,7 @@ internal sealed partial class KeelHost : MonoBehaviour
             GUI.DrawTexture(new Rect(0, 0, window.width, HeaderHeight), headerBack);
             buttonSpots.Add((new Rect(window.x + close.x, window.y + close.y, close.width, close.height), CloseWindow));
         }
-        GUI.Label(new Rect(9, 0, window.width - 45, HeaderHeight), "R.A.T.S. KEEL  ·  MOD REPORT", headStyle);
+        GUI.Label(new Rect(9, 0, window.width - 45, HeaderHeight), "KEEL  ·  MOD REPORT", headStyle);
         GUI.Label(new Rect(0, 0, window.width - 34, HeaderHeight), $"{Keel.Version}  ·  {GameState.BuildName}", metaStyle);
         if (GUI.Button(close, "×", buttonStyle))
             CloseWindow();

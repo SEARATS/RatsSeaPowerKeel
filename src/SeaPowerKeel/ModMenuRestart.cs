@@ -14,7 +14,7 @@ namespace SeaPowerKeel;
 /// </summary>
 internal static class ModMenuRestart
 {
-    // The box's top bar names Keel ("MESSAGE · R.A.T.S. Keel", his rule 2026-11-12), so the text does not say it again.
+    // The box's top bar names Keel ("MESSAGE · Keel", his rule 2026-11-12), so the text does not say it again.
     internal const string Note = "\n\nReload also starts code mods you switched on and takes switched-off ones out as far as the running game allows. " +
                                  "Restart is the clean way: it saves the mod list, closes the game and starts it again.";
 

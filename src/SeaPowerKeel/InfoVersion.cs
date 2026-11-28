@@ -40,14 +40,22 @@ internal static class InfoVersion
     {
         try
         {
-            string ini = Path.Combine(folder ?? "", "_info.ini");
-            return File.Exists(ini) ? Mismatch(File.ReadAllLines(ini), appVersion) : null;
+            return Mismatch(ReadFolder(folder), appVersion);
         }
         catch (Exception)
         {
             return null;
         }
     }
+
+    internal static string[] ReadFolder(string folder)
+    {
+        string ini = Path.Combine(folder ?? "", "_info.ini");
+        return File.Exists(ini) ? File.ReadAllLines(ini) : Array.Empty<string>();
+    }
+
+    internal static Version Number(string version) =>
+        Parse(version) is int[] parts ? new Version(parts[0], parts[1], parts[2]) : null;
 
     internal static string Mismatch(IEnumerable<string> iniLines, string appVersion)
     {

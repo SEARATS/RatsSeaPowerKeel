@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Mono.Cecil;
 
@@ -25,13 +24,15 @@ internal static class EarlyStart
     public static bool InInfoIni(string infoIni) => InInfoIni(infoIni, InfoKey);
 
     /// <summary>True when <paramref name="infoIni"/> has [Keel] <paramref name="key"/>=true.</summary>
-    public static bool InInfoIni(string infoIni, string key) => IsTrue(ValueInInfoIni(infoIni, key));
+    public static bool InInfoIni(string infoIni, string key) => InInfoIniLines((infoIni ?? "").Split('\n'), key);
 
-    /// <summary>The value of [Keel] <paramref name="key"/>= in <paramref name="infoIni"/>, or null.</summary>
-    public static string ValueInInfoIni(string infoIni, string key)
+    public static bool InInfoIniLines(IEnumerable<string> lines, string key) => IsTrue(ValueInInfoIni(lines, key));
+
+    /// <summary>The value of [Keel] <paramref name="key"/>= in <paramref name="lines"/>, or null.</summary>
+    public static string ValueInInfoIni(IEnumerable<string> lines, string key)
     {
         bool inKeel = false;
-        foreach (string raw in (infoIni ?? "").Split('\n'))
+        foreach (string raw in lines)
         {
             string line = raw.Split(';', '#')[0].Trim();
             if (line.StartsWith("["))
@@ -44,25 +45,6 @@ internal static class EarlyStart
                 return line.Substring(eq + 1).Trim();
         }
         return null;
-    }
-
-    /// <summary>True when the folder's _info.ini asks for an early start (false when there is none or it cannot be read).</summary>
-    public static bool FolderAsks(string folder) => FolderHas(folder, InfoKey) || FolderBlocks(folder);
-
-    /// <summary>True when the folder's _info.ini asks for a blocking start: before the game's first frame, holding the game up.</summary>
-    public static bool FolderBlocks(string folder) => FolderHas(folder, BlockingInfoKey);
-
-    private static bool FolderHas(string folder, string key)
-    {
-        try
-        {
-            string path = Path.Combine(folder ?? "", "_info.ini");
-            return File.Exists(path) && InInfoIni(File.ReadAllText(path), key);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
     }
 
     /// <summary>True when the assembly carries AssemblyMetadata("Keel.StartEarly", "true").</summary>

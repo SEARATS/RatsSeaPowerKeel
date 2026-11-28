@@ -16,7 +16,7 @@ namespace SeaPowerKeel;
 /// </summary>
 internal static class Watcher
 {
-    private const string Title = "R.A.T.S. Keel";
+    private const string Title = "Keel";
 
     [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
 
@@ -76,7 +76,7 @@ internal static class Watcher
         Note(dir, $"game {pid} ended ({why}) without a quit mark: crash window");
 
         string text = Explain(journal, dir, out string guid, out string name, out string detail, out string pack);
-        WriteCrashFile(journal, dir, stack);
+        WriteCrashFile(journal, dir, stack, guid);
         StartWindows();
         bool restart = Ask(text, name, detail, dir, pack != null, out bool keepOff);
         if (guid != null && !keepOff)
@@ -164,9 +164,25 @@ internal static class Watcher
     /// Keel-crash.txt for the session that just ended, before any bundle is packed: else the bundle carries the text of an older
     /// session (issue keel-bundle-stale-files). Keel writes the same at the next start.
     /// </summary>
-    private static void WriteCrashFile(CrashText.Journal journal, string dir, string stack) =>
-        TryWrite(Path.Combine(dir, KeelNames.CrashFile),
-                 CrashText.CrashFileText(journal, string.IsNullOrWhiteSpace(stack) ? null : stack));
+    private static void WriteCrashFile(CrashText.Journal journal, string dir, string stack, string guid)
+    {
+        string block = string.IsNullOrWhiteSpace(stack) ? null : stack;
+        TryWrite(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(journal, block));
+        TryWrite(Path.Combine(dir, KeelNames.CrashJsonFile), CrashJson.Text(journal, block, Culprit(dir, guid)));
+    }
+
+    /// <summary>The mod a crash is pinned on, with name and version from Keel's list; a pack (no code) is not one.</summary>
+    internal static CrashJson.Culprit Culprit(string dir, string guid)
+    {
+        if (guid == null)
+            return null;
+        string[] mod = Mods(dir).FirstOrDefault(m => m[0] == guid);
+        return new CrashJson.Culprit { Guid = guid, Name = mod?[1] ?? guid, Version = mod != null && mod.Length > 3 ? mod[3] : null };
+    }
+
+    // Id, display name, code root and (Keel 0.8.1+) version of each mod, in the order Keel uses for blame.
+    private static List<string[]> Mods(string dir) =>
+        CrashText.ReadLines(Path.Combine(dir, KeelNames.ModsFile)).Select(l => l.Split('\t')).Where(p => p.Length >= 3).ToList();
 
     private static bool Ask(string text, string name, string detail, string dir, bool isPack, out bool keepOff)
     {
@@ -259,8 +275,7 @@ internal static class Watcher
             block = null;
         detail = CrashText.CrashLine(block);
 
-        // Id, display name and code root of each mod, in the order Keel uses for blame.
-        List<string[]> mods = CrashText.ReadLines(Path.Combine(dir, KeelNames.ModsFile)).Select(l => l.Split('\t')).Where(p => p.Length == 3).ToList();
+        List<string[]> mods = Mods(dir);
         if (journal.Guid != null)
         {
             string id = journal.Guid;

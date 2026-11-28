@@ -181,12 +181,12 @@ internal sealed class CrashGuard
     /// <summary>The mods a stack can be pinned on, in the order blame goes by.</summary>
     internal static List<PluginEntry> Blamable(IEnumerable<PluginEntry> plugins) => plugins.OrderBy(p => p.Order).Where(p => RootOf(p) != null).ToList();
 
-    /// <summary>For the watcher, which runs outside the game: id, name and code root of every mod.</summary>
+    /// <summary>For the watcher, which runs outside the game: id, name, code root and version of every mod.</summary>
     public void WriteModsFile(IEnumerable<PluginEntry> plugins)
     {
         try
         {
-            File.WriteAllLines(Path.Combine(dir, KeelNames.ModsFile), Blamable(plugins).Select(p => $"{p.Guid}\t{p.Display}\t{RootOf(p)}"));
+            File.WriteAllLines(Path.Combine(dir, KeelNames.ModsFile), Blamable(plugins).Select(p => $"{p.Guid}\t{p.Display}\t{RootOf(p)}\t{p.Version}"));
         }
         catch (Exception)
         {
@@ -232,7 +232,8 @@ internal sealed class CrashGuard
         {
             // Keel-crash.txt describes the last unclean session only; after a clean one it would sit in the next report's bundle
             // as if it were that session's crash (issue keel-bundle-stale-files).
-            try { File.Delete(Path.Combine(dir, KeelNames.CrashFile)); } catch (Exception) { /* it stays, it is dated */ }
+            foreach (string stale in new[] { KeelNames.CrashFile, KeelNames.CrashJsonFile })
+                try { File.Delete(Path.Combine(dir, stale)); } catch (Exception) { /* it stays, it is dated */ }
         }
         try
         {
@@ -255,7 +256,6 @@ internal sealed class CrashGuard
     private PluginEntry Explain(IReadOnlyCollection<PluginEntry> plugins, string caughtStack, Action<string> note)
     {
         string block = !string.IsNullOrWhiteSpace(caughtStack) ? caughtStack : CrashText.CrashBlock(CrashText.ReadAll(playerPrev));
-        WriteCrashFile(block);
         string where = Previous.Scene != null ? $" (last scene: {Previous.Scene})" : "";
         PluginEntry culprit = Previous.Guid != null ? plugins.FirstOrDefault(p => p.Guid == Previous.Guid) : null;
         culpritHow = culprit == null ? null : Previous.Step == "load" ? "while Keel was loading it" : "while Keel was starting it";
@@ -264,6 +264,7 @@ internal sealed class CrashGuard
             culprit = Blame(block, plugins);
             culpritHow = "with its code on the crash's stack";
         }
+        WriteCrashFile(block, culprit);
         if (culprit != null)
         {
             Short = $"Last game crashed: {culprit.Display}";
@@ -328,11 +329,14 @@ internal sealed class CrashGuard
         }
     }
 
-    private void WriteCrashFile(string block)
+    // Keel-crash.txt for people and Keel-crash.json for the feedback board, the same crash in both.
+    private void WriteCrashFile(string block, PluginEntry culprit)
     {
+        var who = culprit == null ? null : new CrashJson.Culprit { Name = culprit.Display, Guid = culprit.Guid, Version = culprit.Version?.ToString() };
         try
         {
             File.WriteAllText(Path.Combine(dir, KeelNames.CrashFile), CrashText.CrashFileText(Previous, block));
+            File.WriteAllText(Path.Combine(dir, KeelNames.CrashJsonFile), CrashJson.Text(Previous, block, who));
         }
         catch (Exception)
         {

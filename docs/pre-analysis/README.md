@@ -1,4 +1,4 @@
-# R.A.T.S. Keel pre-analysis
+# Keel pre-analysis
 
 - A first look at an idea before it becomes a proposal: what could be done, what each option catches and what it costs.
 - Nothing in this folder is decided or built.

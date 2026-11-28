@@ -7,7 +7,7 @@ using BepInEx;
 namespace SeaPowerKeel.Stub;
 
 /// <summary>
-/// The only part of R.A.T.S. Keel that goes into <c>BepInEx\plugins</c>. It finds <c>SeaPowerKeel.dll</c> in the game's
+/// The only part of Keel that goes into <c>BepInEx\plugins</c>. It finds <c>SeaPowerKeel.dll</c> in the game's
 /// enabled mod folders (newest version wins) and starts it. It knows nothing about the game, so it is the same file for
 /// every game build and should never need replacing: the loader itself comes and updates through the Workshop.
 /// </summary>

@@ -33,9 +33,8 @@ internal static class LogBundle
                 // A report or crash text written before this session began belongs to an older one: in the bundle it would read
                 // as this session's (issue keel-bundle-stale-files). The stack files stay, they carry their own times.
                 IEnumerable<string> files = Find(bepInEx, pattern);
-                if (began != null && (pattern == KeelNames.ReportFile || pattern == "Keel-crash*.txt"))
-                    files = files.Where(f => !f.EndsWith(KeelNames.CrashFile, StringComparison.OrdinalIgnoreCase) && !f.EndsWith(KeelNames.ReportFile, StringComparison.OrdinalIgnoreCase)
-                                             || File.GetLastWriteTime(f) >= began.Value.AddSeconds(-KeelNames.TimeSlackSeconds));
+                if (began != null && (pattern == KeelNames.ReportFile || pattern == "Keel-crash*.txt" || pattern == KeelNames.CrashJsonFile))
+                    files = files.Where(f => !Dated(f) || File.GetLastWriteTime(f) >= began.Value.AddSeconds(-KeelNames.TimeSlackSeconds));
                 AddAll(archive, files, "BepInEx", user);
             }
             AddAll(archive, Find(gameData, "Player*.log"), "Game", user);
@@ -44,6 +43,10 @@ internal static class LogBundle
         }
         return zip;
     }
+
+    // The files that describe one session only and carry no time of their own.
+    private static bool Dated(string file) =>
+        new[] { KeelNames.CrashFile, KeelNames.CrashJsonFile, KeelNames.ReportFile }.Any(n => file.EndsWith(n, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>When the session in Keel-session.txt began (its "session" line), or null.</summary>
     private static DateTime? SessionBegan(string bepInEx)
